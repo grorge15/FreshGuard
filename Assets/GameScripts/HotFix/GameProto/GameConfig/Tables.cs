@@ -51,6 +51,48 @@ public partial class Tables
             m_TbGlobal.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 机器人
+    /// </summary>
+    private robot.TbRobot m_TbRobot;
+    public robot.TbRobot TbRobot 
+    {
+        get
+        {
+            if (m_TbRobot == null)
+            {
+                m_TbRobot = new robot.TbRobot(defaultLoader("robot_tbrobot"));
+                m_TbRobot.ResolveRef(this);
+            }
+            return m_TbRobot;
+        }
+        set
+        {
+            m_TbRobot = value;
+            m_TbRobot.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 机器人占格形状
+    /// </summary>
+    private robot.TbRobotShape m_TbRobotShape;
+    public robot.TbRobotShape TbRobotShape 
+    {
+        get
+        {
+            if (m_TbRobotShape == null)
+            {
+                m_TbRobotShape = new robot.TbRobotShape(defaultLoader("robot_tbrobotshape"));
+                m_TbRobotShape.ResolveRef(this);
+            }
+            return m_TbRobotShape;
+        }
+        set
+        {
+            m_TbRobotShape = value;
+            m_TbRobotShape.ResolveRef(this);
+        }
+    }
 
     #endregion
 
