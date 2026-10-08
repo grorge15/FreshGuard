@@ -1,0 +1,7 @@
+[mcp_servers.unityMCP]
+command = "uvx"
+args = ["--offline", "--from", "mcpforunityserver==10.1.2", "mcp-for-unity", "--transport", "stdio"]
+startup_timeout_sec = 60
+
+[mcp_servers.unityMCP.env]
+SystemRoot = "C:\\Windows"
