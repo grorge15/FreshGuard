@@ -1,22 +1,27 @@
 using System;
+using System.Collections.Generic;
+using GameConfig.robot;
 
 namespace GameLogic
 {
     /// <summary>只维护机器人自身状态；放置、拖拽和合成事务由业务系统完成。</summary>
-    public sealed class RobotEntity : Entity
+    public class RobotEntity : Entity
     {
         public override EntityKind Kind => EntityKind.Robot;
         public int Level { get; private set; }
         public int MaxLevel { get; }
         public int ShapeId { get; }
         public int SkillId { get; }
+        public Robot Configuration { get; }
+        public PlaceableDefinition Definition { get; }
+        public int QualityId => Configuration != null ? Configuration.QualityId : 0;
         public RobotLocation Location { get; private set; }
         public BoardCoordinate? Anchor { get; private set; }
         public bool IsDragging { get; private set; }
         public float TriggerCooldownRemaining { get; private set; }
         public bool CanParticipate => !IsRemoved && Location == RobotLocation.Board && !IsDragging;
 
-        internal RobotEntity(int instanceId, int configId, BattleSide side, int shapeId, int skillId,
+        protected internal RobotEntity(int instanceId, int configId, BattleSide side, int shapeId, int skillId,
             int level, int maxLevel)
         {
             InitializeIdentity(instanceId, configId, side);
@@ -25,6 +30,20 @@ namespace GameLogic
             Level = level;
             MaxLevel = maxLevel;
             Location = RobotLocation.Unplaced;
+        }
+
+        protected RobotEntity(int instanceId, Robot config, BattleSide side, int level, int maxLevel)
+            : this(instanceId, config.Id, side, config.ShapeId, config.SkillId, level, maxLevel)
+        {
+            Configuration = config;
+            var cells = new List<BoardCoordinate>();
+            foreach (var offset in config.ShapeId_Ref.CellOffsets)
+            {
+                if (offset == null || offset.Length != 2)
+                    throw new ArgumentException("机器人占格坐标必须是(x,y)二元组。", nameof(config));
+                cells.Add(new BoardCoordinate(offset[0], offset[1]));
+            }
+            Definition = new PlaceableDefinition(instanceId.ToString(System.Globalization.CultureInfo.InvariantCulture), cells);
         }
 
         internal bool TrySetLocation(RobotLocation location, BoardCoordinate? anchor)
