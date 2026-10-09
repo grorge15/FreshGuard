@@ -44,126 +44,8 @@ namespace FreshGuard.Editor
 
         private static async UniTaskVoid VerifyAsync()
         {
-            var report = new Report();
-            try
-            {
-                Require(Application.isPlaying, "需要从启动场景进入 PlayMode。");
-                var host = UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
-                Require(host != null && host.IsReady, "商店未初始化。");
-                host.EndBattle();
-                await host.InitializeAsync();
-                host.SetFrozen(true);
-                var context = host.Context;
-                var ui = await GameModule.UI.ShowUIAsyncAwait<BattleShopUI>(context, host);
-                Require(ui != null && ui.IsPrepare, "TEngine 窗口未就绪。");
-                Canvas.ForceUpdateCanvases();
-                await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
-                report.singleEventSystem = UnityEngine.Object.FindObjectsOfType<EventSystem>().Length == 1;
-                Require(report.singleEventSystem, "存在重复的活动 EventSystem。");
-                var state = context.GetState(BattleSide.Player);
-                report.initialCoins = state.EnergyCoins;
-                Require(state.EnergyCoins == 20, "验收需新的一局，开局余额不是20。");
-                var source = ui.transform.Find("m_rect_ShopPanel/m_tf_Offers/Slot_0").gameObject;
-                var icon = source.transform.Find("m_img_RobotIcon").GetComponent<Image>();
-                var point = RectTransformUtility.WorldToScreenPoint(GameModule.UI.UICamera, source.transform.position);
-                var pointer = new PointerEventData(EventSystem.current) { pointerId = -1, position = point, button = PointerEventData.InputButton.Left };
-                var hits = new List<RaycastResult>();
-                EventSystem.current.RaycastAll(pointer, hits);
-                Require(hits.Count > 0 && hits[0].gameObject == source, "商品槽被其他UI阻挡或无法接收射线。");
-                var price = state.Slots[0].Offer.Price;
-                ExecuteEvents.Execute(source, pointer, ExecuteEvents.pointerDownHandler);
-                var instanceId = state.Slots[0].InstanceId.Value;
-                report.afterPurchase = state.EnergyCoins;
-                Require(report.afterPurchase == 20 - price, "按下未立即购买扣币。");
-                ExecuteEvents.Execute(source, pointer, ExecuteEvents.pointerUpHandler);
-                report.shortPressStayed = state.Slots[0].InstanceId == instanceId && ui.Drag.Phase == RobotDragPhase.Idle;
-                Require(report.shortPressStayed, "短按未保留已购槽。");
-                var now = Time.unscaledTime;
-                ui.PressSlot(0, -1, point, now);
-                ui.Drag.Advance(now + 0.199f);
-                Require(ui.Drag.Phase == RobotDragPhase.Pressed, "0.2秒前进入拖拽。");
-                ui.Drag.Advance(now + 0.201f);
-                var ghost = ui.transform.Find("m_item_DragGhost").gameObject;
-                report.longPressIconOnly = ui.Drag.Phase == RobotDragPhase.Dragging && !icon.enabled &&
-                    ghost.activeSelf && ghost.GetComponentsInChildren<SpriteRenderer>(true).Length == 0 &&
-                    !ghost.GetComponent<Image>().raycastTarget;
-                Require(report.longPressIconOnly, "拖拽图标或来源隐藏不正确。");
-                var beforeRefresh = state.EnergyCoins;
-                Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.Busy, "拖拽时刷新未拦截。");
-                ui.Drag.Release(-1, new Vector2(-1000, -1000));
-                await UniTask.Yield();
-                report.invalidDropReturned = state.Slots[0].InstanceId == instanceId && icon.enabled &&
-                    state.EnergyCoins == beforeRefresh && !ghost.activeSelf;
-                Require(report.invalidDropReturned, "非法落点未返回原槽或发生退款。");
-                var player = GameObject.Find("PlayerBoardWorldRoot").GetComponentInChildren<PlacementBoardView>();
-                var camera = Camera.main;
-                var dropPoint = (Vector2)camera.WorldToScreenPoint(player.GetCellWorldPosition(new BoardCoordinate(4, 3)));
-                Entity cachedEntity;
-                context.Registry.TryGet(instanceId, out cachedEntity);
-                // Warm the normal asset cache, whose Instantiate path yields one frame.
-                var warm = new GameObject("VerificationWarmup");
-                warm.SetActive(false);
-                var cached = await GameModule.Resource.LoadGameObjectAsync(((RobotEntity)cachedEntity).Configuration.RobotPrefab, warm.transform);
-                UnityEngine.Object.Destroy(warm);
-                Require(cached != null, "验收预加载失败。");
-                ui.PressSlot(0, -1, point, Time.unscaledTime);
-                ui.Drag.Advance(Time.unscaledTime + 0.21f);
-                ui.Drag.Release(-1, dropPoint);
-                Require(ui.Drag.Phase == RobotDragPhase.Committing, "验收未进入异步部署。");
-                ui.Drag.Cancel();
-                // Re-press before the old load returns: IsDragging is true again.
-                ui.PressSlot(0, -1, point, Time.unscaledTime);
-                await UniTask.Yield();
-                await UniTask.Yield();
-                report.cancelledLoadStayed = state.Slots[0].InstanceId == instanceId &&
-                    player.Model.GetOccupant(new BoardCoordinate(4, 3)) == null;
-                Require(report.cancelledLoadStayed, "取消的旧加载在再次按下时仍部署了机器人。");
-                ui.Drag.Cancel();
-                ui.PressSlot(0, -1, point, Time.unscaledTime);
-                ui.Drag.Advance(Time.unscaledTime + 0.21f);
-                ui.Drag.Move(-1, dropPoint);
-                ui.Drag.Release(-1, dropPoint);
-                await UniTask.WaitUntil(() => ui.Drag.Phase == RobotDragPhase.Idle,
-                    cancellationToken: host.GetCancellationTokenOnDestroy()).Timeout(TimeSpan.FromSeconds(15));
-                Entity entity;
-                var robot = context.Registry.TryGet(instanceId, out entity) ? entity as RobotEntity : null;
-                report.deployedOriginalEntity = robot != null && robot.Location == RobotLocation.Board &&
-                    player.Model.GetOccupant(new BoardCoordinate(4, 3)) == instanceId.ToString() &&
-                    state.EnergyCoins == beforeRefresh && state.Slots[0].InstanceId == null;
-                Require(report.deployedOriginalEntity, "部署未复用已购实体或再次扣费。");
-                report.stableSlotLayout = source.activeSelf &&
-                    ui.transform.Find("m_rect_ShopPanel/m_tf_Offers").childCount == 3 && !icon.enabled;
-                Require(report.stableSlotLayout, "空商品槽消失或布局移动。");
-                // Use the same public logic API without any opponent window.
-                var opponent = context.GetState(BattleSide.Opponent);
-                RobotEntity first, second;
-                Require(context.TryPurchase(BattleSide.Opponent, 0, opponent.Slots[0].Offer.OfferId, out first) == ShopOperationResult.Success,
-                    "敌方购买失败。");
-                Require(context.TryStoreOrSwap(BattleSide.Opponent, first.InstanceId) == ShopOperationResult.Success, "敌方暂存失败。");
-                context.Rewards.TryGrant(context.BattleId, BattleSide.Opponent, ShopRewardSource.Boss, 991);
-                Require(context.TryPurchase(BattleSide.Opponent, 1, opponent.Slots[1].Offer.OfferId, out second) == ShopOperationResult.Success,
-                    "敌方第二次购买失败。");
-                Require(context.TryStoreOrSwap(BattleSide.Opponent, second.InstanceId) == ShopOperationResult.Success, "暂存交换失败。");
-                report.storageSwap = opponent.StorageInstanceId == second.InstanceId && opponent.Slots[1].InstanceId == first.InstanceId;
-                Require(report.storageSwap, "已购机器人未交换回来源商品槽。");
-                Require(context.TryRefresh(BattleSide.Opponent) == ShopOperationResult.Success, "敌方刷新失败。");
-                report.refreshDiscardedOwned = !context.Registry.TryGet(first.InstanceId, out entity) &&
-                    context.Registry.TryGet(second.InstanceId, out entity) && opponent.StorageInstanceId == second.InstanceId;
-                Require(report.refreshDiscardedOwned, "刷新未清除已购槽或误删暂存。");
-                report.opponentWithoutUi = GameObject.FindObjectsOfType<RobotDragController>().Length == 1;
-                Require(report.opponentWithoutUi, "敌方创建了额外UI。");
-                report.passed = true;
-                report.details = "真实TEngine窗口：按下扣币、短按保留、0.2秒拖拽、非法落点返回、原实体部署、双方独立、暂存交换及刷新清除通过。";
-                // Leave the tested board and shop visible for a screenshot; caller may end the battle afterwards.
-            }
-            catch (Exception e) { report.details = e.ToString(); Debug.LogError("[BattleShop Verification] " + report.details); }
-            finally
-            {
-                File.WriteAllText(Path.Combine(Application.dataPath, "../Library/BattleShopVerification.json"), JsonUtility.ToJson(report, true));
-                if (report.passed) Debug.Log("[BattleShop Verification] PASS " + report.details);
-            }
+            await RobotMergePlayVerification.VerifyAsync();
         }
-
         [MenuItem("FreshGuard/Shop/Verify Lifecycle")]
         public static void VerifyLifecycle() { VerifyLifecycleAsync().Forget(); }
 
@@ -214,7 +96,7 @@ namespace FreshGuard.Editor
                 Action<int> cancelOnBegin = side => { if (robot.IsDragging) ui.Drag.Cancel(); };
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, cancelOnBegin);
                 bool began;
-                try { began = ui.Drag.Press(robot.InstanceId, -1, Vector2.zero, Time.unscaledTime); }
+                try { ui.Drag.Press(robot.InstanceId, -1, Vector2.zero, Time.unscaledTime); ui.Drag.Advance(Time.unscaledTime + 0.21f); began = ui.Drag.Phase != RobotDragPhase.Idle; }
                 finally { GameEvent.RemoveEventListener<int>(BattleShopEvents.Changed, cancelOnBegin); }
                 Require(!began && !context.IsBusy && ui.Drag.Phase == RobotDragPhase.Idle,
                     "交互通知内取消被Press覆盖。");

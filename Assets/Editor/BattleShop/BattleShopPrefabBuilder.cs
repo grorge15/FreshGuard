@@ -29,6 +29,7 @@ namespace FreshGuard.Editor
             AttachMain();
             AssetDatabase.SaveAssets();
             EditorSceneManager.SaveScene(scene);
+            RobotMergePrefabBuilder.Upgrade();
             Debug.Log("[BattleShop] 4 个 UI Prefab 已保存，Main 已装配；重复执行不会增加场景对象。");
         }
 
@@ -127,6 +128,7 @@ namespace FreshGuard.Editor
             var group = root.gameObject.AddComponent<CanvasGroup>();
             group.blocksRaycasts = false;
             group.interactable = false;
+            RobotMergePrefabBuilder.UpgradeGhost(root);
             return root.gameObject;
         }
         private static GameObject BuildWindow(GameObject item, GameObject storage, GameObject ghost)
