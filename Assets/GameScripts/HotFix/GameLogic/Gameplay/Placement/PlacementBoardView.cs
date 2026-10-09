@@ -149,6 +149,14 @@ namespace GameLogic
             foreach (var coordinate in cells) Refresh(coordinate);
         }
 
+        public void RefreshAllCells()
+        {
+            if (!_initialized) return;
+            for (var column = 0; column < _slots.GetLength(0); column++)
+                for (var row = 0; row < _slots.GetLength(1); row++)
+                    Refresh(new BoardCoordinate(column, row));
+        }
+
         public void SetHighlighted(BoardCoordinate coordinate, bool highlighted)
         {
             if (!_initialized) return;

@@ -113,10 +113,17 @@ namespace GameLogic.Tests
                 Assert.AreEqual(Color.white, sprite.color);
                 Assert.Greater(sprite.sortingOrder, -10);
                 Assert.AreEqual(0.329f, sprite.sprite.bounds.size.x * cell.localScale.x, 0.0001f);
+                var collider = cell.GetComponent<BoxCollider2D>();
+                Assert.IsNotNull(collider, "每个机器人实体格都需要静态碰撞体。");
+                Assert.IsTrue(collider.enabled);
+                Assert.IsFalse(collider.isTrigger);
+                Assert.That(Vector2.Distance(collider.size, sprite.sprite.bounds.size), Is.LessThan(0.0001f));
+                Assert.That(Vector2.Distance(collider.offset, sprite.sprite.bounds.center), Is.LessThan(0.0001f));
             }
             Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Sprite>(
                 "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"));
-            Assert.IsEmpty(prefab.GetComponentsInChildren<Collider2D>(true));
+            Assert.AreEqual(4, prefab.GetComponentsInChildren<Collider2D>(true).Length,
+                "仅实际占格参与碰撞，不能用根节点包围盒填满L/T空白区。");
             Assert.IsEmpty(prefab.GetComponentsInChildren<Rigidbody2D>(true));
         }
     }

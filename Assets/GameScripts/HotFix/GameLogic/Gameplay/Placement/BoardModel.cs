@@ -92,12 +92,19 @@ namespace GameLogic
     public sealed class BoardModel
     {
         private readonly string[,] _occupants;
+        private readonly bool[,] _open;
         private readonly HashSet<BoardCoordinate> _highlighted = new HashSet<BoardCoordinate>();
 
         public int Columns { get; }
         public int Rows { get; }
 
         public BoardModel(int columns, int rows)
+            : this(columns, rows, null)
+        {
+        }
+
+        /// <summary>null表示全部开放；传空集合表示全部关闭。</summary>
+        public BoardModel(int columns, int rows, IReadOnlyCollection<BoardCoordinate> openCells)
         {
             if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns));
             if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows));
@@ -105,6 +112,47 @@ namespace GameLogic
             Columns = columns;
             Rows = rows;
             _occupants = new string[columns, rows];
+            _open = new bool[columns, rows];
+            if (openCells == null)
+            {
+                for (var column = 0; column < columns; column++)
+                    for (var row = 0; row < rows; row++) _open[column, row] = true;
+            }
+            else
+            {
+                foreach (var coordinate in openCells)
+                {
+                    if (!IsInside(coordinate)) throw new ArgumentOutOfRangeException(nameof(openCells));
+                    _open[coordinate.Column, coordinate.Row] = true;
+                }
+            }
+        }
+
+        public bool IsOpen(BoardCoordinate coordinate)
+        {
+            return IsInside(coordinate) && _open[coordinate.Column, coordinate.Row];
+        }
+
+        /// <summary>占用中的格子不能关闭；高亮状态不改变开放状态。</summary>
+        public bool SetOpen(BoardCoordinate coordinate, bool open)
+        {
+            if (!IsInside(coordinate) || (!open && IsOccupied(coordinate))) return false;
+            _open[coordinate.Column, coordinate.Row] = open;
+            return true;
+        }
+
+        public bool Release(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            var released = false;
+            for (var column = 0; column < Columns; column++)
+                for (var row = 0; row < Rows; row++)
+                    if (_occupants[column, row] == id)
+                    {
+                        _occupants[column, row] = null;
+                        released = true;
+                    }
+            return released;
         }
 
         public bool IsInside(BoardCoordinate coordinate)
@@ -140,7 +188,7 @@ namespace GameLogic
                 }
                 var coordinate = new BoardCoordinate((int)column, (int)row);
                 cells.Add(coordinate);
-                if (IsOccupied(coordinate)) isValid = false;
+                if (!IsOpen(coordinate) || IsOccupied(coordinate)) isValid = false;
             }
 
             return new BoardPlacementResult(isValid, cells);
@@ -151,12 +199,17 @@ namespace GameLogic
             var result = Evaluate(anchor, definition);
             if (!result.IsValid) return false;
 
+            Occupy(result, definition.Id);
+            return true;
+        }
+
+        private void Occupy(BoardPlacementResult result, string id)
+        {
             for (var index = 0; index < result.Cells.Count; index++)
             {
                 var coordinate = result.Cells[index];
-                _occupants[coordinate.Column, coordinate.Row] = definition.Id;
+                _occupants[coordinate.Column, coordinate.Row] = id;
             }
-            return true;
         }
 
         public void SetHighlighted(BoardCoordinate coordinate, bool highlighted)

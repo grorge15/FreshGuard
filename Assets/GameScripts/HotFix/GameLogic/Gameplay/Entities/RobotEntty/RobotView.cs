@@ -11,6 +11,17 @@ namespace GameLogic
         [SerializeField] private int _configId;
 
         public int ConfigId => _configId;
+        public int InstanceId { get; private set; }
+
+        /// <summary>部署已购机器人时绑定原实体，不再次创建或注册。</summary>
+        public void Bind(BattleEntityRegistry registry, int instanceId)
+        {
+            Entity entity;
+            if (registry == null || !registry.TryGet(instanceId, out entity) ||
+                !(entity is RobotEntity robot) || robot.ConfigId != _configId)
+                throw new ArgumentException("视图与已购买机器人不匹配。", nameof(instanceId));
+            InstanceId = instanceId;
+        }
 
         /// <summary>业务方加载预制体后显式创建实体，不在 Awake 中自动注册。</summary>
         public RobotEntity CreateEntity(BattleEntityRegistry registry, BattleSide side, int level = 1, int maxLevel = 5)

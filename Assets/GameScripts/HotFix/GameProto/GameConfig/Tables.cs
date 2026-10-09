@@ -93,6 +93,27 @@ public partial class Tables
             m_TbRobotShape.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 掉落配置
+    /// </summary>
+    private drop.TbDrop m_TbDrop;
+    public drop.TbDrop TbDrop 
+    {
+        get
+        {
+            if (m_TbDrop == null)
+            {
+                m_TbDrop = new drop.TbDrop(defaultLoader("drop_tbdrop"));
+                m_TbDrop.ResolveRef(this);
+            }
+            return m_TbDrop;
+        }
+        set
+        {
+            m_TbDrop = value;
+            m_TbDrop.ResolveRef(this);
+        }
+    }
 
     #endregion
 

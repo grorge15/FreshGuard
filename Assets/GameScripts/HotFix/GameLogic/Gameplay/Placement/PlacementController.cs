@@ -32,11 +32,13 @@ namespace GameLogic
         private BoardCoordinate _grabbedCell;
         private PlacementBoardView _previewBoard;
         private BoardCoordinate _anchor;
+        private BattleSide? _requiredSide;
 
         public bool IsReady => _ready && isActiveAndEnabled &&
             _playerBoard != null && _enemyBoard != null && _playerBoard.isActiveAndEnabled && _enemyBoard.isActiveAndEnabled &&
             _playerBoard.IsInitialized && _enemyBoard.IsInitialized;
         public bool IsDragging => _dragging;
+        public Camera SceneCamera => _sceneCamera;
 
         public bool Initialize()
         {
@@ -74,6 +76,36 @@ namespace GameLogic
             return true;
         }
 
+        public bool BeginDrag(PlaceableDefinition definition, BoardCoordinate grabbedCell, BattleSide side)
+        {
+            if (side != BattleSide.Player && side != BattleSide.Opponent) return false;
+            if (!BeginDrag(definition, grabbedCell)) return false;
+            _requiredSide = side;
+            return true;
+        }
+
+        // Reads the target without reserving cells; the shop commits after preparing its view.
+        public bool TryGetDragTarget(out BoardPlacementTarget target)
+        {
+            target = default(BoardPlacementTarget);
+            if (!_dragging || !IsReady || _previewBoard == null || !IsAllowedBoard(_previewBoard)) return false;
+            target = new BoardPlacementTarget(_previewBoard, _anchor);
+            return true;
+        }
+
+        public BattleSide GetBoardSide(PlacementBoardView board)
+        {
+            if (board == _playerBoard) return BattleSide.Player;
+            if (board == _enemyBoard) return BattleSide.Opponent;
+            throw new System.ArgumentException("棋盘不属于当前摆放控制器。", nameof(board));
+        }
+
+        private bool IsAllowedBoard(PlacementBoardView board)
+        {
+            return !_requiredSide.HasValue ||
+                (_requiredSide.Value == BattleSide.Player ? board == _playerBoard : board == _enemyBoard);
+        }
+
         public void UpdateDrag(Vector2 screenPosition)
         {
             if (!_dragging) return;
@@ -90,13 +122,15 @@ namespace GameLogic
             else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _enemyBoard;
             if (_previewBoard == null) return;
             _anchor = new BoardCoordinate(coordinate.Column - _grabbedCell.Column, coordinate.Row - _grabbedCell.Row);
-            _previewBoard.ShowPreview(_previewBoard.Model.Evaluate(_anchor, _definition));
+            var preview = _previewBoard.Model.Evaluate(_anchor, _definition);
+            if (!IsAllowedBoard(_previewBoard)) preview = new BoardPlacementResult(false, preview.Cells);
+            _previewBoard.ShowPreview(preview);
         }
 
         public bool TryCommit(out BoardPlacementTarget target)
         {
             target = default(BoardPlacementTarget);
-            if (!_dragging || !IsReady || _previewBoard == null) { CancelDrag(); return false; }
+            if (!_dragging || !IsReady || _previewBoard == null || !IsAllowedBoard(_previewBoard)) { CancelDrag(); return false; }
             var board = _previewBoard;
             var anchor = _anchor;
             var result = board.Model.Evaluate(anchor, _definition);
@@ -112,6 +146,7 @@ namespace GameLogic
             ClearPreview();
             _dragging = false;
             _definition = null;
+            _requiredSide = null;
         }
 
         public void SuspendPlacement()

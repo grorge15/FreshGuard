@@ -596,6 +596,12 @@ namespace GameLogic
             return ret;
         }
 
+        /// <summary>读取当前窗口实例（包含加载中的窗口），不改变顺序或用户数据。</summary>
+        public T GetUI<T>() where T : UIWindow
+        {
+            return GetWindow(typeof(T).FullName) as T;
+        }
+
         /// <summary>
         /// 异步获取窗口。
         /// </summary>

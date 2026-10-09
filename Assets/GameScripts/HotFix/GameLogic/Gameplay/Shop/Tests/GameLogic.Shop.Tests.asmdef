@@ -1,0 +1,12 @@
+{
+  "name": "GameLogic.Shop.Tests",
+  "rootNamespace": "GameLogic.Tests",
+  "references": [
+    "GameLogic",
+    "GameProto",
+    "TEngine.Runtime"
+  ],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false,
+  "optionalUnityReferences": ["TestAssemblies"]
+}

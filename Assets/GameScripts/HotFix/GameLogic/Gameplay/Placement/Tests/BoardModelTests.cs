@@ -183,6 +183,42 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void ShopDragRejectsOpponentBoardBeforeOccupancyChanges()
+        {
+            using (var fixture = new DragFixture())
+            {
+                var begin = typeof(PlacementController).GetMethod("BeginDrag", new[]
+                {
+                    typeof(PlaceableDefinition), typeof(BoardCoordinate), typeof(BattleSide)
+                });
+                Assert.IsNotNull(begin, "商店拖拽必须显式约束所属方，不能先占敌方格再回滚。");
+                Assert.IsTrue((bool)begin.Invoke(fixture.Controller, new object[]
+                {
+                    new PlaceableDefinition("ShopRobot", 1, 1), new BoardCoordinate(0, 0), BattleSide.Player
+                }));
+                fixture.UpdateAt(fixture.Enemy, 0, 0);
+                BoardPlacementTarget target;
+                Assert.IsFalse(fixture.Controller.TryCommit(out target));
+                Assert.IsFalse(fixture.Enemy.View.Model.IsOccupied(new BoardCoordinate(0, 0)));
+            }
+        }
+
+        [Test]
+        public void ShopTargetInspectionDoesNotReserveCells()
+        {
+            using (var fixture = new DragFixture())
+            {
+                var inspect = typeof(PlacementController).GetMethod("TryGetDragTarget");
+                Assert.IsNotNull(inspect, "准备异步视图前读取目标不能写入棋盘。");
+                fixture.Controller.BeginDrag(new PlaceableDefinition("ShopRobot", 1, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateAt(fixture.Player, 0, 0);
+                var arguments = new object[] { null };
+                Assert.IsTrue((bool)inspect.Invoke(fixture.Controller, arguments));
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(0, 0)));
+            }
+        }
+
+        [Test]
         public void CrossingBoardsLeavingAndCancellationRestorePreview()
         {
             using (var fixture = new DragFixture())
