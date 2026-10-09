@@ -20,12 +20,20 @@ namespace GameLogic
         private Vector2 _direction;
         private bool _launched;
         private bool _frozen;
+        private bool _dragging;
         private Func<bool> _runningGate;
         private readonly HashSet<int> _glassHitsThisStep = new HashSet<int>();
         private GameConfig.globalcfg.TbGlobal _globalTable;
         public Func<int, float> GlobalValueProvider { get; set; }
         public Vector2 CurrentDirection => _direction;
         public float Speed => speed;
+        public float EffectiveSpeed
+        {
+            get
+            {
+                return !_dragging || IsBerserk ? speed : speed * ReadDraggingMultiplier();
+            }
+        }
         public int BounceCount { get; private set; }
         public BattleSide Side { get; private set; }
         public long BattleId { get; private set; }
@@ -33,6 +41,14 @@ namespace GameLogic
         public bool IsLaunched => _launched;
         public float SecondsSinceEffectiveInteraction { get; private set; }
         public event Action<PhysicalCollisionBall> EffectiveInteraction;
+
+        private float ReadDraggingMultiplier()
+        {
+            if (GlobalValueProvider == null) return 1f;
+            float multiplier = GlobalValueProvider(17);
+            return !float.IsNaN(multiplier) && !float.IsInfinity(multiplier) && multiplier > 0f && multiplier <= 1f
+                ? multiplier : 1f;
+        }
 
         private void Awake()
         {
@@ -58,13 +74,17 @@ namespace GameLogic
         private void OnDisable() { Stop(); }
         private void FixedUpdate()
         {
-            _glassHitsThisStep.Clear();
-            if (_launched && !_frozen && _runningGate != null && !_runningGate()) { Stop(); return; }
-            if (_launched && !_frozen && (_runningGate == null || _runningGate()))
+            try
             {
-                SecondsSinceEffectiveInteraction += Time.fixedDeltaTime;
-                _body.velocity = _direction * speed;
+                _glassHitsThisStep.Clear();
+                if (_launched && !_frozen && _runningGate != null && !_runningGate()) { Stop(); return; }
+                if (_launched && !_frozen && (_runningGate == null || _runningGate()))
+                {
+                    SecondsSinceEffectiveInteraction += Time.fixedDeltaTime;
+                    _body.velocity = _direction * EffectiveSpeed;
+                }
             }
+            catch (Exception e) { StopWithError(e); }
         }
 
         public void BindBattle(long battleId, BattleSide side, Func<bool> runningGate)
@@ -80,21 +100,47 @@ namespace GameLogic
             SecondsSinceEffectiveInteraction = 0f;
         }
 
-        public void SetBerserk(bool berserk) { IsBerserk = berserk; }
+        public void SetDragging(bool dragging)
+        {
+            try
+            {
+                // 先验证配置再提交拖拽状态，冻结、未发射或暴走不能掩盖配置读取失败。
+                if (dragging) ReadDraggingMultiplier();
+                _dragging = dragging;
+                ApplyEffectiveVelocity();
+            }
+            catch (Exception e) { StopWithError(e); }
+        }
+
+        public void SetBerserk(bool berserk)
+        {
+            IsBerserk = berserk;
+            ApplyEffectiveVelocity();
+        }
 
         public void SetFrozen(bool frozen)
         {
             _frozen = frozen;
-            if (_body != null)
+            ApplyEffectiveVelocity();
+        }
+
+        private void ApplyEffectiveVelocity()
+        {
+            if (_body == null) return;
+            try
             {
-                _body.simulated = !frozen && _launched;
-                _body.velocity = _launched && !frozen ? _direction * speed : Vector2.zero;
+                bool moving = _launched && !_frozen && (_runningGate == null || _runningGate());
+                Vector2 velocity = moving ? _direction * EffectiveSpeed : Vector2.zero;
+                _body.simulated = moving;
+                _body.velocity = velocity;
             }
+            catch (Exception e) { StopWithError(e); }
         }
 
         public void Stop()
         {
             _launched = false;
+            _dragging = false;
             _glassHitsThisStep.Clear();
             if (_body != null) { _body.velocity = Vector2.zero; _body.simulated = false; }
         }
@@ -123,7 +169,7 @@ namespace GameLogic
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
                 _body.simulated = true;
                 _body.position = position;
-                _body.velocity = _direction * speed;
+                _body.velocity = _direction * EffectiveSpeed;
                 BounceCount = 0;
                 SecondsSinceEffectiveInteraction = 0f;
                 _glassHitsThisStep.Clear();
@@ -155,7 +201,7 @@ namespace GameLogic
                     bounced = true;
                     break;
                 }
-                _body.velocity = _direction * speed;
+                _body.velocity = _direction * EffectiveSpeed;
                 if (bounced && glass != null && _glassHitsThisStep.Add(glass.InstanceId))
                 {
                     var result = glass.Collide(this);
