@@ -18,6 +18,7 @@ namespace GameLogic
         public RobotLocation Location { get; private set; }
         public BoardCoordinate? Anchor { get; private set; }
         public bool IsDragging { get; private set; }
+        public long ActionVersion { get; private set; } = 1;
         public float TriggerCooldownRemaining { get; private set; }
         public bool CanParticipate => !IsRemoved && Location == RobotLocation.Board && !IsDragging;
 
@@ -78,6 +79,7 @@ namespace GameLogic
         internal bool TryUpgrade()
         {
             if (IsRemoved || Level >= MaxLevel) return false;
+            ActionVersion++;
             Level++;
             TriggerCooldownRemaining = 0f;
             return true;
@@ -99,6 +101,7 @@ namespace GameLogic
 
         protected override void OnRemoved()
         {
+            ActionVersion++;
             Location = RobotLocation.Unplaced;
             Anchor = null;
             IsDragging = false;

@@ -32,6 +32,7 @@ namespace GameLogic
     public static class BattleShopEvents
     {
         public const int Changed = 0x53484F50;
+        public const int Merged = 0x53484F51;
     }
 
     public sealed class ShopOffer

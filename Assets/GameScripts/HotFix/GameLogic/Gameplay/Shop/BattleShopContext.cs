@@ -8,10 +8,10 @@ using TEngine;
 namespace GameLogic
 {
     /// <summary>
-    /// 单局双方商店事务。购买即扣费并创建实体，交互不移除来源；失败由调用方取消交互。
+    /// 单局双方商店事务。拖拽先释放场上占格；提交后消费来源，取消恢复原位。
     /// 主线程使用；Registry用于读取和战斗实体管理，已购机器人的移除由本Context完成。
     /// </summary>
-    public sealed class BattleShopContext : IDisposable
+    public sealed partial class BattleShopContext : IDisposable
     {
         private static long _lastBattleId;
         private readonly BattleShopState[] _states;
@@ -24,14 +24,15 @@ namespace GameLogic
         private readonly HashSet<RewardKey> _rewardKeys = new HashSet<RewardKey>();
         private readonly IShopRandom _random;
         private long _nextOfferId = 1;
-        private int? _interactionId;
-        private BattleSide _interactionSide;
+        private static long _lastInteractionId;
+        public RobotDragSession ActiveInteraction { get; private set; }
         private bool _committing;
+        private long? _cancelRequestedInteractionId;
         private bool _endRequested;
 
         public long BattleId { get; } = Interlocked.Increment(ref _lastBattleId);
         public bool IsEnded { get; private set; }
-        public bool IsBusy => _interactionId.HasValue;
+        public bool IsBusy => ActiveInteraction != null;
         public ShopRules Rules { get; }
         public int RefreshPrice => Rules.RefreshPrice;
         public BattleEntityRegistry Registry { get; } = new BattleEntityRegistry();
@@ -73,22 +74,23 @@ namespace GameLogic
             robot = null;
             var gate = CheckMutation(side);
             if (gate != ShopOperationResult.Success) return gate;
-            var state = GetState(side);
-            if (slotId < 0 || slotId >= state.Slots.Count) return ShopOperationResult.InvalidSlot;
-            var slot = state.Slots[slotId];
-            if (slot.IsPurchased) return ShopOperationResult.AlreadyPurchased;
-            var offer = slot.Offer;
-            if (offer == null || offer.OfferId != offerId) return ShopOperationResult.StaleOffer;
-            if (state.EnergyCoins < offer.Price) return ShopOperationResult.InsufficientCoins;
+            RobotEntity owned;
+            ShopSlot slot;
+            Robot config;
+            int level;
+            PlaceableDefinition definition;
+            var result = ResolveDragSource(side, RobotDragSource.Offer(slotId, offerId), out owned,
+                out slot, out config, out level, out definition, true);
+            if (result != ShopOperationResult.Success) return result;
+            result = CheckOfferFunds(side, slot);
+            if (result != ShopOperationResult.Success) return result;
             _committing = true;
             try
             {
-                try { robot = Registry.CreateRobotFromConfig(_configs[offer.RobotId], side, offer.Level, Rules.MaxRobotLevel); }
-                catch (ArgumentException) { return ShopOperationResult.InvalidConfiguration; }
+                result = CreateOfferRobot(side, slot, out robot);
+                if (result != ShopOperationResult.Success) return result;
                 robot.TrySetLocation(RobotLocation.PurchasedShopSlot, null);
-                _owned.Add(robot.InstanceId, robot);
-                state.EnergyCoins -= offer.Price;
-                slot.Offer = null;
+                ConsumeOffer(side, slot);
                 slot.InstanceId = robot.InstanceId;
                 Notify(side);
                 return ShopOperationResult.Success;
@@ -96,106 +98,41 @@ namespace GameLogic
             finally { FinishMutation(); }
         }
 
+        // 同步兼容入口与会话入口共享校验和提交逻辑；工具调用无需显式拿起。
         public ShopOperationResult TryDeploy(BattleSide side, int instanceId, BattleSide boardSide,
             BoardModel board, BoardCoordinate anchor)
         {
-            var gate = CheckMutation(side, instanceId);
+            RobotDragSession session;
+            bool created;
+            var gate = BeginLegacyCommit(side, instanceId, out session, out created);
             if (gate != ShopOperationResult.Success) return gate;
-            if (!IsValidSide(boardSide) || board == null) return ShopOperationResult.InvalidArgument;
-            if (boardSide != side) return ShopOperationResult.WrongSide;
-            BattleSide registeredSide;
-            if (_boardSides.TryGetValue(board, out registeredSide) && registeredSide != side)
-                return ShopOperationResult.WrongSide;
             RobotEntity robot;
-            var source = FindOwned(side, instanceId, out robot);
-            if (source != ShopOperationResult.Success) return source;
-            if (!IsMovableSource(robot)) return ShopOperationResult.InvalidLocation;
-            _committing = true;
-            try
-            {
-                if (!board.TryPlace(anchor, robot.Definition))
-                    return ShopOperationResult.InvalidPlacement;
-                DetachSource(robot);
-                _boards[instanceId] = board;
-                _boardSides[board] = side;
-                robot.TrySetLocation(RobotLocation.Board, anchor);
-                CompleteInteraction();
-                Notify(side);
-                return ShopOperationResult.Success;
-            }
-            finally { FinishMutation(); }
+            var result = TryCommitDeploy(session.InteractionId, boardSide, board, anchor, out robot);
+            FinishLegacyCommit(session, created, result);
+            return result;
         }
 
         public ShopOperationResult TryMerge(BattleSide side, int instanceId, int targetInstanceId)
         {
-            var gate = CheckMutation(side, instanceId);
+            RobotDragSession session;
+            bool created;
+            var gate = BeginLegacyCommit(side, instanceId, out session, out created);
             if (gate != ShopOperationResult.Success) return gate;
-            RobotEntity sourceRobot;
-            RobotEntity targetRobot;
-            var source = FindOwned(side, instanceId, out sourceRobot);
-            if (source != ShopOperationResult.Success) return source;
-            if (!IsMovableSource(sourceRobot)) return ShopOperationResult.InvalidLocation;
-            var target = FindOwned(side, targetInstanceId, out targetRobot);
-            if (target != ShopOperationResult.Success) return target;
-            if (targetRobot.Location != RobotLocation.Board) return ShopOperationResult.InvalidLocation;
-            if (instanceId == targetInstanceId || sourceRobot.ConfigId != targetRobot.ConfigId || sourceRobot.Level != targetRobot.Level)
-                return ShopOperationResult.IncompatibleMerge;
-            if (targetRobot.Level >= Rules.MaxRobotLevel || targetRobot.Level >= targetRobot.MaxLevel)
-                return ShopOperationResult.MaxLevelReached;
-            _committing = true;
-            try
-            {
-                if (!targetRobot.TryUpgrade()) return ShopOperationResult.IncompatibleMerge;
-                DetachSource(sourceRobot);
-                EntityRemovalSnapshot removal;
-                Registry.Remove(instanceId, EntityRemovalReason.Consumed, out removal);
-                _owned.Remove(instanceId);
-                CompleteInteraction();
-                Notify(side);
-                return ShopOperationResult.Success;
-            }
-            finally { FinishMutation(); }
+            var result = TryCommitMerge(session.InteractionId, targetInstanceId);
+            FinishLegacyCommit(session, created, result);
+            return result;
         }
 
         public ShopOperationResult TryStoreOrSwap(BattleSide side, int instanceId)
         {
-            var gate = CheckMutation(side, instanceId);
+            RobotDragSession session;
+            bool created;
+            var gate = BeginLegacyCommit(side, instanceId, out session, out created);
             if (gate != ShopOperationResult.Success) return gate;
             RobotEntity robot;
-            var source = FindOwned(side, instanceId, out robot);
-            if (source != ShopOperationResult.Success) return source;
-            if (!IsMovableSource(robot)) return ShopOperationResult.InvalidLocation;
-            var state = GetState(side);
-            var sourceSlot = FindSlot(state, instanceId);
-            RobotEntity stored = null;
-            if (state.StorageInstanceId.HasValue && robot.Location != RobotLocation.Storage)
-            {
-                if (sourceSlot == null) return ShopOperationResult.StorageFull;
-                var storage = FindOwned(side, state.StorageInstanceId.Value, out stored);
-                if (storage != ShopOperationResult.Success) return storage;
-            }
-            _committing = true;
-            try
-            {
-                if (robot.Location == RobotLocation.Storage)
-                {
-                    CompleteInteraction();
-                    Notify(side);
-                    return ShopOperationResult.Success;
-                }
-                DetachSource(robot);
-                if (stored != null)
-                {
-                    sourceSlot.InstanceId = stored.InstanceId;
-                    stored.TrySetLocation(RobotLocation.PurchasedShopSlot, null);
-                }
-                state.StorageInstanceId = instanceId;
-                robot.TrySetLocation(RobotLocation.Storage, null);
-                CompleteInteraction();
-                Notify(side);
-                return ShopOperationResult.Success;
-            }
-            finally { FinishMutation(); }
+            var result = TryCommitStorage(session.InteractionId, out robot);
+            FinishLegacyCommit(session, created, result);
+            return result;
         }
 
         public ShopOperationResult TryRefresh(BattleSide side)
@@ -213,6 +150,7 @@ namespace GameLogic
                 // 抽取成功前不扣币、不销毁；抽取失败可以重试。
                 foreach (var slot in state.Slots)
                 {
+                    if (slot.Offer != null) _offerDefinitions.Remove(slot.Offer.OfferId);
                     if (slot.InstanceId.HasValue)
                     {
                         EntityRemovalSnapshot removal;
@@ -232,33 +170,13 @@ namespace GameLogic
 
         public bool TryBeginInteraction(BattleSide side, int instanceId)
         {
-            if (CheckMutation(side) != ShopOperationResult.Success) return false;
-            RobotEntity robot;
-            if (FindOwned(side, instanceId, out robot) != ShopOperationResult.Success) return false;
-            if (!IsMovableSource(robot)) return false;
-            _committing = true;
-            try
-            {
-                _interactionSide = side;
-                _interactionId = instanceId;
-                robot.TrySetDragging(true);
-                Notify(side);
-                return true;
-            }
-            finally { FinishMutation(); }
+            RobotDragSession session;
+            return TryBeginDrag(side, RobotDragSource.Owned(instanceId), out session) == ShopOperationResult.Success;
         }
 
         public void CancelInteraction()
         {
-            if (_committing || !_interactionId.HasValue) return;
-            var side = _interactionSide;
-            _committing = true;
-            try
-            {
-                CompleteInteraction();
-                Notify(side);
-            }
-            finally { FinishMutation(); }
+            if (ActiveInteraction != null) CancelInteraction(ActiveInteraction.InteractionId);
         }
 
         public void EndBattle()
@@ -270,6 +188,7 @@ namespace GameLogic
             IsEnded = true;
             try
             {
+                RestoreInteraction();
                 CompleteInteraction();
                 foreach (var pair in _boards)
                     pair.Value.Release(pair.Key.ToString(CultureInfo.InvariantCulture));
@@ -283,6 +202,7 @@ namespace GameLogic
                 Registry.Dispose();
                 _owned.Clear();
                 _rewardKeys.Clear();
+                _offerDefinitions.Clear();
                 foreach (var state in _states) Notify(state.Side);
             }
             finally { FinishMutation(); }
@@ -319,8 +239,9 @@ namespace GameLogic
         {
             if (IsEnded || _endRequested) return ShopOperationResult.BattleEnded;
             if (!IsValidSide(side)) return ShopOperationResult.InvalidArgument;
-            if (_committing || (!allowInteraction && _interactionId.HasValue &&
-                (_interactionId != instanceId || _interactionSide != side))) return ShopOperationResult.Busy;
+            if (_committing || (!allowInteraction && ActiveInteraction != null &&
+                (ActiveInteraction.Source.Kind != RobotDragSourceKind.OwnedRobot ||
+                 ActiveInteraction.Source.InstanceId != instanceId || ActiveInteraction.Side != side))) return ShopOperationResult.Busy;
             return ShopOperationResult.Success;
         }
 
@@ -358,11 +279,6 @@ namespace GameLogic
             return null;
         }
 
-        private static bool IsMovableSource(RobotEntity robot)
-        {
-            return robot.Location == RobotLocation.PurchasedShopSlot || robot.Location == RobotLocation.Storage;
-        }
-
         private void DetachSource(RobotEntity robot)
         {
             var state = GetState(robot.Side);
@@ -372,19 +288,20 @@ namespace GameLogic
             BoardModel board;
             if (_boards.TryGetValue(robot.InstanceId, out board))
             {
-                board.Release(robot.InstanceId.ToString(CultureInfo.InvariantCulture));
+                // 拿起时已经释放原占格，部署时目标占格已写入，不能再次Release同一ID。
+                if (!IsLiftedBoardSource(robot)) board.Release(robot.Definition.Id);
                 _boards.Remove(robot.InstanceId);
             }
         }
 
         private void CompleteInteraction()
         {
-            if (_interactionId.HasValue)
+            if (ActiveInteraction != null && ActiveInteraction.Source.Kind == RobotDragSourceKind.OwnedRobot)
             {
                 RobotEntity robot;
-                if (_owned.TryGetValue(_interactionId.Value, out robot)) robot.TrySetDragging(false);
+                if (_owned.TryGetValue(ActiveInteraction.Source.InstanceId, out robot)) robot.TrySetDragging(false);
             }
-            _interactionId = null;
+            ActiveInteraction = null;
         }
 
         private void Notify(BattleSide side) { GameEvent.Send<int>(BattleShopEvents.Changed, (int)side); }
@@ -392,11 +309,14 @@ namespace GameLogic
         private void FinishMutation()
         {
             _committing = false;
+            var cancellation = _cancelRequestedInteractionId;
+            _cancelRequestedInteractionId = null;
             if (_endRequested)
             {
                 _endRequested = false;
                 EndBattle();
             }
+            else if (cancellation.HasValue) CancelInteraction(cancellation.Value);
         }
 
         private int[] CopyCandidates(IReadOnlyList<int> source)
@@ -433,7 +353,7 @@ namespace GameLogic
             return slots;
         }
 
-        private void ValidateConfig(int id, Robot config)
+        private PlaceableDefinition ValidateConfig(int id, Robot config, string definitionId = "config")
         {
             if (config == null || config.Id != id || config.ShapeId <= 0 || config.SkillId < 0 ||
                 config.ShapeId_Ref == null || config.ShapeId_Ref.Id != config.ShapeId ||
@@ -446,7 +366,7 @@ namespace GameLogic
                 if (cell == null || cell.Length != 2) throw new ArgumentException("机器人占格必须是坐标二元组。");
                 cells.Add(new BoardCoordinate(cell[0], cell[1]));
             }
-            new PlaceableDefinition("config", cells);
+            return new PlaceableDefinition(definitionId, cells);
         }
 
         private ShopOffer[] GenerateBatch(BattleShopState state, bool initial)

@@ -21,6 +21,7 @@ namespace GameLogic.Tests
         [Test]
         public void DraggingSuspendsParticipationButPreservesSourceAndProtection()
         {
+            var version = _robot.ActionVersion;
             var anchor = new BoardCoordinate(2, 3);
             Assert.IsFalse(_robot.CanParticipate);
             Assert.IsFalse(_robot.TryConsumeAttackTrigger(2f));
@@ -31,6 +32,7 @@ namespace GameLogic.Tests
             Assert.IsFalse(_robot.CanParticipate);
             _registry.AdvanceTime(0.5f);
             Assert.AreEqual(1.5f, _robot.TriggerCooldownRemaining);
+            Assert.AreEqual(version, _robot.ActionVersion, "拖拽、恢复和存储不取消已产生的行动。");
             Assert.IsTrue(_robot.TrySetDragging(false));
             Assert.AreEqual(anchor, _robot.Anchor);
             Assert.IsTrue(_robot.CanParticipate);
@@ -65,11 +67,19 @@ namespace GameLogic.Tests
             _robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(1, 0));
             limited.TryConsumeAttackTrigger(3f);
             _robot.TryConsumeAttackTrigger(3f);
+            var limitedVersion = limited.ActionVersion;
+            var otherVersion = _robot.ActionVersion;
             Assert.IsTrue(limited.TryUpgrade());
+            Assert.Greater(limited.ActionVersion, limitedVersion);
+            Assert.AreEqual(otherVersion, _robot.ActionVersion);
             Assert.AreEqual(2, limited.Level);
             Assert.AreEqual(0f, limited.TriggerCooldownRemaining);
             Assert.AreEqual(3f, _robot.TriggerCooldownRemaining);
+            limited.TryConsumeAttackTrigger(2f);
+            var maxVersion = limited.ActionVersion;
             Assert.IsFalse(limited.TryUpgrade());
+            Assert.AreEqual(maxVersion, limited.ActionVersion);
+            Assert.AreEqual(2f, limited.TriggerCooldownRemaining, "失败升级不清除保护。");
             Assert.AreEqual(2, limited.Level);
         }
 
@@ -108,8 +118,10 @@ namespace GameLogic.Tests
             _robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
             _robot.TryConsumeAttackTrigger(3f);
             _robot.TrySetDragging(true);
+            var version = _robot.ActionVersion;
             EntityRemovalSnapshot removal;
             Assert.IsTrue(_registry.Remove(_robot.InstanceId, EntityRemovalReason.Consumed, out removal));
+            Assert.Greater(_robot.ActionVersion, version);
             Assert.AreEqual(EntityKind.Robot, removal.Kind);
             Assert.AreEqual(2, removal.RobotLevel);
             Assert.IsNull(removal.EnemyHp);
