@@ -50,9 +50,14 @@ namespace FreshGuard.Editor
                 Require(Application.isPlaying, "需要从启动场景进入 PlayMode。");
                 var host = UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
                 Require(host != null && host.IsReady, "商店未初始化。");
+                host.EndBattle();
+                await host.InitializeAsync();
+                host.SetFrozen(true);
                 var context = host.Context;
                 var ui = await GameModule.UI.ShowUIAsyncAwait<BattleShopUI>(context, host);
                 Require(ui != null && ui.IsPrepare, "TEngine 窗口未就绪。");
+                Canvas.ForceUpdateCanvases();
+                await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
                 report.singleEventSystem = UnityEngine.Object.FindObjectsOfType<EventSystem>().Length == 1;
                 Require(report.singleEventSystem, "存在重复的活动 EventSystem。");
                 var state = context.GetState(BattleSide.Player);
@@ -92,7 +97,7 @@ namespace FreshGuard.Editor
                 Require(report.invalidDropReturned, "非法落点未返回原槽或发生退款。");
                 var player = GameObject.Find("PlayerBoardWorldRoot").GetComponentInChildren<PlacementBoardView>();
                 var camera = Camera.main;
-                var dropPoint = (Vector2)camera.WorldToScreenPoint(player.GetCellWorldPosition(new BoardCoordinate(0, 0)));
+                var dropPoint = (Vector2)camera.WorldToScreenPoint(player.GetCellWorldPosition(new BoardCoordinate(4, 3)));
                 Entity cachedEntity;
                 context.Registry.TryGet(instanceId, out cachedEntity);
                 // Warm the normal asset cache, whose Instantiate path yields one frame.
@@ -111,7 +116,7 @@ namespace FreshGuard.Editor
                 await UniTask.Yield();
                 await UniTask.Yield();
                 report.cancelledLoadStayed = state.Slots[0].InstanceId == instanceId &&
-                    player.Model.GetOccupant(new BoardCoordinate(0, 0)) == null;
+                    player.Model.GetOccupant(new BoardCoordinate(4, 3)) == null;
                 Require(report.cancelledLoadStayed, "取消的旧加载在再次按下时仍部署了机器人。");
                 ui.Drag.Cancel();
                 ui.PressSlot(0, -1, point, Time.unscaledTime);
@@ -123,7 +128,7 @@ namespace FreshGuard.Editor
                 Entity entity;
                 var robot = context.Registry.TryGet(instanceId, out entity) ? entity as RobotEntity : null;
                 report.deployedOriginalEntity = robot != null && robot.Location == RobotLocation.Board &&
-                    player.Model.GetOccupant(new BoardCoordinate(0, 0)) == instanceId.ToString() &&
+                    player.Model.GetOccupant(new BoardCoordinate(4, 3)) == instanceId.ToString() &&
                     state.EnergyCoins == beforeRefresh && state.Slots[0].InstanceId == null;
                 Require(report.deployedOriginalEntity, "部署未复用已购实体或再次扣费。");
                 report.stableSlotLayout = source.activeSelf &&
@@ -171,6 +176,9 @@ namespace FreshGuard.Editor
                 Require(Application.isPlaying, "需要 PlayMode。");
                 var host = UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
                 Require(host != null && host.IsReady, "商店未就绪。");
+                host.EndBattle();
+                await host.InitializeAsync();
+                host.SetFrozen(true);
                 var context = host.Context;
                 var state = context.GetState(BattleSide.Player);
                 // Verify the real event adapter, including duplicate facts.
@@ -196,7 +204,7 @@ namespace FreshGuard.Editor
                     sawFlash |= coins.color != Color.white;
                     await UniTask.Yield();
                 }
-                await UniTask.Yield();
+                await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
                 Require(sawFlash && coins.color == Color.white, "0.5秒不足闪烁未结束。");
                 GameEvent.Send(BattleRewardAdapter.REWARD_EVENT,
                     new BattleRewardEvent(context.BattleId, BattleSide.Player, ShopRewardSource.Boss, 70002));
@@ -221,14 +229,14 @@ namespace FreshGuard.Editor
                 try
                 {
                     result = await host.DeployRobotAsync(robot.InstanceId,
-                        new BoardPlacementTarget(player, new BoardCoordinate(0, 3)), host.GetCancellationTokenOnDestroy());
+                        new BoardPlacementTarget(player, new BoardCoordinate(4, 3)), host.GetCancellationTokenOnDestroy());
                 }
                 finally { GameEvent.RemoveEventListener<int>(BattleShopEvents.Changed, endOnDeploy); }
                 await UniTask.Yield();
                 Require(result == ShopOperationResult.BattleEnded && context.IsEnded && !host.IsReady,
                     "部署通知内终局未阻止晚到视图。");
                 Require(UnityEngine.Object.FindObjectsOfType<RobotView>().Length == 0 &&
-                    player.Model.GetOccupant(new BoardCoordinate(0, 3)) == null && GameModule.UI.GetUI<BattleShopUI>() == null,
+                    player.Model.GetOccupant(new BoardCoordinate(4, 3)) == null && GameModule.UI.GetUI<BattleShopUI>() == null,
                     "终局留下视图、占格或窗口。");
                 Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.BattleEnded, "终局仍可刷新。");
                 host.EndBattle();

@@ -49,7 +49,7 @@ namespace FreshGuard.Editor
             {
                 Require(Application.isPlaying, "需要从启动场景进入 PlayMode。");
                 host = UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
-                ball = UnityEngine.Object.FindObjectOfType<PhysicalCollisionBall>();
+                ball = host != null && host.Bootstrap != null ? host.Bootstrap.PlayerBall : null;
                 Require(host != null && host.IsReady && ball != null, "商店或小球未就绪。");
                 ballSettings = new SerializedObject(ball);
                 spawn = ballSettings.FindProperty("spawnPosition").vector2Value;
@@ -62,6 +62,8 @@ namespace FreshGuard.Editor
                     host.EndBattle();
                     await host.InitializeAsync();
                     Require(host.IsReady, "验收新局初始化失败。");
+                    await UniTask.WaitUntil(() => host.IsCombatRunning).Timeout(TimeSpan.FromSeconds(8));
+                    host.Bootstrap.StopBalls();
                     var context = host.Context;
                     var state = context.GetState(BattleSide.Player);
                     var slot = -1;
@@ -96,7 +98,7 @@ namespace FreshGuard.Editor
                             emptyClear &= colliders.All(item => !item.OverlapPoint(point));
                         }
                     ballSettings.Update();
-                    ballSettings.FindProperty("spawnPosition").vector2Value = (Vector2)target.AnchorWorldPosition + Vector2.left * 0.8f;
+                    ballSettings.FindProperty("spawnPosition").vector2Value = board.GetCellWorldPosition(new BoardCoordinate(3, 3));
                     ballSettings.FindProperty("initialAngleMin").floatValue = 0;
                     ballSettings.FindProperty("initialAngleMax").floatValue = 0;
                     ballSettings.ApplyModifiedPropertiesWithoutUndo();

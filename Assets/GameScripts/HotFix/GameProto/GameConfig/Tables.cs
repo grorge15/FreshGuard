@@ -114,6 +114,48 @@ public partial class Tables
             m_TbDrop.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 玻璃配置
+    /// </summary>
+    private glass.TbGlass m_TbGlass;
+    public glass.TbGlass TbGlass 
+    {
+        get
+        {
+            if (m_TbGlass == null)
+            {
+                m_TbGlass = new glass.TbGlass(defaultLoader("glass_tbglass"));
+                m_TbGlass.ResolveRef(this);
+            }
+            return m_TbGlass;
+        }
+        set
+        {
+            m_TbGlass = value;
+            m_TbGlass.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 棋盘布局配置
+    /// </summary>
+    private board.TbBoardLayout m_TbBoardLayout;
+    public board.TbBoardLayout TbBoardLayout 
+    {
+        get
+        {
+            if (m_TbBoardLayout == null)
+            {
+                m_TbBoardLayout = new board.TbBoardLayout(defaultLoader("board_tbboardlayout"));
+                m_TbBoardLayout.ResolveRef(this);
+            }
+            return m_TbBoardLayout;
+        }
+        set
+        {
+            m_TbBoardLayout = value;
+            m_TbBoardLayout.ResolveRef(this);
+        }
+    }
 
     #endregion
 

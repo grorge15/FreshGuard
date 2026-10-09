@@ -65,7 +65,7 @@ namespace GameLogic
             }, new[] { ShopEnemyKind.Normal, ShopEnemyKind.Elite, ShopEnemyKind.Boss });
             GlassRewards = CopyAmounts(glassRewards ?? new Dictionary<ShopGlassKind, int>
             {
-                { ShopGlassKind.Normal, 10 }, { ShopGlassKind.Rainbow, 10 }
+                { ShopGlassKind.Normal, 10 }, { ShopGlassKind.Rainbow, 30 }
             }, new[] { ShopGlassKind.Normal, ShopGlassKind.Rainbow });
             InitialCoins = initialCoins;
             RefreshPrice = refreshPrice;

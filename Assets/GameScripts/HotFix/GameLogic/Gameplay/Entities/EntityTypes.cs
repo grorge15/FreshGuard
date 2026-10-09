@@ -4,9 +4,11 @@ namespace GameLogic
 {
     public enum BattleSide { Player, Opponent }
     public enum RobotLocation { Unplaced, Board, Storage, PurchasedShopSlot }
-    public enum EntityRemovalReason { None, Consumed, Killed, Leaked, BattleEnded, Manual }
-    public enum EntityKind { Robot, Enemy }
+    public enum EntityRemovalReason { None, Consumed, Killed, Leaked, BattleEnded, Manual, Broken }
+    public enum EntityKind { Robot, Enemy, Glass }
     public enum DamageResult { Ignored, Damaged, Killed }
+    public enum GlassKind { Normal = 0, Colored = 1 }
+    public enum GlassCollisionResult { Ignored, Damaged, Broken }
 
     internal static class EntityValidation
     {

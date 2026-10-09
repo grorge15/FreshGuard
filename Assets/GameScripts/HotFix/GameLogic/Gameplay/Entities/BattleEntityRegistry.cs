@@ -79,9 +79,12 @@ namespace GameLogic
             if (!TryGet(instanceId, out entity) || entity.IsRemoved || !CanRemove(entity, reason)) return false;
             removal = new EntityRemovalSnapshot(entity, reason);
             _entities.Remove(instanceId);
+            var glass = entity as GlassEntity;
+            if (glass != null) _glassByCell.Remove((glass.Side, glass.Coordinate));
             entity.MarkRemoved(reason);
             var enemy = entity as EnemyEntity;
             if (enemy != null) MemoryPool.Release(enemy);
+            if (glass != null) MemoryPool.Release(glass);
             return true;
         }
 
@@ -90,7 +93,10 @@ namespace GameLogic
             ThrowIfDisposed();
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             foreach (var entity in _entities.Values)
+            {
                 (entity as RobotEntity)?.AdvanceTime(deltaTime);
+                (entity as GlassEntity)?.AdvanceTime(deltaTime);
+            }
         }
 
         public void Dispose()
@@ -114,6 +120,8 @@ namespace GameLogic
                     return entity is EnemyEntity enemy && enemy.CurrentHp == 0;
                 case EntityRemovalReason.Leaked:
                     return entity is EnemyEntity;
+                case EntityRemovalReason.Broken:
+                    return entity is GlassEntity glass && glass.CurrentDurability == 0;
                 case EntityRemovalReason.Manual:
                 case EntityRemovalReason.BattleEnded:
                     return true;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GameLogic
@@ -18,11 +19,20 @@ namespace GameLogic
         private Rigidbody2D _body;
         private Vector2 _direction;
         private bool _launched;
+        private bool _frozen;
+        private Func<bool> _runningGate;
+        private readonly HashSet<int> _glassHitsThisStep = new HashSet<int>();
         private GameConfig.globalcfg.TbGlobal _globalTable;
         public Func<int, float> GlobalValueProvider { get; set; }
         public Vector2 CurrentDirection => _direction;
         public float Speed => speed;
         public int BounceCount { get; private set; }
+        public BattleSide Side { get; private set; }
+        public long BattleId { get; private set; }
+        public bool IsBerserk { get; private set; }
+        public bool IsLaunched => _launched;
+        public float SecondsSinceEffectiveInteraction { get; private set; }
+        public event Action<PhysicalCollisionBall> EffectiveInteraction;
 
         private void Awake()
         {
@@ -45,12 +55,59 @@ namespace GameLogic
         }
 
         private void OnEnable() { if (launchOnEnable) Launch(); }
-        private void OnDisable() { _launched = false; if (_body != null) _body.velocity = Vector2.zero; }
-        private void FixedUpdate() { if (_launched) _body.velocity = _direction * speed; }
+        private void OnDisable() { Stop(); }
+        private void FixedUpdate()
+        {
+            _glassHitsThisStep.Clear();
+            if (_launched && !_frozen && _runningGate != null && !_runningGate()) { Stop(); return; }
+            if (_launched && !_frozen && (_runningGate == null || _runningGate()))
+            {
+                SecondsSinceEffectiveInteraction += Time.fixedDeltaTime;
+                _body.velocity = _direction * speed;
+            }
+        }
+
+        public void BindBattle(long battleId, BattleSide side, Func<bool> runningGate)
+        {
+            Stop();
+            if (battleId <= 0 || runningGate == null) throw new ArgumentException("能源球缺少有效对局绑定。");
+            EntityValidation.RequireSide(side);
+            BattleId = battleId;
+            Side = side;
+            _runningGate = runningGate;
+            IsBerserk = false;
+            _frozen = false;
+            SecondsSinceEffectiveInteraction = 0f;
+        }
+
+        public void SetBerserk(bool berserk) { IsBerserk = berserk; }
+
+        public void SetFrozen(bool frozen)
+        {
+            _frozen = frozen;
+            if (_body != null)
+            {
+                _body.simulated = !frozen && _launched;
+                _body.velocity = _launched && !frozen ? _direction * speed : Vector2.zero;
+            }
+        }
+
+        public void Stop()
+        {
+            _launched = false;
+            _glassHitsThisStep.Clear();
+            if (_body != null) { _body.velocity = Vector2.zero; _body.simulated = false; }
+        }
 
         public void Launch()
         {
-            if (_body == null) return;
+            float angle = UnityEngine.Random.Range(Mathf.Min(initialAngleMin, initialAngleMax), Mathf.Max(initialAngleMin, initialAngleMax));
+            LaunchAt(spawnPosition, angle);
+        }
+
+        public void LaunchAt(Vector2 position, float angle)
+        {
+            if (_body == null || _frozen || (_runningGate != null && !_runningGate())) return;
             try
             {
                 ValidateConfig();
@@ -59,12 +116,17 @@ namespace GameLogic
                 if (float.IsNaN(initialAngleMin) || float.IsNaN(initialAngleMax) ||
                     float.IsInfinity(initialAngleMin) || float.IsInfinity(initialAngleMax))
                     throw new InvalidOperationException("发射角必须是有限角度。");
-                float rad = UnityEngine.Random.Range(Mathf.Min(initialAngleMin, initialAngleMax),
-                    Mathf.Max(initialAngleMin, initialAngleMax)) * Mathf.Deg2Rad;
+                if (float.IsNaN(angle) || float.IsInfinity(angle) || float.IsNaN(position.x) ||
+                    float.IsNaN(position.y) || float.IsInfinity(position.x) || float.IsInfinity(position.y))
+                    throw new InvalidOperationException("发射位置和角度必须有限。");
+                float rad = angle * Mathf.Deg2Rad;
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
-                _body.position = spawnPosition;
+                _body.simulated = true;
+                _body.position = position;
                 _body.velocity = _direction * speed;
                 BounceCount = 0;
+                SecondsSinceEffectiveInteraction = 0f;
+                _glassHitsThisStep.Clear();
                 _launched = true;
             }
             catch (Exception e) { StopWithError(e); }
@@ -74,36 +136,50 @@ namespace GameLogic
         private void OnCollisionStay2D(Collision2D collision) { Bounce(collision); }
         private void Bounce(Collision2D collision)
         {
-            if (!_launched) return;
+            if (!_launched || _frozen || (_runningGate != null && !_runningGate())) return;
             try
             {
+                var glass = collision.collider.GetComponent<GlassView>();
+                if (glass != null && (glass.Owner == null || !glass.Owner.IsRunning ||
+                    glass.Owner.Side != Side || glass.Owner.BattleId != BattleId)) return;
                 ValidateConfig();
+                var bounced = false;
                 for (int i = 0; i < collision.contactCount; i++)
                 {
                     Vector2 normal = collision.GetContact(i).normal.normalized;
                     if (Vector2.Dot(_direction, normal) >= -0.00001f) continue;
-                    float range = Mathf.Abs(GlobalValueProvider(4));
+                    float range = Mathf.Abs(GlobalValueProvider(IsBerserk ? 5 : 4));
                     _direction = BallBounceMath.Resolve(_direction, normal, UnityEngine.Random.Range(-range, range),
-                        GlobalValueProvider(6), UnityEngine.Random.value < 0.5f);
+                        GlobalValueProvider(IsBerserk ? 7 : 6), UnityEngine.Random.value < 0.5f);
                     BounceCount++;
+                    bounced = true;
+                    break;
                 }
                 _body.velocity = _direction * speed;
+                if (bounced && glass != null && _glassHitsThisStep.Add(glass.InstanceId))
+                {
+                    var result = glass.Collide(this);
+                    if (result != GlassCollisionResult.Ignored)
+                    {
+                        SecondsSinceEffectiveInteraction = 0f;
+                        EffectiveInteraction?.Invoke(this);
+                    }
+                }
             }
             catch (Exception e) { StopWithError(e); }
         }
 
         private void ValidateConfig()
         {
-            float range = GlobalValueProvider(4), threshold = GlobalValueProvider(6);
+            float range = GlobalValueProvider(IsBerserk ? 5 : 4), threshold = GlobalValueProvider(IsBerserk ? 7 : 6);
             if (float.IsNaN(range) || float.IsInfinity(range) || float.IsNaN(threshold) ||
                 float.IsInfinity(threshold) || threshold < 0f || threshold > 45f)
-                throw new InvalidOperationException("Global 4 必须有限；Global 6 必须在 0～45 度之间。");
+                    throw new InvalidOperationException("能源球反弹角度必须有限，防轴向阈值必须在0～45度之间。");
         }
 
         private void StopWithError(Exception e)
         {
-            _launched = false;
-            _body.velocity = Vector2.zero;
+            Stop();
             Debug.LogError("能源球停止，请检查配置后调用 Launch 重试：" + e.Message, this);
         }
     }

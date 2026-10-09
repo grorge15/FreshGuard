@@ -31,6 +31,29 @@ namespace GameLogic
         public Vector2 Size => new Vector2(_columns * _cellSize, _rows * _cellSize);
         public PhysicalCollisionBoundary Boundary => _boundary;
 
+        public float CellSize => _cellSize;
+
+        /// <summary>仅在新局、尚无部署实体时重置；同局初始化不恢复破碎格。</summary>
+        public bool ResetForBattle(BoardLayoutRules layout)
+        {
+            if (layout == null) throw new ArgumentNullException(nameof(layout));
+            ClearPreview();
+            if (_initialized && (_columns != layout.Columns || _rows != layout.Rows || _cellSize != layout.CellSize))
+            {
+                var root = transform.Find("Slots");
+                if (root != null)
+                    foreach (Transform child in root) child.gameObject.SetActive(false);
+                _initialized = false;
+            }
+            _columns = layout.Columns;
+            _rows = layout.Rows;
+            _cellSize = layout.CellSize;
+            if (!Initialize()) return false;
+            _model = new BoardModel(_columns, _rows, layout.OpenCells, layout.ReservedBorderWidth);
+            RefreshAllCells();
+            return true;
+        }
+
         public bool Initialize()
         {
             if (_initialized)
@@ -126,6 +149,8 @@ namespace GameLogic
         {
             return transform.TransformPoint(GetLocalPosition(coordinate));
         }
+
+        public Vector3 GetCellLocalPosition(BoardCoordinate coordinate) => GetLocalPosition(coordinate);
 
         public void ShowPreview(BoardPlacementResult result)
         {
