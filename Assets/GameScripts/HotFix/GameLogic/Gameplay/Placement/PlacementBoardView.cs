@@ -54,7 +54,8 @@ namespace GameLogic
                     slotRoot = new GameObject("Slots").transform;
                     slotRoot.SetParent(transform, false);
                 }
-                _model = new BoardModel(_columns, _rows);
+                // The outer ring stays visible and addressable, but cannot hold robots.
+                _model = new BoardModel(_columns, _rows, null, reservedBorderWidth: 1);
                 _slots = new SpriteRenderer[_columns, _rows];
                 for (var column = 0; column < _columns; column++)
                 {

@@ -93,6 +93,7 @@ namespace GameLogic
     {
         private readonly string[,] _occupants;
         private readonly bool[,] _open;
+        private readonly int _reservedBorderWidth;
         private readonly HashSet<BoardCoordinate> _highlighted = new HashSet<BoardCoordinate>();
 
         public int Columns { get; }
@@ -103,14 +104,16 @@ namespace GameLogic
         {
         }
 
-        /// <summary>null表示全部开放；传空集合表示全部关闭。</summary>
-        public BoardModel(int columns, int rows, IReadOnlyCollection<BoardCoordinate> openCells)
+        /// <summary>null表示开放非保留格；传空集合表示全部关闭。保留外圈不可重新开放。</summary>
+        public BoardModel(int columns, int rows, IReadOnlyCollection<BoardCoordinate> openCells, int reservedBorderWidth = 0)
         {
             if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns));
             if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows));
+            if (reservedBorderWidth < 0) throw new ArgumentOutOfRangeException(nameof(reservedBorderWidth));
 
             Columns = columns;
             Rows = rows;
+            _reservedBorderWidth = reservedBorderWidth;
             _occupants = new string[columns, rows];
             _open = new bool[columns, rows];
             if (openCells == null)
@@ -130,13 +133,19 @@ namespace GameLogic
 
         public bool IsOpen(BoardCoordinate coordinate)
         {
-            return IsInside(coordinate) && _open[coordinate.Column, coordinate.Row];
+            return IsInsidePlacementArea(coordinate) && _open[coordinate.Column, coordinate.Row];
+        }
+
+        private bool IsInsidePlacementArea(BoardCoordinate coordinate)
+        {
+            return coordinate.Column >= _reservedBorderWidth && coordinate.Column < Columns - _reservedBorderWidth &&
+                coordinate.Row >= _reservedBorderWidth && coordinate.Row < Rows - _reservedBorderWidth;
         }
 
         /// <summary>占用中的格子不能关闭；高亮状态不改变开放状态。</summary>
         public bool SetOpen(BoardCoordinate coordinate, bool open)
         {
-            if (!IsInside(coordinate) || (!open && IsOccupied(coordinate))) return false;
+            if (!IsInside(coordinate) || (open && !IsInsidePlacementArea(coordinate)) || (!open && IsOccupied(coordinate))) return false;
             _open[coordinate.Column, coordinate.Row] = open;
             return true;
         }

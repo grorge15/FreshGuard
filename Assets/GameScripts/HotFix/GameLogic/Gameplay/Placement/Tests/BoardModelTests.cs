@@ -7,6 +7,85 @@ namespace GameLogic.Tests
 {
     public class BoardModelTests
     {
+        [Test]
+        public void WorldBoardReservesOuterRingAndCannotReopenIt()
+        {
+            using (var fixture = new BoardFixture(Vector3.zero))
+            {
+                var board = fixture.View.Model;
+                var one = new PlaceableDefinition("One", 1, 1);
+                var allowedCount = 0;
+                for (var column = 0; column < 11; column++)
+                    for (var row = 0; row < 9; row++)
+                    {
+                        var coordinate = new BoardCoordinate(column, row);
+                        Assert.IsTrue(board.IsInside(coordinate));
+                        var border = column == 0 || column == 10 || row == 0 || row == 8;
+                        if (border)
+                        {
+                            Assert.IsFalse(board.IsOpen(coordinate));
+                            Assert.IsFalse(board.SetOpen(coordinate, true));
+                            Assert.IsFalse(board.TryPlace(coordinate, one));
+                            Assert.IsFalse(board.IsOccupied(coordinate));
+                        }
+                        else
+                        {
+                            Assert.IsTrue(board.Evaluate(coordinate, one).IsValid);
+                            allowedCount++;
+                        }
+                    }
+                Assert.AreEqual(63, allowedCount);
+                Assert.IsTrue(board.TryPlace(new BoardCoordinate(1, 1), one));
+                Assert.IsTrue(board.TryPlace(new BoardCoordinate(9, 7), one));
+            }
+        }
+
+        [TestCase(0, 4)]
+        [TestCase(10, 4)]
+        [TestCase(5, 0)]
+        [TestCase(5, 8)]
+        [TestCase(0, 0)]
+        [TestCase(10, 8)]
+        public void BorderDragShowsRedAndCannotCommit(int column, int row)
+        {
+            using (var fixture = new DragFixture())
+            {
+                var slot = fixture.Player.Slot(column, row);
+                var normal = slot.color;
+                Assert.IsTrue(fixture.Controller.BeginDrag(new PlaceableDefinition("One", 1, 1), new BoardCoordinate(0, 0)));
+                fixture.UpdateAt(fixture.Player, column, row);
+                Assert.Greater(slot.color.r, slot.color.g);
+                BoardPlacementTarget target;
+                Assert.IsFalse(fixture.Controller.TryCommit(out target));
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(column, row)));
+                Assert.AreEqual(normal, slot.color);
+            }
+        }
+
+        [Test]
+        public void FootprintTouchingBorderRejectsEveryCellAtomically()
+        {
+            using (var fixture = new DragFixture())
+            {
+                var shape = new PlaceableDefinition("Square", 2, 2);
+                fixture.Controller.BeginDrag(shape, new BoardCoordinate(0, 0));
+                fixture.UpdateAt(fixture.Player, 9, 6);
+                foreach (var cell in new[] { new BoardCoordinate(9, 6), new BoardCoordinate(10, 6), new BoardCoordinate(9, 7), new BoardCoordinate(10, 7) })
+                {
+                    var color = fixture.Player.Slot(cell.Column, cell.Row).color;
+                    Assert.Greater(color.r, color.g);
+                }
+                BoardPlacementTarget target;
+                Assert.IsFalse(fixture.Controller.TryCommit(out target));
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(9, 6)));
+                fixture.Controller.BeginDrag(shape, new BoardCoordinate(0, 0));
+                fixture.UpdateAt(fixture.Player, 8, 6);
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.IsTrue(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(9, 7)));
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(10, 7)));
+            }
+        }
+
         private static PlaceableDefinition LShape()
         {
             return new PlaceableDefinition("L", new[] { new BoardCoordinate(0, 0), new BoardCoordinate(0, 1), new BoardCoordinate(1, 0) });
@@ -91,12 +170,12 @@ namespace GameLogic.Tests
             {
                 var slot = fixture.Slot(0, 0);
                 var top = fixture.Root.transform.Find("Boundary/Top");
-                Assert.IsTrue(fixture.View.Model.TryPlace(new BoardCoordinate(0, 0), new PlaceableDefinition("Keep", 1, 1)));
+                Assert.IsTrue(fixture.View.Model.TryPlace(new BoardCoordinate(1, 1), new PlaceableDefinition("Keep", 1, 1)));
                 fixture.View.DisableBoundary();
                 Assert.IsTrue(fixture.View.Initialize());
                 Assert.AreSame(slot, fixture.Slot(0, 0));
                 Assert.AreSame(top, fixture.Root.transform.Find("Boundary/Top"));
-                Assert.AreEqual("Keep", fixture.View.Model.GetOccupant(new BoardCoordinate(0, 0)));
+                Assert.AreEqual("Keep", fixture.View.Model.GetOccupant(new BoardCoordinate(1, 1)));
                 Assert.AreEqual(99, fixture.Root.transform.Find("Slots").childCount);
                 Assert.AreEqual(4, fixture.Root.transform.Find("Boundary").childCount);
                 Assert.IsTrue(top.GetComponent<BoxCollider2D>().enabled);
@@ -140,25 +219,25 @@ namespace GameLogic.Tests
         {
             using (var fixture = new BoardFixture(Vector3.zero))
             {
-                var cell = new BoardCoordinate(0, 0);
-                var normal = fixture.Slot(0, 0).color;
+                var cell = new BoardCoordinate(1, 1);
+                var normal = fixture.Slot(1, 1).color;
                 var one = new PlaceableDefinition("One", 1, 1);
                 fixture.View.ShowPreview(fixture.View.Model.Evaluate(cell, one));
-                Assert.Greater(fixture.Slot(0, 0).color.g, fixture.Slot(0, 0).color.r);
+                Assert.Greater(fixture.Slot(1, 1).color.g, fixture.Slot(1, 1).color.r);
                 fixture.View.ClearPreview();
-                Assert.AreEqual(normal, fixture.Slot(0, 0).color);
+                Assert.AreEqual(normal, fixture.Slot(1, 1).color);
                 Assert.IsTrue(fixture.View.Model.TryPlace(cell, one));
                 fixture.View.RefreshOccupied(new[] { cell });
-                var occupied = fixture.Slot(0, 0).color;
+                var occupied = fixture.Slot(1, 1).color;
                 fixture.View.SetHighlighted(cell, true);
-                var highlighted = fixture.Slot(0, 0).color;
+                var highlighted = fixture.Slot(1, 1).color;
                 Assert.AreNotEqual(occupied, highlighted);
                 fixture.View.ShowPreview(fixture.View.Model.Evaluate(cell, one));
-                Assert.Greater(fixture.Slot(0, 0).color.r, fixture.Slot(0, 0).color.g);
+                Assert.Greater(fixture.Slot(1, 1).color.r, fixture.Slot(1, 1).color.g);
                 fixture.View.ClearPreview();
-                Assert.AreEqual(highlighted, fixture.Slot(0, 0).color);
+                Assert.AreEqual(highlighted, fixture.Slot(1, 1).color);
                 fixture.View.SetHighlighted(cell, false);
-                Assert.AreEqual(occupied, fixture.Slot(0, 0).color);
+                Assert.AreEqual(occupied, fixture.Slot(1, 1).color);
                 Assert.IsTrue(fixture.View.Model.IsOccupied(cell));
             }
         }
@@ -255,10 +334,10 @@ namespace GameLogic.Tests
                 Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(10, 8)));
                 var one = new PlaceableDefinition("One", 1, 1);
                 fixture.Controller.BeginDrag(one, new BoardCoordinate(0, 0));
-                fixture.UpdateAt(fixture.Player, 0, 0);
-                fixture.Player.View.Model.TryPlace(new BoardCoordinate(0, 0), new PlaceableDefinition("Other", 1, 1));
+                fixture.UpdateAt(fixture.Player, 1, 1);
+                Assert.IsTrue(fixture.Player.View.Model.TryPlace(new BoardCoordinate(1, 1), new PlaceableDefinition("Other", 1, 1)));
                 Assert.IsFalse(fixture.Controller.TryCommit(out target));
-                Assert.AreEqual("Other", fixture.Player.View.Model.GetOccupant(new BoardCoordinate(0, 0)));
+                Assert.AreEqual("Other", fixture.Player.View.Model.GetOccupant(new BoardCoordinate(1, 1)));
             }
         }
 
