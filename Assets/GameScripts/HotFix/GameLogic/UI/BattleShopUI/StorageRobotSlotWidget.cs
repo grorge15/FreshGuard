@@ -12,6 +12,7 @@ namespace GameLogic
         private ShopPointerInput _input;
         private BattleShopUI _owner;
         private string _location;
+        private int _level;
         protected override void ScriptGenerator()
         {
             _icon = FindChildComponent<Image>("m_img_RobotIcon");
@@ -28,11 +29,14 @@ namespace GameLogic
         public void Render(BattleShopUI owner)
         {
             _owner = owner;
+            _icon.color = RobotLevelStyle.IconColor;
             var id = owner.Context.GetState(BattleSide.Player).StorageInstanceId;
             Entity entity;
             var robot = id.HasValue && owner.Context.Registry.TryGet(id.Value, out entity) ? entity as RobotEntity : null;
             _icon.enabled = robot != null && owner.Drag.DraggedInstanceId != robot.InstanceId;
             _label.text = robot != null ? "暂存  Lv" + robot.Level : "暂存位";
+            _level = robot != null ? robot.Level : 0;
+            SetHighlighted(false);
             if (robot != null && _location != robot.Configuration.RobotIcon)
             {
                 _location = robot.Configuration.RobotIcon;
@@ -42,7 +46,7 @@ namespace GameLogic
         public void SetHighlighted(bool highlighted)
         {
             if (_background == null) return;
-            _background.color = highlighted ? new Color(0.62f, 0.83f, 0.62f) : new Color(0.76f, 0.68f, 0.58f);
+            _background.color = highlighted ? Color.cyan : _level > 0 ? RobotLevelStyle.ColorForLevel(_level) : new Color(0.76f, 0.68f, 0.58f);
         }
         protected override void OnDestroy()
         {

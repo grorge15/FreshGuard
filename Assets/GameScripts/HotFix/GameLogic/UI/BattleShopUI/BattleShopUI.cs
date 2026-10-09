@@ -65,7 +65,10 @@ namespace GameLogic
         }
         public void RefreshView()
         {
-            if (Context == null || _items == null || _storage == null) return;
+            // 场景卸载时Unity对象可能先于窗口包装销毁，终局通知不再访问展示组件。
+            if (Context == null || Context.IsEnded || gameObject == null || _items == null || _storage == null ||
+                _storage.gameObject == null || _coins == null || _refreshPrice == null || _offers == null) return;
+            foreach (var item in _items) if (item == null || item.gameObject == null) return;
             var state = Context.GetState(BattleSide.Player);
             _coins.text = state.EnergyCoins.ToString();
             _refreshPrice.text = _host != null ? _host.RefreshPrice.ToString() : "";
@@ -79,18 +82,13 @@ namespace GameLogic
         {
             if (Context == null || Context.IsEnded || Context.IsBusy || Drag.Phase != RobotDragPhase.Idle) return;
             var slot = Context.GetState(BattleSide.Player).Slots[slotId];
-            RobotEntity robot;
             if (slot.Offer != null)
             {
-                var result = Context.TryPurchase(BattleSide.Player, slotId, slot.Offer.OfferId, out robot);
-                if (result != ShopOperationResult.Success) { ShowFailure(result); return; }
+                if (Context.GetState(BattleSide.Player).EnergyCoins < slot.Offer.Price)
+                { ShowFailure(ShopOperationResult.InsufficientCoins); return; }
+                Drag.Press(RobotDragSource.Offer(slotId, slot.Offer.OfferId), pointerId, position, now, new BoardCoordinate(0, 0));
             }
-            else
-            {
-                Entity entity;
-                robot = slot.InstanceId.HasValue && Context.Registry.TryGet(slot.InstanceId.Value, out entity) ? entity as RobotEntity : null;
-            }
-            if (robot != null) Drag.Press(robot.InstanceId, pointerId, position, now);
+            else if (slot.InstanceId.HasValue) Drag.Press(slot.InstanceId.Value, pointerId, position, now);
             RefreshView();
         }
         public void PressStorage(int pointerId, Vector2 position, float now)
@@ -111,7 +109,7 @@ namespace GameLogic
             return _storage != null && RectTransformUtility.RectangleContainsScreenPoint(_storage.rectTransform, position, EventCamera);
         }
         public void SetStorageHighlighted(bool highlighted) { _storage?.SetHighlighted(highlighted); }
-        public void ShowGhost(string icon, Vector2 position) { _ghost.Show(icon, position, EventCamera); }
+        public void ShowGhost(string icon, int level, Vector2 position) { _ghost.Show(icon, level, position, EventCamera); }
         public void MoveGhost(Vector2 position) { _ghost?.Move(position, EventCamera); }
         public void HideGhost() { if (_ghost != null && _ghost.gameObject != null) _ghost.Visible = false; }
         public void ShowFailure(ShopOperationResult result)
@@ -126,7 +124,11 @@ namespace GameLogic
                 case ShopOperationResult.ResourceFailed: _message.text = "资源加载失败，请再次拖拽"; break;
                 case ShopOperationResult.BattleEnded: _message.text = "对局已结束"; break;
                 case ShopOperationResult.Busy: return;
-                default: _message.text = "无法放置，机器人已回到原槽位"; break;
+                case ShopOperationResult.IncompatibleMerge: _message.text = "需要相同机器人、相同等级"; break;
+                case ShopOperationResult.MaxLevelReached: _message.text = "Lv5 无法继续合成"; break;
+                case ShopOperationResult.EntityNotFound: _message.text = "目标已失效，已返回来源位置"; break;
+                case ShopOperationResult.StorageFull: _message.text = "暂存位已满，已返回原位置"; break;
+                default: _message.text = "无法放置，已返回来源位置"; break;
             }
             _messageUntil = Time.unscaledTime + 1.8f;
         }
@@ -142,8 +144,8 @@ namespace GameLogic
         protected override void OnDestroy()
         {
             if (_refreshButton != null) _refreshButton.onClick.RemoveListener(OnRefreshClicked);
-            Context = null;
             Drag?.Cancel();
+            Context = null;
             _host = null;
             if (_font != null) Object.Destroy(_font);
         }

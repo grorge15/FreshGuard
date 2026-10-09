@@ -32,6 +32,7 @@ namespace GameLogic
         private BoardCoordinate _grabbedCell;
         private PlacementBoardView _previewBoard;
         private BoardCoordinate _anchor;
+        private BoardCoordinate _pointerCell;
         private BattleSide? _requiredSide;
 
         public bool IsReady => _ready && isActiveAndEnabled &&
@@ -100,6 +101,33 @@ namespace GameLogic
             throw new System.ArgumentException("棋盘不属于当前摆放控制器。", nameof(board));
         }
 
+        public bool TryGetPointerCell(Vector2 position, out PlacementBoardView board, out BoardCoordinate coordinate)
+        {
+            board = null;
+            coordinate = default(BoardCoordinate);
+            if (!IsReady || _sceneCamera == null || float.IsNaN(position.x) || float.IsNaN(position.y) ||
+                float.IsInfinity(position.x) || float.IsInfinity(position.y)) return false;
+            var ray = _sceneCamera.ScreenPointToRay(position);
+            float distance;
+            if (!new Plane(Vector3.forward, Vector3.zero).Raycast(ray, out distance)) return false;
+            var point = ray.GetPoint(distance);
+            if (_playerBoard.TryGetCoordinate(point, out coordinate)) board = _playerBoard;
+            else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) board = _enemyBoard;
+            return board != null;
+        }
+
+        public bool TryGetDragOccupant(out int instanceId)
+        {
+            instanceId = 0;
+            return _dragging && _previewBoard != null && IsAllowedBoard(_previewBoard) &&
+                int.TryParse(_previewBoard.Model.GetOccupant(_pointerCell), out instanceId);
+        }
+
+        public void ClearPlacementPreview()
+        {
+            if (_previewBoard != null) _previewBoard.ClearPreview();
+        }
+
         private bool IsAllowedBoard(PlacementBoardView board)
         {
             return !_requiredSide.HasValue ||
@@ -121,6 +149,7 @@ namespace GameLogic
             if (_playerBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _playerBoard;
             else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _enemyBoard;
             if (_previewBoard == null) return;
+            _pointerCell = coordinate;
             _anchor = new BoardCoordinate(coordinate.Column - _grabbedCell.Column, coordinate.Row - _grabbedCell.Row);
             var preview = _previewBoard.Model.Evaluate(_anchor, _definition);
             if (!IsAllowedBoard(_previewBoard)) preview = new BoardPlacementResult(false, preview.Cells);
