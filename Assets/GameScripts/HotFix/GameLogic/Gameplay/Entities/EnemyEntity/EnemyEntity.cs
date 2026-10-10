@@ -1,5 +1,6 @@
 using System;
 using TEngine;
+using GameConfig.enemy;
 
 namespace GameLogic
 {
@@ -7,13 +8,15 @@ namespace GameLogic
     /// 框架内存池对象。只允许管理器获取、初始化和归还；查询引用仅供当前同步操作使用。
     /// 延迟操作保存实例 ID，归还后不得继续访问对象引用。
     /// </summary>
-    public sealed class EnemyEntity : Entity, IMemory
+    public class EnemyEntity : Entity, IMemory
     {
         public override EntityKind Kind => EntityKind.Enemy;
         public int MaxHp { get; private set; }
         public int CurrentHp { get; private set; }
         public float BaseSpeed { get; private set; }
         public float RouteProgress { get; private set; }
+        public Enemy Configuration { get; private set; }
+        public int Cycle { get; private set; }
         public bool IsAlive => !IsRemoved && CurrentHp > 0;
 
         // MemoryPool.Acquire<T>() requires a public parameterless constructor.
@@ -21,11 +24,20 @@ namespace GameLogic
 
         internal void Initialize(int instanceId, int configId, BattleSide side, int maxHp, float baseSpeed)
         {
+            Configuration = null;
+            Cycle = 0;
             InitializeIdentity(instanceId, configId, side);
             MaxHp = maxHp;
             CurrentHp = maxHp;
             BaseSpeed = baseSpeed;
             RouteProgress = 0f;
+        }
+
+        internal void InitializeFromConfig(int instanceId, Enemy config, BattleSide side, int cycle)
+        {
+            Initialize(instanceId, config.Id, side, cycle == 1 ? config.HpC1 : config.HpC2, config.EnemySpeed);
+            Configuration = config;
+            Cycle = cycle;
         }
 
         internal bool TrySetRouteProgress(float progress)
@@ -47,6 +59,8 @@ namespace GameLogic
             CurrentHp = 0;
             BaseSpeed = 0f;
             RouteProgress = 0f;
+            Configuration = null;
+            Cycle = 0;
         }
     }
 }
