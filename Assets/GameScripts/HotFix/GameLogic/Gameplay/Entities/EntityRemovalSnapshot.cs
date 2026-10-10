@@ -11,6 +11,7 @@ namespace GameLogic
         public int? RobotLevel { get; }
         public int? EnemyHp { get; }
         public float? EnemyRouteProgress { get; }
+        public int? TowerHp { get; }
 
         internal EntityRemovalSnapshot(Entity entity, EntityRemovalReason reason)
         {
@@ -22,6 +23,7 @@ namespace GameLogic
             RobotLevel = (entity as RobotEntity)?.Level;
             EnemyHp = (entity as EnemyEntity)?.CurrentHp;
             EnemyRouteProgress = (entity as EnemyEntity)?.RouteProgress;
+            TowerHp = (entity as TowerEntity)?.CurrentHp;
         }
     }
 }

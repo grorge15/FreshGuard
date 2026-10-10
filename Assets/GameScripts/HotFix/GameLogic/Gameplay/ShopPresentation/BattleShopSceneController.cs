@@ -10,7 +10,7 @@ namespace GameLogic
 {
     /// <summary>单局装配入口：双方共用纯逻辑上下文，只有玩家打开 UIWindow。</summary>
     [DisallowMultipleComponent]
-    public sealed class BattleShopSceneController : MonoBehaviour
+    public sealed partial class BattleShopSceneController : MonoBehaviour
     {
         [SerializeField] private PlacementController _placement;
         [SerializeField] private PlacementBoardView _playerBoard;
@@ -38,7 +38,7 @@ namespace GameLogic
         public BattleShopContext Context { get; private set; }
         public PlacementController Placement => _placement;
         public int RefreshPrice => _rules.RefreshPrice;
-        public bool IsReady => _ready && Context != null && !Context.IsEnded;
+        public bool IsReady => _ready && Context != null && !Context.IsEnded && !Context.IsEndRequested;
         public bool IsCombatRunning => IsReady && _running && !_frozen;
         public bool IsFrozen => _frozen;
         public float PreparationRemaining => _preparationRemaining;
@@ -104,6 +104,7 @@ namespace GameLogic
                 _opponentGlass = GetGlassController(_opponentBoard);
                 await _playerGlass.PrepareAsync(this, context, _playerBoard, BattleSide.Player, layout, tables, cancellationToken);
                 await _opponentGlass.PrepareAsync(this, context, _opponentBoard, BattleSide.Opponent, layout, tables, cancellationToken);
+                await PrepareTowersAsync(context, cancellationToken);
                 var window = await GameModule.UI.ShowUIAsyncAwait<BattleShopUI>(context, this)
                     .AttachExternalCancellation(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
@@ -114,6 +115,7 @@ namespace GameLogic
                 _preparationRemaining = 3f;
                 _running = _frozen = false;
                 _ready = true;
+                foreach (var towerView in _towerViews) if (towerView != null) towerView.SetActive(true);
             }
             catch (OperationCanceledException)
             {
@@ -301,6 +303,7 @@ namespace GameLogic
 
         private void Update()
         {
+            if (_pendingTowerSettlement.HasValue) { EndBattle(); return; }
             if (Context != null && Context.IsEnded) { EndBattle(); return; }
             if (IsReady && !_frozen)
             {
@@ -365,10 +368,15 @@ namespace GameLogic
         public void EndBattle()
         {
             var context = Context;
+            // 商店事务也可能在通知中造成塔死亡；等待该事务退出后再清理、广播。
+            if (_pendingTowerSettlement.HasValue && context != null && context.IsMutationInProgress) return;
+            var settlement = _pendingTowerSettlement;
+            _pendingTowerSettlement = null;
             var generation = _initializationGeneration;
             CloseOwnedWindow();
             // 关闭窗口的取消通知可以重入终局并启动新局，只清理本次捕获的所有权。
             if (Context == context && generation == _initializationGeneration) Cleanup();
+            if (settlement.HasValue) NotifySettlementAfterCleanupAsync(context, settlement.Value).Forget();
         }
 
         private void CloseOwnedWindow()
@@ -422,6 +430,7 @@ namespace GameLogic
                 GameEvent.RemoveEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
             }
             rewards?.Dispose();
+            ClearTowers();
             _playerGlass?.Clear();
             _opponentGlass?.Clear();
             _playerGlass = _opponentGlass = null;
@@ -433,8 +442,12 @@ namespace GameLogic
         }
         private void OnDestroy()
         {
+            var context = Context;
+            var settlement = _pendingTowerSettlement;
+            _pendingTowerSettlement = null;
             CloseOwnedWindow();
             Cleanup();
+            if (settlement.HasValue) NotifySettlementAfterCleanupAsync(context, settlement.Value).Forget();
         }
     }
 }

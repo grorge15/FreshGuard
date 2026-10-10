@@ -32,6 +32,8 @@ namespace GameLogic
 
         public long BattleId { get; } = Interlocked.Increment(ref _lastBattleId);
         public bool IsEnded { get; private set; }
+        public bool IsEndRequested => _endRequested;
+        internal bool IsMutationInProgress => _committing;
         public bool IsBusy => ActiveInteraction != null;
         public ShopRules Rules { get; }
         public int RefreshPrice => Rules.RefreshPrice;
@@ -177,6 +179,12 @@ namespace GameLogic
         public void CancelInteraction()
         {
             if (ActiveInteraction != null) CancelInteraction(ActiveInteraction.InteractionId);
+        }
+
+        /// <summary>锁定后续操作，但不在实体通知调用栈中清理。由对局入口随后调用 EndBattle。</summary>
+        public void RequestEndBattle()
+        {
+            if (!IsEnded) _endRequested = true;
         }
 
         public void EndBattle()

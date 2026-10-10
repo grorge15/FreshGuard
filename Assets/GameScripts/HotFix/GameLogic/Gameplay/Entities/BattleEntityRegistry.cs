@@ -81,6 +81,8 @@ namespace GameLogic
             _entities.Remove(instanceId);
             var glass = entity as GlassEntity;
             if (glass != null) _glassByCell.Remove((glass.Side, glass.Coordinate));
+            var tower = entity as TowerEntity;
+            if (tower != null) _towerBySide.Remove(tower.Side);
             entity.MarkRemoved(reason);
             var enemy = entity as EnemyEntity;
             if (enemy != null) MemoryPool.Release(enemy);
@@ -117,7 +119,8 @@ namespace GameLogic
                 case EntityRemovalReason.Consumed:
                     return entity is RobotEntity;
                 case EntityRemovalReason.Killed:
-                    return entity is EnemyEntity enemy && enemy.CurrentHp == 0;
+                    return (entity is EnemyEntity enemy && enemy.CurrentHp == 0) ||
+                        (entity is TowerEntity tower && tower.CurrentHp == 0);
                 case EntityRemovalReason.Leaked:
                     return entity is EnemyEntity;
                 case EntityRemovalReason.Broken:
