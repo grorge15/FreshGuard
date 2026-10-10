@@ -33,7 +33,7 @@ MonoBehaviour:
       - CollectPath: Assets/AssetRaw/Actor
         CollectorGUID: 9c67ce0c9edfd4e4aa1006ee39846d66
         CollectorType: 0
-        AddressRuleName: AddressByFileName
+        AddressRuleName: AddressByActorAsset
         PackRuleName: PackDirectory
         FilterRuleName: CollectAll
         AssetTags: 

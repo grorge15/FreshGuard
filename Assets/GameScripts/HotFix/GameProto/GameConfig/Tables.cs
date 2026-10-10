@@ -156,6 +156,27 @@ public partial class Tables
             m_TbBoardLayout.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 敌人配置
+    /// </summary>
+    private enemy.TbEnemy m_TbEnemy;
+    public enemy.TbEnemy TbEnemy 
+    {
+        get
+        {
+            if (m_TbEnemy == null)
+            {
+                m_TbEnemy = new enemy.TbEnemy(defaultLoader("enemy_tbenemy"));
+                m_TbEnemy.ResolveRef(this);
+            }
+            return m_TbEnemy;
+        }
+        set
+        {
+            m_TbEnemy = value;
+            m_TbEnemy.ResolveRef(this);
+        }
+    }
 
     #endregion
 
