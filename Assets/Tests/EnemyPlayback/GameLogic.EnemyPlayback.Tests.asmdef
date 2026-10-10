@@ -1,0 +1,8 @@
+{
+  "name": "GameLogic.EnemyPlayback.Tests",
+  "rootNamespace": "GameLogic.Tests",
+  "references": ["GameLogic", "GameProto", "TEngine.Runtime"],
+  "includePlatforms": [],
+  "autoReferenced": false,
+  "optionalUnityReferences": ["TestAssemblies"]
+}
