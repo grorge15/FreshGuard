@@ -54,6 +54,7 @@ namespace GameLogic
             if (Elapsed < _flightTime) return false;
             // 先封住重复结算，再扣血；击杀立即摘掉移动记录并交付不可变快照。
             Resolve();
+            _enemies.TryPlayDamageFeedback(Side, TargetInstanceId, Damage);
             var result = _context.Registry.ApplyDamage(TargetInstanceId, Damage, out var removal);
             if (result == DamageResult.Killed) _enemies.NotifyKilled(removal);
             return true;

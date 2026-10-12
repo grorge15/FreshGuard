@@ -16,7 +16,10 @@ namespace GameLogic
         [SerializeField] private bool launchOnEnable = true;
         [Tooltip("Luban 生成的 Global 二进制；作为 Prefab 依赖加载，不在碰撞回调中进行 IO。")]
         [SerializeField] private TextAsset globalConfig;
+        [SerializeField] private ComboPopupView _comboPopupPrefab;
+        [SerializeField, Min(0f)] private float _comboPopupOffset = 0.35f;
         private Rigidbody2D _body;
+        private CircleCollider2D _collider;
         private Vector2 _direction;
         private bool _launched;
         private bool _frozen;
@@ -24,6 +27,26 @@ namespace GameLogic
         private Func<bool> _runningGate;
         private readonly HashSet<int> _glassHitsThisStep = new HashSet<int>();
         private GameConfig.globalcfg.TbGlobal _globalTable;
+        private bool _comboEnabled;
+        private BattleEntityRegistry _comboRegistry;
+        private Transform _comboPopupRoot;
+        private float _comboTimeout;
+        private double _comboElapsed;
+        private bool _reconcileAfterFreeze;
+        private readonly Dictionary<int, RobotContact> _robotContacts = new Dictionary<int, RobotContact>();
+        private readonly HashSet<int> _robotHitsThisStep = new HashSet<int>();
+        private readonly List<int> _endedRobotContacts = new List<int>();
+        private readonly List<ComboPopupView> _comboPopups = new List<ComboPopupView>();
+
+        private sealed class RobotContact
+        {
+            public RobotView View;
+            public Collider2D[] AllColliders;
+            public readonly HashSet<Collider2D> Touching = new HashSet<Collider2D>();
+            public bool Counted;
+        }
+
+        public int ComboCount { get; private set; }
         public Func<int, float> GlobalValueProvider { get; set; }
         public Vector2 CurrentDirection => _direction;
         public float Speed => speed;
@@ -53,6 +76,7 @@ namespace GameLogic
         private void Awake()
         {
             _body = GetComponent<Rigidbody2D>();
+            _collider = GetComponent<CircleCollider2D>();
             _body.gravityScale = 0f;
             _body.drag = 0f;
             _body.angularDrag = 0f;
@@ -77,9 +101,12 @@ namespace GameLogic
             try
             {
                 _glassHitsThisStep.Clear();
+                _robotHitsThisStep.Clear();
                 if (_launched && !_frozen && _runningGate != null && !_runningGate()) { Stop(); return; }
                 if (_launched && !_frozen && (_runningGate == null || _runningGate()))
                 {
+                    ReconcileRobotContacts();
+                    AdvanceComboTime(Time.fixedDeltaTime);
                     SecondsSinceEffectiveInteraction += Time.fixedDeltaTime;
                     _body.velocity = _direction * EffectiveSpeed;
                 }
@@ -90,6 +117,9 @@ namespace GameLogic
         public void BindBattle(long battleId, BattleSide side, Func<bool> runningGate)
         {
             Stop();
+            _comboEnabled = false;
+            _comboRegistry = null;
+            _comboPopupRoot = null;
             if (battleId <= 0 || runningGate == null) throw new ArgumentException("能源球缺少有效对局绑定。");
             EntityValidation.RequireSide(side);
             BattleId = battleId;
@@ -98,6 +128,23 @@ namespace GameLogic
             IsBerserk = false;
             _frozen = false;
             SecondsSinceEffectiveInteraction = 0f;
+        }
+
+        public void BindCombo(BattleEntityRegistry registry, Transform popupRoot)
+        {
+            if (_launched || BattleId <= 0 || _runningGate == null || registry == null || popupRoot == null)
+                throw new InvalidOperationException("Combo必须在主球绑定本局后、发射前装配。");
+            float timeout = GlobalValueProvider(34);
+            if (float.IsNaN(timeout) || float.IsInfinity(timeout) || timeout <= 0f)
+                throw new InvalidOperationException("Global34 Combo断档时间必须为有限正数。");
+            if (_comboPopupPrefab == null || _comboPopupPrefab.GetComponent<TextMesh>() == null ||
+                _comboPopupPrefab.GetComponentInChildren<Collider2D>(true) != null ||
+                float.IsNaN(_comboPopupOffset) || float.IsInfinity(_comboPopupOffset) || _comboPopupOffset < 0f)
+                throw new InvalidOperationException("主球缺少有效Combo提示Prefab或出现偏移配置。");
+            _comboTimeout = timeout;
+            _comboRegistry = registry;
+            _comboPopupRoot = popupRoot;
+            _comboEnabled = true;
         }
 
         public void SetDragging(bool dragging)
@@ -114,12 +161,18 @@ namespace GameLogic
 
         public void SetBerserk(bool berserk)
         {
+            if (berserk && !IsBerserk)
+            {
+                ResetComboCount();
+                foreach (var contact in _robotContacts.Values) contact.Counted = true;
+            }
             IsBerserk = berserk;
             ApplyEffectiveVelocity();
         }
 
         public void SetFrozen(bool frozen)
         {
+            if (_frozen && !frozen) _reconcileAfterFreeze = true;
             _frozen = frozen;
             ApplyEffectiveVelocity();
         }
@@ -142,6 +195,7 @@ namespace GameLogic
             _launched = false;
             _dragging = false;
             _glassHitsThisStep.Clear();
+            ClearCombo();
             if (_body != null) { _body.velocity = Vector2.zero; _body.simulated = false; }
         }
 
@@ -173,6 +227,7 @@ namespace GameLogic
                 BounceCount = 0;
                 SecondsSinceEffectiveInteraction = 0f;
                 _glassHitsThisStep.Clear();
+                ClearCombo();
                 _launched = true;
             }
             catch (Exception e) { StopWithError(e); }
@@ -180,6 +235,13 @@ namespace GameLogic
 
         private void OnCollisionEnter2D(Collision2D collision) { Bounce(collision); }
         private void OnCollisionStay2D(Collision2D collision) { Bounce(collision); }
+        private void OnCollisionExit2D(Collision2D collision)
+        {
+            if (_frozen || !_comboEnabled) return;
+            var view = collision.collider.GetComponentInParent<RobotView>();
+            if (view != null && _robotContacts.TryGetValue(view.InstanceId, out var contact))
+                contact.Touching.Remove(collision.collider);
+        }
         private void Bounce(Collision2D collision)
         {
             if (!_launched || _frozen || (_runningGate != null && !_runningGate())) return;
@@ -202,6 +264,8 @@ namespace GameLogic
                     break;
                 }
                 _body.velocity = _direction * EffectiveSpeed;
+                var robot = collision.collider.GetComponentInParent<RobotView>();
+                if (robot != null) ProcessRobotCombo(robot, collision.collider, bounced);
                 if (bounced && glass != null && _glassHitsThisStep.Add(glass.InstanceId))
                 {
                     var result = glass.Collide(this);
@@ -213,6 +277,112 @@ namespace GameLogic
                 }
             }
             catch (Exception e) { StopWithError(e); }
+        }
+
+        private bool IsComboRunning => _comboEnabled && _launched && !_frozen && _runningGate != null && _runningGate();
+
+        private void ProcessRobotCombo(RobotView view, Collider2D collider, bool bounced)
+        {
+            if (!IsComboRunning || collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy ||
+                view == null || !view.TryGetComboRobot(_comboRegistry, Side, out var robot)) return;
+            if (!_robotContacts.TryGetValue(robot.InstanceId, out var contact))
+            {
+                contact = new RobotContact { View = view, AllColliders = view.GetComponentsInChildren<Collider2D>() };
+                _robotContacts.Add(robot.InstanceId, contact);
+            }
+            contact.Touching.Add(collider);
+            if (IsBerserk) { contact.Counted = true; return; }
+            if (!bounced || contact.Counted || !_robotHitsThisStep.Add(robot.InstanceId)) return;
+            contact.Counted = true;
+            ComboCount++;
+            _comboElapsed = 0d;
+            if (ComboCount <= 50 && ComboCount % 10 == 0) ShowComboPopup();
+        }
+
+        private void AdvanceComboTime(float deltaTime)
+        {
+            if (!IsComboRunning || IsBerserk || ComboCount == 0) return;
+            _comboElapsed += deltaTime;
+            if (_comboElapsed > _comboTimeout) ResetComboCount();
+        }
+
+        private void ReconcileRobotContacts()
+        {
+            if (!_comboEnabled || _frozen) return;
+            _endedRobotContacts.Clear();
+            foreach (var pair in _robotContacts)
+            {
+                var contact = pair.Value;
+                if (contact.View == null || !contact.View.TryGetComboRobot(_comboRegistry, Side, out _))
+                { _endedRobotContacts.Add(pair.Key); continue; }
+                contact.Touching.Clear();
+                foreach (var collider in contact.AllColliders)
+                {
+                    if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) continue;
+                    // Restoring simulated clears Unity's contact cache; retain the old episode
+                    // while the shapes are still touching until the first resumed simulation.
+                    bool touching = _collider.IsTouching(collider);
+                    if (!touching && _reconcileAfterFreeze)
+                    {
+                        var distance = _collider.Distance(collider);
+                        touching = distance.isValid && distance.distance <= Physics2D.defaultContactOffset;
+                    }
+                    if (touching) contact.Touching.Add(collider);
+                }
+                if (contact.Touching.Count == 0) _endedRobotContacts.Add(pair.Key);
+            }
+            foreach (var id in _endedRobotContacts) _robotContacts.Remove(id);
+            _reconcileAfterFreeze = false;
+        }
+
+        private void ShowComboPopup()
+        {
+            ComboPopupView popup = null;
+            try
+            {
+                if (_comboPopupRoot == null) throw new InvalidOperationException("Combo提示根节点已失效。");
+                popup = Instantiate(_comboPopupPrefab, transform.position + Vector3.up * _comboPopupOffset,
+                    Quaternion.identity, _comboPopupRoot);
+                popup.Initialize(ComboCount, popup.transform.position);
+                _comboPopups.Add(popup);
+            }
+            catch (Exception e)
+            {
+                if (popup != null) ReleaseComboPopup(popup);
+                Debug.LogError("Combo提示播放失败：" + e.Message, this);
+            }
+        }
+
+        private void Update()
+        {
+            if (!IsComboRunning) return;
+            for (var i = _comboPopups.Count - 1; i >= 0; i--)
+            {
+                var popup = _comboPopups[i];
+                try { if (popup != null && !popup.Advance(Time.deltaTime)) continue; }
+                catch (Exception e) { Debug.LogError("Combo提示播放失败：" + e.Message, this); }
+                _comboPopups.RemoveAt(i);
+                if (popup != null) ReleaseComboPopup(popup);
+            }
+        }
+
+        private void ResetComboCount() { ComboCount = 0; _comboElapsed = 0d; }
+
+        private void ClearCombo()
+        {
+            ResetComboCount();
+            _robotContacts.Clear();
+            _robotHitsThisStep.Clear();
+            _endedRobotContacts.Clear();
+            _reconcileAfterFreeze = false;
+            foreach (var popup in _comboPopups) if (popup != null) ReleaseComboPopup(popup);
+            _comboPopups.Clear();
+        }
+
+        private static void ReleaseComboPopup(ComboPopupView popup)
+        {
+            if (Application.isPlaying) { popup.gameObject.SetActive(false); Destroy(popup.gameObject); }
+            else DestroyImmediate(popup.gameObject);
         }
 
         private void ValidateConfig()

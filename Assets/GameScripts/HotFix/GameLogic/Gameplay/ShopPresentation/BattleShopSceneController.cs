@@ -22,6 +22,7 @@ namespace GameLogic
         [SerializeField] private int[] _opponentCandidates = { 1001, 1002, 1003 };
         private readonly Dictionary<int, GameObject> _views = new Dictionary<int, GameObject>();
         private Transform _preparedRoot;
+        private Transform _comboPopupRoot;
         private bool _initializing;
         private int _initializationGeneration;
         private CancellationTokenSource _initializationCancellation;
@@ -103,7 +104,11 @@ namespace GameLogic
                 GameEvent.AddEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
                 _listening = true;
                 var context = Context;
-                _bootstrap.BindBattle(context.BattleId, () => IsCombatRunning && Context == context);
+                var popupRoot = new GameObject("ComboPopups");
+                popupRoot.transform.SetParent(transform, false);
+                _comboPopupRoot = popupRoot.transform;
+                _bootstrap.BindBattle(context.BattleId, () => IsCombatRunning && Context == context,
+                    context.Registry, _comboPopupRoot);
                 _playerGlass = GetGlassController(_playerBoard);
                 _opponentGlass = GetGlassController(_opponentBoard);
                 await _playerGlass.PrepareAsync(this, context, _playerBoard, BattleSide.Player, layout, tables, cancellationToken);
@@ -441,6 +446,9 @@ namespace GameLogic
             _ready = _running = _frozen = false;
             _preparationRemaining = 0f;
             if (_bootstrap != null) _bootstrap.StopBalls();
+            var popupRoot = _comboPopupRoot;
+            _comboPopupRoot = null;
+            if (popupRoot != null) Destroy(popupRoot.gameObject);
             // Detach old ownership before Dispose can notify listeners that start another battle.
             var context = Context;
             Context = null;

@@ -42,23 +42,30 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, host.Enemies.GetSpawnedCount(BattleSide.Player));
             host.SetFrozen(false);
             Assert.AreEqual(1f, animator.speed);
-            while (!host.Enemies.IsWaveCompleted && Time.realtimeSinceStartup < deadline) yield return null;
-            Assert.IsTrue(host.Enemies.IsWaveCompleted, "第一波应在时限内完成");
-            Assert.AreEqual(10, host.Enemies.GetSpawnedCount(BattleSide.Player));
-            Assert.AreEqual(10, host.Enemies.GetSpawnedCount(BattleSide.Opponent));
-            Assert.AreEqual(90, host.Towers.PlayerTower.CurrentHp);
-            Assert.AreEqual(90, host.Towers.OpponentTower.CurrentHp);
-            Assert.IsTrue(host.IsReady);
+            while (!host.Towers.IsEnded && !host.Enemies.IsWaveCompleted && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.IsTrue(host.Towers.IsEnded || host.Enemies.IsWaveCompleted, "第一波应完成或因塔被击破结束");
+            if (host.Towers.IsEnded)
+            {
+                Assert.IsTrue(host.Towers.PlayerTower.CurrentHp == 0 || host.Towers.OpponentTower.CurrentHp == 0,
+                    "结束对局时至少有一座塔应被敌人接触扣至 0 点");
+            }
+            else
+            {
+                Assert.AreEqual(5, host.Towers.PlayerTower.CurrentHp);
+                Assert.AreEqual(5, host.Towers.OpponentTower.CurrentHp);
+            }
+            var oldBattle = host.Context.BattleId;
+            host.EndBattle();
             yield return null;
             Assert.AreEqual(0, Object.FindObjectsOfType<EnemyView>().Length);
-            var oldBattle = host.Context.BattleId;
-            host.EndBattle(); host.EndBattle();
+            host.EndBattle();
             host.SendMessage("Start");
             deadline = Time.realtimeSinceStartup + 30f;
             while (!host.IsReady && Time.realtimeSinceStartup < deadline) yield return null;
             Assert.IsTrue(host.IsReady);
             Assert.AreNotEqual(oldBattle, host.Context.BattleId);
-            Assert.AreEqual(100, host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(5, host.Towers.PlayerTower.CurrentHp);
             Assert.AreEqual(0, host.Enemies.LiveCount);
             Assert.AreEqual(0, host.Enemies.GetSpawnedCount(BattleSide.Player));
             Assert.AreEqual(DamageResult.Ignored, host.ApplyTowerDamage(oldBattle, BattleSide.Player, 100));

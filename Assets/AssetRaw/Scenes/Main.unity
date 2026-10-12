@@ -283,6 +283,7 @@ MonoBehaviour:
   - {fileID: 1832132060}
   - {fileID: 1096092600}
   - {fileID: 1519177347}
+  _damageNumberPrefab: {fileID: 5355598917011885402, guid: 70cd3a17ed1327345acef9e62e0e1f71, type: 3}
 --- !u!1 &207628316
 GameObject:
   m_ObjectHideFlags: 0

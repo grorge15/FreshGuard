@@ -160,6 +160,29 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, ((EnemyBattleController)f.Controller).DeathViewCount);
         }
 
+        [Test]
+        public void DamageNumberUsesHalfSecondLifetimeAndExpires()
+        {
+            var type = typeof(RobotEntity).Assembly.GetType("GameLogic.DamageNumberView");
+            Assert.IsNotNull(type, "缺少 DamageNumberView");
+            var go = new GameObject("DamageNumber");
+            go.transform.SetParent(_fixture.Root.transform);
+            var number = go.AddComponent(type);
+            go.GetComponent<TextMesh>().font = null;
+            go.GetComponent<MeshRenderer>().sharedMaterial = null;
+            Call(number, "Initialize", 20, Vector3.zero);
+            var label = go.GetComponent<TextMesh>();
+            Assert.IsNotNull(label.font, "伤害数字必须有可显示的字体");
+            Assert.AreSame(label.font.material, go.GetComponent<MeshRenderer>().sharedMaterial);
+            Assert.That((float)type.GetProperty("Lifetime").GetValue(number), Is.EqualTo(0.5f));
+            Assert.IsFalse((bool)Call(number, "Advance", 0.25f));
+            Assert.That(go.transform.position.y, Is.EqualTo(0.175f).Within(0.0001f));
+            Assert.That(label.color.a, Is.EqualTo(0.5f).Within(1f / 255f));
+            Assert.IsFalse((bool)Call(number, "Advance", 0.24f));
+            Assert.IsTrue((bool)Call(number, "Advance", 0.01f));
+            Assert.That(label.color.a, Is.EqualTo(0f).Within(0.0001f));
+        }
+
         private Component Bullet(int targetId, int damage, Vector3 start)
         {
             var type = typeof(RobotEntity).Assembly.GetType("GameLogic.RobotBulletView");

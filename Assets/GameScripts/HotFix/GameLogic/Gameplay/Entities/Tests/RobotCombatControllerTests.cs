@@ -29,7 +29,7 @@ namespace GameLogic.Tests
             var target = _f.PlayerView.InstanceId;
             _combat.AdvanceAttacks(0f);
             Assert.AreEqual(1, _combat.LiveBulletCount);
-            Assert.AreEqual(1f, robot.TriggerCooldownRemaining);
+            Assert.AreEqual(0.5f, robot.TriggerCooldownRemaining);
             Assert.IsTrue(robot.TryUpgrade());
             Assert.AreEqual(30, robot.GetAttackDamage());
             _f.Context.Registry.Remove(robot.InstanceId, EntityRemovalReason.Consumed, out _);
@@ -79,12 +79,12 @@ namespace GameLogic.Tests
         [Test]
         public void ArrivalBeforeBulletPhaseLeaksOnceAndDoesNotDamageTheNextEnemy()
         {
-            _f.Clear(); _f.SetRoutes(new[] { new Vector3(-0.1f, 0f, 0f) }); _f.Prepare(); _f.Start();
+            _f.Clear(); _f.SetRoutes(new[] { new Vector3(-0.61f, 0f, 0f) }); _f.Prepare(); _f.Start();
             Prepare(); AddRobot();
             _combat.AdvanceAttacks(0f);
             _f.Advance(0.6f);
             _combat.AdvanceExistingBullets(0.6f);
-            Assert.AreEqual(99, _f.Host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(4, _f.Host.Towers.PlayerTower.CurrentHp);
             _f.Context.Registry.TryGet(_f.PlayerView.InstanceId, out var entity);
             Assert.AreEqual(100, ((EnemyEntity)entity).CurrentHp);
             Assert.AreEqual(0, _combat.LiveBulletCount);

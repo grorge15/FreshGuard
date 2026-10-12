@@ -14,11 +14,14 @@ namespace GameLogic
         public PhysicalCollisionBall PlayerBall => _ball;
         public PhysicalCollisionBall OpponentBall => _opponentBall;
 
-        public void BindBattle(long battleId, System.Func<bool> runningGate)
+        public void BindBattle(long battleId, System.Func<bool> runningGate,
+            BattleEntityRegistry registry, Transform popupRoot)
         {
             _launched = false;
             _ball.BindBattle(battleId, BattleSide.Player, runningGate);
             _opponentBall.BindBattle(battleId, BattleSide.Opponent, runningGate);
+            _ball.BindCombo(registry, popupRoot);
+            _opponentBall.BindCombo(registry, popupRoot);
         }
 
         public bool LaunchBoth(PlacementBoardView player, PlacementBoardView opponent)

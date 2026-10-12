@@ -16,6 +16,7 @@ namespace GameLogic
         private Collider2D[] _colliders;
         private TextMesh _levelLabel;
         private RobotEntity _robot;
+        private BattleEntityRegistry _registry;
         private bool _mergeCandidate;
         private float _feedbackUntil;
         public int MergeFeedbackCount { get; private set; }
@@ -89,7 +90,18 @@ namespace GameLogic
                 !(entity is RobotEntity robot) || robot.ConfigId != _configId)
                 throw new ArgumentException("视图与已购买机器人不匹配。", nameof(instanceId));
             InstanceId = instanceId;
+            _registry = registry;
             Render(robot);
+        }
+
+        public bool TryGetComboRobot(BattleEntityRegistry registry, BattleSide side, out RobotEntity robot)
+        {
+            robot = null;
+            if (!isActiveAndEnabled || registry == null || !ReferenceEquals(_registry, registry) ||
+                !registry.TryGet(InstanceId, out var entity) || !ReferenceEquals(entity, _robot) ||
+                _robot == null || _robot.Side != side || !_robot.CanParticipate) return false;
+            robot = _robot;
+            return true;
         }
 
         /// <summary>业务方加载预制体后显式创建实体，不在 Awake 中自动注册。</summary>

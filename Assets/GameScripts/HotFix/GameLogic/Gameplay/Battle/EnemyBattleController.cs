@@ -20,9 +20,13 @@ namespace GameLogic
         [Header("敌方战场路线：按数组顺序移动")]
         [Tooltip("把自行摆放的节点 Transform 按顺序拖入。Element 0 为出生点；同侧 Tower 自动作为终点，不必填入。修改在下一次初始化对局时生效。")]
         [SerializeField] private Transform[] _opponentRoutePoints;
+        [Header("战斗反馈")]
+        [Tooltip("机器人命中时显示的世界空间伤害数字预制体。未指定时使用运行时后备样式。")]
+        [SerializeField] private GameObject _damageNumberPrefab;
         private readonly List<SpawnGroup> _groups = new List<SpawnGroup>();
         private readonly Dictionary<int, MoveEntry> _active = new Dictionary<int, MoveEntry>();
         private readonly Dictionary<int, DeathEntry> _dying = new Dictionary<int, DeathEntry>();
+        private readonly List<DamageNumberView> _damageNumbers = new List<DamageNumberView>();
         private BattleShopSceneController _host;
         private BattleShopContext _context;
         private Transform _preparedRoot;
@@ -157,7 +161,15 @@ namespace GameLogic
         {
             if (authored == null || authored.Length == 0 || authored.Any(p => p == null))
                 throw new InvalidOperationException("请配置双方路线节点，首节点为出生点。");
-            var points = authored.Select(p => p.position).Concat(new[] { tower.position }).ToArray();
+            var contactPosition = tower.position;
+            var collider = tower.GetComponent<Collider2D>();
+            if (collider != null && collider.enabled && collider.gameObject.activeInHierarchy)
+            {
+                Physics2D.SyncTransforms();
+                var contact = collider.ClosestPoint(authored[authored.Length - 1].position);
+                contactPosition = new Vector3(contact.x, contact.y, tower.position.z);
+            }
+            var points = authored.Select(p => p.position).Concat(new[] { contactPosition }).ToArray();
             if (points.Any(p => !Finite(p.x) || !Finite(p.y) || !Finite(p.z)))
                 throw new InvalidOperationException("路线节点位置必须为有限数值。");
             return points;
@@ -180,6 +192,7 @@ namespace GameLogic
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!IsRunning) return;
+            AdvanceDamageNumbers(deltaTime);
             AdvanceDeathViews(deltaTime);
             if (!IsRunning || IsWaveCompleted) return;
             try
@@ -294,11 +307,11 @@ namespace GameLogic
                 if (!IsRunning) return;
                 if (!_active.TryGetValue(id, out var entry) || !_context.Registry.TryGet(id, out var entity) ||
                     !(entity is EnemyEntity enemy) || !enemy.IsAlive) continue;
-                Arrive(id, entry, enemy.Configuration.LeakDamage);
+                Arrive(id, entry);
             }
         }
 
-        private void Arrive(int id, MoveEntry entry, int damage)
+        private void Arrive(int id, MoveEntry entry)
         {
             var context = _context;
             var host = _host;
@@ -309,7 +322,7 @@ namespace GameLogic
             {
                 // 先提交伤害，再通知表现，移除监听方冻结或终局不会吞掉此次抵塔。
                 if (OwnsBattle && host.IsCombatRunning && host.TryGetTowerTarget(side, out var targetId, out _) && targetId == entry.Group.TowerId)
-                    host.ApplyTowerDamage(context.BattleId, side, damage);
+                    host.ApplyTowerDamage(context.BattleId, side, 1);
             }
             finally
             {
@@ -318,6 +331,43 @@ namespace GameLogic
                     var instance = entry.View.gameObject;
                     try { entry.View.PlayRemoval(snapshot); }
                     finally { Release(instance); }
+                }
+            }
+        }
+
+        /// <summary>子弹命中后统一提交受击表现，逻辑伤害仍由调用方提交。</summary>
+        public bool TryPlayDamageFeedback(BattleSide side, int instanceId, int damage)
+        {
+            if (!OwnsBattle || damage <= 0 || !_active.TryGetValue(instanceId, out var entry) ||
+                entry.Group.Side != side || entry.View == null || !entry.View.PlayHitFeedback()) return false;
+            if (_damageNumberPrefab != null)
+            {
+                var instance = Instantiate(_damageNumberPrefab, entry.View.transform.position + Vector3.up * 0.25f,
+                    Quaternion.identity, transform);
+                var number = instance.GetComponent<DamageNumberView>();
+                if (number == null) number = instance.AddComponent<DamageNumberView>();
+                number.Initialize(damage, instance.transform.position);
+                _damageNumbers.Add(number);
+            }
+            else
+            {
+                var instance = new GameObject("DamageNumber");
+                instance.transform.SetParent(transform, true);
+                var number = instance.AddComponent<DamageNumberView>();
+                number.Initialize(damage, entry.View.transform.position + Vector3.up * 0.25f);
+                _damageNumbers.Add(number);
+            }
+            return true;
+        }
+
+        private void AdvanceDamageNumbers(float deltaTime)
+        {
+            foreach (var number in _damageNumbers.ToArray())
+            {
+                if (number == null || number.Advance(deltaTime))
+                {
+                    _damageNumbers.Remove(number);
+                    if (number != null) Release(number.gameObject);
                 }
             }
         }
@@ -413,6 +463,9 @@ namespace GameLogic
             }
             _active.Clear();
             foreach (var id in _dying.Keys.ToArray()) ReleaseDeathView(id);
+            foreach (var number in _damageNumbers)
+                if (number != null) Release(number.gameObject);
+            _damageNumbers.Clear();
             foreach (var group in _groups)
                 while (group.Pending.Count > 0) Release(group.Pending.Dequeue());
             _groups.Clear();
