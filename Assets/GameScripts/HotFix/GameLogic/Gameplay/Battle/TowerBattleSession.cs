@@ -26,6 +26,7 @@ namespace GameLogic
     /// <summary>独立的双方塔生命周期。只请求结算，不操作商店、场景或结算 UI。</summary>
     public sealed class TowerBattleSession : IDisposable
     {
+        public const int DefaultTowerMaxHp = 5;
         private readonly long _battleId;
         private readonly BattleEntityRegistry _registry;
         private bool _disposed;
@@ -44,8 +45,8 @@ namespace GameLogic
                 throw new InvalidOperationException("本局已存在塔，不能重复装配。");
             _battleId = battleId;
             _registry = registry;
-            PlayerTower = registry.CreateTower(configId, BattleSide.Player, maxHp);
-            try { OpponentTower = registry.CreateTower(configId, BattleSide.Opponent, maxHp); }
+            PlayerTower = registry.CreateTower(configId, BattleSide.Player, DefaultTowerMaxHp);
+            try { OpponentTower = registry.CreateTower(configId, BattleSide.Opponent, DefaultTowerMaxHp); }
             catch
             {
                 EntityRemovalSnapshot ignored;

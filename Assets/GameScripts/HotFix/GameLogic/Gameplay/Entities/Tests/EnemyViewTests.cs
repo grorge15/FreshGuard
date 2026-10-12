@@ -148,6 +148,40 @@ namespace GameLogic.Tests
             Assert.AreEqual(100, ((EnemyEntity)entity).CurrentHp);
         }
 
+        [Test]
+        public void DamageFeedbackTurnsEnemySpritesRed()
+        {
+            CreateView();
+            var visual = new GameObject("Visual");
+            visual.transform.SetParent(_root.transform, false);
+            var renderer = visual.AddComponent<SpriteRenderer>();
+            renderer.color = Color.white;
+            var id = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), BattleSide.Player);
+            Call("Bind", _registry, id);
+
+            Assert.IsTrue((bool)Call("PlayHitFeedback", 0.12f));
+            Assert.IsTrue(renderer.color.r > 0.8f && renderer.color.g < 0.4f && renderer.color.b < 0.4f);
+        }
+
+        [Test]
+        public void SortingOrderUsesWorldHeightAndStableInstanceTieBreaker()
+        {
+            CreateView();
+            var visual = new GameObject("Visual");
+            visual.transform.SetParent(_root.transform, false);
+            var renderer = visual.AddComponent<SpriteRenderer>();
+            var firstId = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), BattleSide.Player);
+            Call("Bind", _registry, firstId);
+            _root.transform.position = new Vector3(0f, 2f, 0f);
+            Lifecycle("LateUpdate");
+            var highOrder = renderer.sortingOrder;
+            Assert.AreEqual(SpriteSortPoint.Pivot, renderer.spriteSortPoint,
+                "动画帧包围盒变化不应参与相同 Order 的距离排序");
+            _root.transform.position = new Vector3(0f, -1f, 0f);
+            Lifecycle("LateUpdate");
+            Assert.Greater(renderer.sortingOrder, highOrder);
+        }
+
         private void CreateView()
         {
             var type = typeof(EnemyEntity).Assembly.GetType("GameLogic.EnemyView");

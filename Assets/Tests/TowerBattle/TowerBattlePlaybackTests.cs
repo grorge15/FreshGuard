@@ -74,7 +74,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(DamageResult.Ignored, controller.ApplyTowerDamage(context.BattleId, side, 100));
                 SetField(controller, "_frozen", false);
                 Assert.AreEqual(DamageResult.Ignored, controller.ApplyTowerDamage(context.BattleId + 1, side, 100));
-                Assert.AreEqual(DamageResult.Damaged, controller.ApplyTowerDamage(context.BattleId, side, 20));
+                Assert.AreEqual(DamageResult.Damaged, controller.ApplyTowerDamage(context.BattleId, side, 1));
                 var target = side == BattleSide.Player ? session.PlayerTower : session.OpponentTower;
                 var targetView = sceneViews.Find(v => v.GetComponent<TowerView>().InstanceId == target.InstanceId).GetComponent<TowerView>();
                 Assert.AreEqual(0.8f, targetView.HealthFraction);
@@ -85,7 +85,7 @@ namespace GameLogic.Tests
                     {
                         if (fired) return;
                         fired = true;
-                        Assert.AreEqual(DamageResult.Killed, controller.ApplyTowerDamage(context.BattleId, side, 80));
+                        Assert.AreEqual(DamageResult.Killed, controller.ApplyTowerDamage(context.BattleId, side, 4));
                         UnityEngine.Object.DestroyImmediate(root);
                         Assert.AreEqual(0, notifications, "商店事务提交前不能通知结算");
                     };
@@ -97,7 +97,7 @@ namespace GameLogic.Tests
                 }
                 else
                 {
-                    Assert.AreEqual(DamageResult.Killed, controller.ApplyTowerDamage(context.BattleId, side, 80));
+                    Assert.AreEqual(DamageResult.Killed, controller.ApplyTowerDamage(context.BattleId, side, 4));
                     Assert.AreEqual(0f, targetView.HealthFraction);
                     Assert.IsTrue(targetView.IsDead);
                     Assert.AreEqual(0, notifications, "终局通知应离开受伤通知栈后发出");

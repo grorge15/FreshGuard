@@ -108,7 +108,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(1, notifications);
                 var other = side == BattleSide.Player ? session.OpponentTower : session.PlayerTower;
                 Assert.AreEqual(DamageResult.Ignored, registry.ApplyTowerDamage(other.InstanceId, 100));
-                Assert.AreEqual(100, other.CurrentHp);
+                Assert.AreEqual(5, other.CurrentHp);
                 session.Dispose();
                 Assert.AreEqual(1, notifications);
             }
@@ -131,7 +131,7 @@ namespace GameLogic.Tests
             using (var session = new TowerBattleSession(2, registry, 100))
             {
                 Assert.AreEqual(DamageResult.Ignored, session.ApplyDamage(1, BattleSide.Player, 100));
-                Assert.AreEqual(100, session.PlayerTower.CurrentHp);
+                Assert.AreEqual(5, session.PlayerTower.CurrentHp);
             }
         }
 

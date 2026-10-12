@@ -47,7 +47,7 @@ namespace GameLogic.Tests
                         Assert.AreEqual(controller.Towers.OpponentTower.InstanceId, opponent.InstanceId);
                         Assert.AreEqual(1f, player.HealthFraction);
                         controller.Towers.ApplyDamage(context.BattleId, BattleSide.Player, 25);
-                        Assert.AreEqual(0.75f, player.HealthFraction);
+                        Assert.AreEqual(0f, player.HealthFraction);
                         controller.EndBattle();
                         Assert.IsTrue(player != null && opponent != null, "场景塔应在结算后保留");
                         Assert.AreEqual(0, player.InstanceId);
