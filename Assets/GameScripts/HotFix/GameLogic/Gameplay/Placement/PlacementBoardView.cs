@@ -14,6 +14,8 @@ namespace GameLogic
         [SerializeField] private float _cellSize = 0.35f;
         [SerializeField] private float _wallThickness = 0.25f;
         [SerializeField] private SpriteRenderer _slotPrefab;
+        [SerializeField, Tooltip("当前棋盘的格子图片；Player 和 Enemy 可分别配置。留空使用 Slot Prefab 的图片。")]
+        private Sprite _slotSprite;
         [SerializeField] private PhysicalCollisionBoundary _boundary;
         private SpriteRenderer[,] _slots;
         private BoardModel _model;
@@ -58,6 +60,7 @@ namespace GameLogic
         {
             if (_initialized)
             {
+                RefreshSlotSprites();
                 _boundary.SetWallsEnabled(true);
                 return true;
             }
@@ -65,9 +68,10 @@ namespace GameLogic
             {
                 if (_columns <= 0 || _rows <= 0 || float.IsNaN(_cellSize) || float.IsInfinity(_cellSize) || _cellSize <= 0f)
                     throw new InvalidOperationException("棋盘尺寸与格距必须为正数。");
-                if (_slotPrefab == null || _slotPrefab.sprite == null)
+                var sprite = _slotSprite != null ? _slotSprite : (_slotPrefab != null ? _slotPrefab.sprite : null);
+                if (_slotPrefab == null || sprite == null)
                     throw new InvalidOperationException("世界 Slot Prefab 或 Sprite 引用缺失。");
-                var slotSize = _slotPrefab.sprite.bounds.size;
+                var slotSize = sprite.bounds.size;
                 if (slotSize.x <= 0f || slotSize.y <= 0f || _slotPrefab.GetComponent<Collider2D>() != null || _slotPrefab.GetComponent<Rigidbody2D>() != null)
                     throw new InvalidOperationException("Slot 必须是无物理组件的有效 Sprite。");
 
@@ -92,6 +96,7 @@ namespace GameLogic
                         if (slot.GetComponent<Collider2D>() != null || slot.GetComponent<Rigidbody2D>() != null)
                             throw new InvalidOperationException("格子不能包含碰撞或刚体组件：" + slotName);
                         slot.name = slotName;
+                        slot.sprite = sprite;
                         slot.transform.localPosition = GetLocalPosition(new BoardCoordinate(column, row)) + Vector3.forward;
                         slot.transform.localRotation = Quaternion.identity;
                         slot.transform.localScale = new Vector3(_cellSize * 0.94f / slotSize.x, _cellSize * 0.94f / slotSize.y, 1f);
@@ -213,5 +218,33 @@ namespace GameLogic
         }
 
         private void OnDisable() { ClearPreview(); }
+
+        [ContextMenu("Refresh Slot Sprites")]
+        private void RefreshSlotSprites()
+        {
+            if (this == null) return;
+            var sprite = _slotSprite != null ? _slotSprite : (_slotPrefab != null ? _slotPrefab.sprite : null);
+            if (sprite == null || _cellSize <= 0f || float.IsNaN(_cellSize) || float.IsInfinity(_cellSize)) return;
+            var size = sprite.bounds.size;
+            if (size.x <= 0f || size.y <= 0f) return;
+            var root = transform.Find("Slots");
+            if (root == null) return;
+            foreach (Transform child in root)
+            {
+                var slot = child.GetComponent<SpriteRenderer>();
+                if (slot == null) continue;
+                slot.sprite = sprite;
+                slot.transform.localScale = new Vector3(_cellSize * 0.94f / size.x, _cellSize * 0.94f / size.y, 1f);
+            }
+        }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            // OnValidate may run during loading; defer scene access to the editor thread.
+            UnityEditor.EditorApplication.delayCall -= RefreshSlotSprites;
+            UnityEditor.EditorApplication.delayCall += RefreshSlotSprites;
+        }
+#endif
     }
 }
