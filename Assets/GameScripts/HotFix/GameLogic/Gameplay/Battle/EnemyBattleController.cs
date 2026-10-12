@@ -22,6 +22,7 @@ namespace GameLogic
         [SerializeField] private Transform[] _opponentRoutePoints;
         private readonly List<SpawnGroup> _groups = new List<SpawnGroup>();
         private readonly Dictionary<int, MoveEntry> _active = new Dictionary<int, MoveEntry>();
+        private readonly Dictionary<int, DeathEntry> _dying = new Dictionary<int, DeathEntry>();
         private BattleShopSceneController _host;
         private BattleShopContext _context;
         private Transform _preparedRoot;
@@ -37,6 +38,7 @@ namespace GameLogic
             internal WaveSpawn Rule;
             internal Enemy Config;
             internal Vector3[] Points;
+            internal float[] CumulativeLengths;
             internal int TowerId;
             internal int Spawned;
             internal readonly Queue<GameObject> Pending = new Queue<GameObject>();
@@ -50,11 +52,19 @@ namespace GameLogic
             internal int NextPoint = 1;
         }
 
+        private sealed class DeathEntry
+        {
+            internal EnemyView View;
+            internal float Remaining = 3f;
+        }
+
         public int LiveCount => _active.Count;
+        public int DeathViewCount => _dying.Count;
         public bool IsWaveCompleted => _started && _groups.All(g => g.Spawned == g.Rule.Count) && _active.Count == 0;
         private bool OwnsBattle => this != null && _host != null && _context != null &&
             _host.Context == _context && !_context.IsEnded && !_context.IsEndRequested;
         private bool IsRunning => _prepared && _started && OwnsBattle && _host.IsCombatRunning;
+        internal bool OwnsContext(BattleShopContext context) => context == _context && OwnsBattle;
 
         public int GetSpawnedCount(BattleSide side)
         {
@@ -107,7 +117,12 @@ namespace GameLogic
                         if (config == null || string.IsNullOrWhiteSpace(config.EnemyPrefab) || config.HpC1 <= 0 ||
                             !EntityValidation.IsFiniteNonNegative(config.EnemySpeed) || config.LeakDamage < 0)
                             throw new InvalidOperationException("第一波敌人配置无效：" + rule.EnemyId);
-                        _groups.Add(new SpawnGroup { Side = side, Rule = rule, Config = config, Points = points, TowerId = towerId });
+                        var lengths = new float[points.Length];
+                        for (var p = 1; p < points.Length; p++)
+                            lengths[p] = lengths[p - 1] + Vector3.Distance(points[p - 1], points[p]);
+                        if (lengths.Any(v => !Finite(v))) throw new InvalidOperationException("路线长度必须为有限数值。");
+                        _groups.Add(new SpawnGroup { Side = side, Rule = rule, Config = config, Points = points,
+                            CumulativeLengths = lengths, TowerId = towerId });
                     }
                 }
                 var root = new GameObject("PreparedEnemyViews");
@@ -164,6 +179,8 @@ namespace GameLogic
         public void Advance(float deltaTime)
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
+            if (!IsRunning) return;
+            AdvanceDeathViews(deltaTime);
             if (!IsRunning || IsWaveCompleted) return;
             try
             {
@@ -265,6 +282,10 @@ namespace GameLogic
                     distance = Mathf.Max(0f, distance - length);
                 }
                 entry.View.transform.position = position;
+                var lengths = entry.Group.CumulativeLengths;
+                var progress = entry.NextPoint == points.Length ? lengths[lengths.Length - 1] :
+                    lengths[entry.NextPoint] - Vector3.Distance(position, points[entry.NextPoint]);
+                enemy.TrySetRouteProgress(Mathf.Clamp(progress, 0f, lengths[lengths.Length - 1]));
                 if (entry.NextPoint == points.Length) arrivals.Add(id);
             }
             // 同一时间段的所有位置先推进，再通知抵塔；回调冻结不会让后遍历者少走这段时间。
@@ -305,6 +326,69 @@ namespace GameLogic
         {
             foreach (var entry in _active.Values)
                 if (entry.View != null) entry.View.GetComponent<Animator>().speed = frozen ? 0f : 1f;
+            foreach (var entry in _dying.Values)
+                if (entry.View != null) entry.View.GetComponent<Animator>().speed = frozen ? 0f : 1f;
+        }
+
+        /// <summary>只提供当前对局正在移动的存活敌人；不会改变移动状态。</summary>
+        public void CopyTargetCandidates(BattleSide side, List<int> destination)
+        {
+            EntityValidation.RequireSide(side);
+            if (destination == null) throw new ArgumentNullException(nameof(destination));
+            destination.Clear();
+            if (!OwnsBattle) return;
+            foreach (var pair in _active)
+                if (TryGetTargetPosition(side, pair.Key, out _)) destination.Add(pair.Key);
+        }
+
+        public bool TryGetTargetPosition(BattleSide side, int instanceId, out Vector3 position)
+        {
+            position = default;
+            if (!OwnsBattle || !_active.TryGetValue(instanceId, out var entry) || entry.Group.Side != side ||
+                entry.View == null || !entry.View.isActiveAndEnabled || entry.View.InstanceId != instanceId ||
+                !_context.Registry.TryGet(instanceId, out var entity) || !(entity is EnemyEntity enemy) ||
+                !enemy.IsAlive || enemy.Side != side) return false;
+            position = entry.View.transform.position;
+            return true;
+        }
+
+        /// <summary>逻辑实体已回收，死亡动画单独保留，不能再抵塔或被索敌。</summary>
+        public void NotifyKilled(EntityRemovalSnapshot snapshot)
+        {
+            if (!OwnsBattle || snapshot.RemovalReason != EntityRemovalReason.Killed || snapshot.Kind != EntityKind.Enemy ||
+                _context.Registry.TryGet(snapshot.InstanceId, out _) ||
+                !_active.TryGetValue(snapshot.InstanceId, out var entry) || entry.Group.Side != snapshot.Side) return;
+            _active.Remove(snapshot.InstanceId);
+            if (entry.View == null) return;
+            _dying.Add(snapshot.InstanceId, new DeathEntry { View = entry.View });
+            entry.View.RemovalAnimationCompleted += OnDeathCompleted;
+            try
+            {
+                if (!entry.View.PlayRemoval(snapshot)) ReleaseDeathView(snapshot.InstanceId);
+            }
+            catch { ReleaseDeathView(snapshot.InstanceId); throw; }
+        }
+
+        private void OnDeathCompleted(int id) => ReleaseDeathView(id);
+
+        private void AdvanceDeathViews(float deltaTime)
+        {
+            foreach (var id in _dying.Keys.ToArray())
+            {
+                if (!IsRunning) return;
+                if (!_dying.TryGetValue(id, out var entry)) continue;
+                entry.Remaining -= deltaTime;
+                if (entry.View == null || !entry.View.isActiveAndEnabled || entry.Remaining <= 0f) ReleaseDeathView(id);
+            }
+        }
+
+        private void ReleaseDeathView(int id)
+        {
+            if (!_dying.TryGetValue(id, out var entry)) return;
+            _dying.Remove(id);
+            if (entry.View == null) return;
+            entry.View.RemovalAnimationCompleted -= OnDeathCompleted;
+            Release(entry.View.gameObject);
         }
 
         private void AbortBattle()
@@ -328,6 +412,7 @@ namespace GameLogic
                 if (pair.Value.View != null) Release(pair.Value.View.gameObject);
             }
             _active.Clear();
+            foreach (var id in _dying.Keys.ToArray()) ReleaseDeathView(id);
             foreach (var group in _groups)
                 while (group.Pending.Count > 0) Release(group.Pending.Dequeue());
             _groups.Clear();

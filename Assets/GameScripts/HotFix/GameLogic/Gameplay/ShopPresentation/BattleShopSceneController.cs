@@ -35,6 +35,7 @@ namespace GameLogic
         private float _preparationRemaining;
         private GlassBoardController _playerGlass;
         private GlassBoardController _opponentGlass;
+        private RobotCombatController _combat;
         public BattleShopUI ShopWindow { get; private set; }
         public BattleShopContext Context { get; private set; }
         public PlacementController Placement => _placement;
@@ -47,6 +48,7 @@ namespace GameLogic
         public GlassBoardController PlayerGlass => _playerGlass;
         public GlassBoardController OpponentGlass => _opponentGlass;
         public EnemyBattleController Enemies => _enemies;
+        public RobotCombatController Combat => _combat;
 
         private void Start() { InitializeAsync().Forget(); }
 
@@ -109,6 +111,8 @@ namespace GameLogic
                 PrepareTowers(context, tables, cancellationToken);
                 if (_enemies == null) throw new InvalidOperationException("缺少 EnemyBattleController 场景引用。");
                 await _enemies.PrepareAsync(this, context, tables, cancellationToken);
+                _combat = new RobotCombatController(this, context, _enemies, _views);
+                await _combat.PrepareAsync(tables, cancellationToken);
                 var window = await GameModule.UI.ShowUIAsyncAwait<BattleShopUI>(context, this)
                     .AttachExternalCancellation(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
@@ -252,6 +256,7 @@ namespace GameLogic
                 _views[robot.InstanceId] = instance;
                 instance.SetActive(true);
                 view.Render(robot);
+                _combat?.SyncRobots();
                 prepared = null;
                 target.Board.RefreshAllCells();
                 return ShopOperationResult.Success;
@@ -298,6 +303,7 @@ namespace GameLogic
                 prepared.transform.localScale = Vector3.one;
                 _views.Add(instanceId, prepared);
                 prepared.SetActive(true);
+                _combat?.SyncRobots();
                 prepared = null;
                 target.Board.RefreshOccupied(target.Board.Model.Evaluate(target.Anchor, robot.Definition).Cells);
                 return ShopOperationResult.Success;
@@ -339,6 +345,15 @@ namespace GameLogic
                     try { _enemies?.Advance(Time.deltaTime); }
                     catch (Exception e) { Debug.LogException(e, this); }
                 }
+                if (IsCombatRunning)
+                {
+                    try
+                    {
+                        _combat?.AdvanceExistingBullets(Time.deltaTime);
+                        if (IsCombatRunning) _combat?.AdvanceAttacks(Time.deltaTime);
+                    }
+                    catch (Exception e) { Debug.LogException(e, this); EndBattle(); }
+                }
             }
         }
 
@@ -369,6 +384,7 @@ namespace GameLogic
             }
             _playerBoard.RefreshAllCells();
             _opponentBoard.RefreshAllCells();
+            _combat?.SyncRobots();
         }
 
         private void OnRobotMerged(RobotMergeSnapshot snapshot)
@@ -445,6 +461,9 @@ namespace GameLogic
                 GameEvent.RemoveEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
             }
             rewards?.Dispose();
+            var combat = _combat;
+            _combat = null;
+            combat?.Dispose();
             _enemies?.Clear();
             ClearTowers();
             _playerGlass?.Clear();

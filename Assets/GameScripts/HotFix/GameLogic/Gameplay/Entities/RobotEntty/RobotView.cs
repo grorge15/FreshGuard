@@ -20,6 +20,20 @@ namespace GameLogic
         private float _feedbackUntil;
         public int MergeFeedbackCount { get; private set; }
 
+        public Vector3 GetAttackOrigin()
+        {
+            if (_robot?.Configuration?.ShapeId_Ref == null) return transform.position;
+            var sum = Vector3.zero;
+            var count = 0;
+            foreach (var offset in _robot.Configuration.ShapeId_Ref.CellOffsets)
+            {
+                var cell = transform.Find("Cell_" + offset[0] + "_" + offset[1]);
+                if (cell == null) continue;
+                sum += cell.position; count++;
+            }
+            return count > 0 ? sum / count : transform.position;
+        }
+
         public void BindInput(BattleShopSceneController host)
         {
             var input = GetComponent<RobotBoardPointerInput>();

@@ -14,6 +14,7 @@ namespace GameLogic
             EntityValidation.RequirePositive(config.QualityId, nameof(config.QualityId));
             EntityValidation.RequirePositive(config.ShapeId, nameof(config.ShapeId));
             EntityValidation.RequirePositive(maxLevel, nameof(maxLevel));
+            RobotEntity.ValidateAttackConfig(config, maxLevel);
             if (level <= 0 || level > maxLevel) throw new ArgumentOutOfRangeException(nameof(level));
             // 0 是尚未配置技能；现有显式传参接口继续要求有效技能 ID。
             if (config.SkillId < 0) throw new ArgumentOutOfRangeException(nameof(config.SkillId));
