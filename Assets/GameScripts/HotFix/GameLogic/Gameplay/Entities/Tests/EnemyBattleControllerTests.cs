@@ -89,6 +89,17 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void MovementPublishesDistanceAlongTheRouteInsteadOfLeavingProgressAtZero()
+        {
+            var f = Create(); f.Start();
+            var id = f.PlayerView.InstanceId;
+            f.Advance(2.5f);
+            Assert.IsTrue(f.Context.Registry.TryGet(id, out var entity));
+            Assert.That(((EnemyEntity)entity).RouteProgress, Is.EqualTo(1.5f).Within(0.0001f),
+                "走完1单位竖段再走0.5单位横段，应发布1.5单位路线进度");
+        }
+
+        [Test]
         public void FreezeStopsSpawnMovementAndAnimatorWithoutCatchup()
         {
             var f = Create(); f.Start();
@@ -249,7 +260,7 @@ namespace GameLogic.Tests
             throw new MissingFieldException(target.GetType().Name, name);
         }
 
-        private sealed class Fixture : IDisposable
+        internal sealed class Fixture : IDisposable
         {
             public readonly GameObject Root = new GameObject("EnemyBattleFixture");
             public readonly Tables Tables = LoadTables();

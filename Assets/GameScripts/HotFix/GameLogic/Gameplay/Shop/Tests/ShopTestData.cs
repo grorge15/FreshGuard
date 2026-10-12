@@ -37,6 +37,12 @@ namespace GameLogic.Tests
             robotBuffer.WriteString("RobotIcon");
             robotBuffer.WriteInt(1);
             robotBuffer.WriteInt(0);
+            robotBuffer.WriteFloat(1f);
+            robotBuffer.WriteInt(20);
+            robotBuffer.WriteInt(10);
+            robotBuffer.WriteFloat(0.6f);
+            robotBuffer.WriteFloat(1f);
+            robotBuffer.WriteString("RobotBullet");
             return new Robot(robotBuffer) { ShapeId_Ref = new RobotShape(shapeBuffer) };
         }
 
