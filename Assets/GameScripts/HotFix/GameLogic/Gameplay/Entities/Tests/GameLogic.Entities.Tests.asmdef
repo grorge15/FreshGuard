@@ -5,6 +5,7 @@
     "GUID:6e76b07590314a543b982daed6af2509",
     "TEngine.Runtime",
     "GameProto",
+    "UniTask",
     "YooAsset.Editor"
   ],
   "includePlatforms": ["Editor"],

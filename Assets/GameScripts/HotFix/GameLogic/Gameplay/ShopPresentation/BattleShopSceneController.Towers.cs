@@ -1,7 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using GameConfig;
 using TEngine;
 using UnityEngine;
 
@@ -9,11 +9,11 @@ namespace GameLogic
 {
     public sealed partial class BattleShopSceneController
     {
-        [SerializeField] private string _towerPrefab = "Tower";
+        [Header("场景塔：直接调整各自 Transform 的位置和缩放")]
+        [SerializeField] private TowerView _playerTowerView;
+        [SerializeField] private TowerView _opponentTowerView;
         [SerializeField] private int _towerConfigId = 3001;
-        [SerializeField] private int _towerMaxHp = 100;
         private TowerBattleSession _towers;
-        private readonly List<GameObject> _towerViews = new List<GameObject>();
         private BattleSettlementSnapshot? _pendingTowerSettlement;
         public TowerBattleSession Towers => _towers;
 
@@ -24,40 +24,37 @@ namespace GameLogic
             return _towers.ApplyDamage(battleId, targetSide, damage);
         }
 
-        private async UniTask PrepareTowersAsync(BattleShopContext context, CancellationToken cancellationToken)
+        public bool TryGetTowerTarget(BattleSide side, out int instanceId, out Transform target)
         {
-            if (!GameModule.Resource.CheckLocationValid(_towerPrefab))
-                throw new InvalidOperationException("塔预制体未加入 YooAsset 收集：" + _towerPrefab);
-            var session = new TowerBattleSession(context.BattleId, context.Registry, _towerMaxHp, _towerConfigId);
-            _towers = session;
-            session.SettlementRequested += OnTowerSettlementRequested;
-            var parent = _preparedRoot;
-            await PrepareTowerViewAsync(context, session, session.PlayerTower, _playerBoard, parent, cancellationToken);
-            await PrepareTowerViewAsync(context, session, session.OpponentTower, _opponentBoard, parent, cancellationToken);
+            instanceId = 0;
+            target = null;
+            if (Context == null || Context.IsEnded || Context.IsEndRequested || _towers == null || _towers.IsEnded ||
+                (side != BattleSide.Player && side != BattleSide.Opponent)) return false;
+            var view = side == BattleSide.Player ? _playerTowerView : _opponentTowerView;
+            var tower = side == BattleSide.Player ? _towers.PlayerTower : _towers.OpponentTower;
+            if (view == null || !tower.IsAlive || view.InstanceId != tower.InstanceId) return false;
+            instanceId = tower.InstanceId;
+            target = view.transform;
+            return true;
         }
 
-        private async UniTask PrepareTowerViewAsync(BattleShopContext context, TowerBattleSession session,
-            TowerEntity tower, PlacementBoardView board, Transform parent, CancellationToken cancellationToken)
+        private void PrepareTowers(BattleShopContext context, Tables tables, CancellationToken cancellationToken)
         {
-            GameObject instance = null;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_playerTowerView == null || _opponentTowerView == null || _playerTowerView == _opponentTowerView)
+                throw new InvalidOperationException("请为商店入口指定两个不同的场景 TowerView：我方塔和敌方塔。");
+            var config = tables.TbTower.Get(_towerConfigId);
+            if (string.IsNullOrWhiteSpace(config.Prefab)) throw new InvalidOperationException("Tower 配置缺少预制体资源名。");
+            var session = new TowerBattleSession(context.BattleId, context.Registry, config.MaxHp, config.Id);
+            _towers = session;
+            session.SettlementRequested += OnTowerSettlementRequested;
             try
             {
-                instance = await GameModule.Resource.LoadGameObjectAsync(_towerPrefab, parent, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (this == null || Context != context || _towers != session || context.IsEnded || session.IsEnded)
-                    throw new OperationCanceledException(cancellationToken);
-                if (instance == null) throw new InvalidOperationException("塔预制体加载失败。");
-                instance.SetActive(false);
-                var view = instance.GetComponent<TowerView>();
-                if (view == null) throw new InvalidOperationException("塔预制体缺少 TowerView。");
-                view.Bind(tower);
-                instance.name = tower.Side == BattleSide.Player ? "PlayerTower" : "OpponentTower";
-                instance.transform.SetParent(board.transform, false);
-                instance.transform.localPosition = new Vector3(0f, -board.Size.y * 0.5f - 0.65f, 0f);
-                _towerViews.Add(instance);
-                instance = null;
+                // 场景拥有视图；每局只更换实体绑定，不覆盖作者设置的 Transform。
+                _playerTowerView.Bind(session.PlayerTower);
+                _opponentTowerView.Bind(session.OpponentTower);
             }
-            finally { if (instance != null) Destroy(instance); }
+            catch { ClearTowers(); throw; }
         }
 
         private void OnTowerSettlementRequested(BattleSettlementSnapshot snapshot)
@@ -74,13 +71,13 @@ namespace GameLogic
             var session = _towers;
             _towers = null;
             _pendingTowerSettlement = null;
+            if (_playerTowerView != null) _playerTowerView.Unbind();
+            if (_opponentTowerView != null) _opponentTowerView.Unbind();
             if (session != null)
             {
                 session.SettlementRequested -= OnTowerSettlementRequested;
                 session.Dispose();
             }
-            foreach (var view in _towerViews) if (view != null) Destroy(view);
-            _towerViews.Clear();
         }
 
         private static async UniTask NotifySettlementAfterCleanupAsync(BattleShopContext context, BattleSettlementSnapshot snapshot)

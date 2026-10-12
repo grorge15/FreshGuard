@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using GameConfig;
 using Luban;
 using NUnit.Framework;
@@ -14,6 +15,54 @@ namespace GameLogic.Tests
 {
     public sealed class TowerIntegrationTests
     {
+        [Test]
+        public void SceneTowersKeepAuthoredTransformsAcrossCleanupAndNewBattle()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Tower/Prefabs/Tower.prefab");
+            var root = new GameObject("TowerLayoutTest");
+            var controller = root.AddComponent<BattleShopSceneController>();
+            var player = UnityEngine.Object.Instantiate(prefab, root.transform).GetComponent<TowerView>();
+            var opponent = UnityEngine.Object.Instantiate(prefab, root.transform).GetComponent<TowerView>();
+            player.transform.localPosition = new Vector3(2f, -4f, 0f);
+            opponent.transform.localPosition = new Vector3(-3f, 5f, 0f);
+            player.transform.localScale = new Vector3(1.5f, 2f, 1f);
+            opponent.transform.localScale = new Vector3(0.8f, 1.2f, 1f);
+            player.transform.localRotation = Quaternion.Euler(0f, 0f, 15f);
+            var rotation = player.transform.localRotation;
+            try
+            {
+                SetField(controller, "_playerTowerView", player);
+                SetField(controller, "_opponentTowerView", opponent);
+                var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
+                    Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+                for (var battle = 0; battle < 2; battle++)
+                {
+                    using (var context = new BattleShopContext(ShopRules.FromTables(tables),
+                        new[] { 1001, 1002, 1003 }, new[] { 1001, 1002, 1003 }, tables.TbRobot.Get))
+                    {
+                        SetField(controller, "<Context>k__BackingField", context);
+                        controller.GetType().GetMethod("PrepareTowers", BindingFlags.Instance | BindingFlags.NonPublic)
+                            .Invoke(controller, new object[] { context, tables, CancellationToken.None });
+                        Assert.AreEqual(controller.Towers.PlayerTower.InstanceId, player.InstanceId);
+                        Assert.AreEqual(controller.Towers.OpponentTower.InstanceId, opponent.InstanceId);
+                        Assert.AreEqual(1f, player.HealthFraction);
+                        controller.Towers.ApplyDamage(context.BattleId, BattleSide.Player, 25);
+                        Assert.AreEqual(0.75f, player.HealthFraction);
+                        controller.EndBattle();
+                        Assert.IsTrue(player != null && opponent != null, "场景塔应在结算后保留");
+                        Assert.AreEqual(0, player.InstanceId);
+                        Assert.AreEqual(0, opponent.InstanceId);
+                        Assert.AreEqual(new Vector3(2f, -4f, 0f), player.transform.localPosition);
+                        Assert.AreEqual(new Vector3(-3f, 5f, 0f), opponent.transform.localPosition);
+                        Assert.AreEqual(new Vector3(1.5f, 2f, 1f), player.transform.localScale);
+                        Assert.AreEqual(new Vector3(0.8f, 1.2f, 1f), opponent.transform.localScale);
+                        Assert.AreEqual(rotation, player.transform.localRotation);
+                    }
+                }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
         [TestCase(BattleSide.Player, false)]
         [TestCase(BattleSide.Opponent, false)]
         [TestCase(BattleSide.Player, true)]

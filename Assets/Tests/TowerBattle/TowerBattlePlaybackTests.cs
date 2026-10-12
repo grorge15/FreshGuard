@@ -45,7 +45,7 @@ namespace GameLogic.Tests
             session.SettlementRequested += (Action<BattleSettlementSnapshot>)Delegate.CreateDelegate(
                 typeof(Action<BattleSettlementSnapshot>), controller,
                 controller.GetType().GetMethod("OnTowerSettlementRequested", BindingFlags.Instance | BindingFlags.NonPublic));
-            var ownedViews = (List<GameObject>)controller.GetType().GetField("_towerViews", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(controller);
+            var sceneViews = new List<GameObject>();
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Tower/Prefabs/Tower.prefab");
             foreach (var tower in new[] { session.PlayerTower, session.OpponentTower })
             {
@@ -55,7 +55,8 @@ namespace GameLogic.Tests
                 view.Bind(tower);
                 instance.SetActive(true);
                 Assert.AreEqual(tower.InstanceId, view.InstanceId, "准备时绑定、启用时应保留绑定");
-                ownedViews.Add(instance);
+                SetField(controller, tower.Side == BattleSide.Player ? "_playerTowerView" : "_opponentTowerView", view);
+                sceneViews.Add(instance);
             }
             var notifications = 0;
             Action<BattleSettlementSnapshot> listener = snapshot =>
@@ -75,7 +76,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(DamageResult.Ignored, controller.ApplyTowerDamage(context.BattleId + 1, side, 100));
                 Assert.AreEqual(DamageResult.Damaged, controller.ApplyTowerDamage(context.BattleId, side, 20));
                 var target = side == BattleSide.Player ? session.PlayerTower : session.OpponentTower;
-                var targetView = ownedViews.Find(v => v.GetComponent<TowerView>().InstanceId == target.InstanceId).GetComponent<TowerView>();
+                var targetView = sceneViews.Find(v => v.GetComponent<TowerView>().InstanceId == target.InstanceId).GetComponent<TowerView>();
                 Assert.AreEqual(0.8f, targetView.HealthFraction);
                 if (damageDuringShopNotification)
                 {
@@ -108,9 +109,13 @@ namespace GameLogic.Tests
                 yield return null;
                 Assert.AreEqual(1, notifications);
                 Assert.IsTrue(context.IsEnded);
-                Assert.AreEqual(0, ownedViews.Count);
                 if (root != null)
                 {
+                    foreach (var view in sceneViews)
+                    {
+                        Assert.IsTrue(view != null, "结算不能销毁场景预摆的塔");
+                        Assert.AreEqual(0, view.GetComponent<TowerView>().InstanceId);
+                    }
                     Assert.AreEqual(DamageResult.Ignored, controller.ApplyTowerDamage(context.BattleId, side, 100));
                     controller.EndBattle();
                 }

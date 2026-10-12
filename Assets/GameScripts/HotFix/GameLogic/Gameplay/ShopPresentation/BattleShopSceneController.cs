@@ -16,6 +16,7 @@ namespace GameLogic
         [SerializeField] private PlacementBoardView _playerBoard;
         [SerializeField] private PlacementBoardView _opponentBoard;
         [SerializeField] private PlacementBoardsBootstrap _bootstrap;
+        [SerializeField] private EnemyBattleController _enemies;
         [SerializeField] private int _layoutConfigId = 1;
         [SerializeField] private int[] _playerCandidates = { 1001, 1002, 1003 };
         [SerializeField] private int[] _opponentCandidates = { 1001, 1002, 1003 };
@@ -45,6 +46,7 @@ namespace GameLogic
         public PlacementBoardsBootstrap Bootstrap => _bootstrap;
         public GlassBoardController PlayerGlass => _playerGlass;
         public GlassBoardController OpponentGlass => _opponentGlass;
+        public EnemyBattleController Enemies => _enemies;
 
         private void Start() { InitializeAsync().Forget(); }
 
@@ -104,7 +106,9 @@ namespace GameLogic
                 _opponentGlass = GetGlassController(_opponentBoard);
                 await _playerGlass.PrepareAsync(this, context, _playerBoard, BattleSide.Player, layout, tables, cancellationToken);
                 await _opponentGlass.PrepareAsync(this, context, _opponentBoard, BattleSide.Opponent, layout, tables, cancellationToken);
-                await PrepareTowersAsync(context, cancellationToken);
+                PrepareTowers(context, tables, cancellationToken);
+                if (_enemies == null) throw new InvalidOperationException("缺少 EnemyBattleController 场景引用。");
+                await _enemies.PrepareAsync(this, context, tables, cancellationToken);
                 var window = await GameModule.UI.ShowUIAsyncAwait<BattleShopUI>(context, this)
                     .AttachExternalCancellation(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
@@ -115,7 +119,8 @@ namespace GameLogic
                 _preparationRemaining = 3f;
                 _running = _frozen = false;
                 _ready = true;
-                foreach (var towerView in _towerViews) if (towerView != null) towerView.SetActive(true);
+                _playerTowerView.gameObject.SetActive(true);
+                _opponentTowerView.gameObject.SetActive(true);
             }
             catch (OperationCanceledException)
             {
@@ -163,6 +168,7 @@ namespace GameLogic
             if (!IsReady) return;
             _frozen = frozen;
             _bootstrap.SetFrozen(frozen);
+            _enemies?.SetFrozen(frozen);
         }
 
         public void PressBoardRobot(int instanceId, int pointerId, Vector2 position, float now)
@@ -307,6 +313,7 @@ namespace GameLogic
             if (Context != null && Context.IsEnded) { EndBattle(); return; }
             if (IsReady && !_frozen)
             {
+                var startedThisFrame = false;
                 _rewards?.Advance();
                 if (!IsReady) return;
                 if (!_running)
@@ -320,10 +327,18 @@ namespace GameLogic
                         Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
                         return;
                     }
+                    try { _enemies?.StartFirstWave(); }
+                    catch (Exception e) { Debug.LogException(e, this); return; }
+                    startedThisFrame = true;
                 }
                 Context.Registry.AdvanceTime(Time.deltaTime);
                 _playerGlass?.Advance(Time.deltaTime);
                 _opponentGlass?.Advance(Time.deltaTime);
+                if (!startedThisFrame && IsCombatRunning)
+                {
+                    try { _enemies?.Advance(Time.deltaTime); }
+                    catch (Exception e) { Debug.LogException(e, this); }
+                }
             }
         }
 
@@ -430,6 +445,7 @@ namespace GameLogic
                 GameEvent.RemoveEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
             }
             rewards?.Dispose();
+            _enemies?.Clear();
             ClearTowers();
             _playerGlass?.Clear();
             _opponentGlass?.Clear();
