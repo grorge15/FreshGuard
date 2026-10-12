@@ -177,6 +177,48 @@ public partial class Tables
             m_TbEnemy.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 防御塔配置
+    /// </summary>
+    private tower.TbTower m_TbTower;
+    public tower.TbTower TbTower 
+    {
+        get
+        {
+            if (m_TbTower == null)
+            {
+                m_TbTower = new tower.TbTower(defaultLoader("tower_tbtower"));
+                m_TbTower.ResolveRef(this);
+            }
+            return m_TbTower;
+        }
+        set
+        {
+            m_TbTower = value;
+            m_TbTower.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 波次出兵配置
+    /// </summary>
+    private wave.TbWaveSpawn m_TbWaveSpawn;
+    public wave.TbWaveSpawn TbWaveSpawn 
+    {
+        get
+        {
+            if (m_TbWaveSpawn == null)
+            {
+                m_TbWaveSpawn = new wave.TbWaveSpawn(defaultLoader("wave_tbwavespawn"));
+                m_TbWaveSpawn.ResolveRef(this);
+            }
+            return m_TbWaveSpawn;
+        }
+        set
+        {
+            m_TbWaveSpawn = value;
+            m_TbWaveSpawn.ResolveRef(this);
+        }
+    }
 
     #endregion
 
