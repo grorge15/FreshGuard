@@ -24,7 +24,7 @@ public sealed partial class Robot : Luban.BeanBase
         ShapeId = _buf.ReadInt();
         ShapeId_Ref = null;
         SkillId = _buf.ReadInt();
-        AttackInterval = _buf.ReadFloat();
+        MinTriggerInterval = _buf.ReadFloat();
         AttackDamage = _buf.ReadInt();
         DamagePerLevel = _buf.ReadInt();
         BulletFlightTime = _buf.ReadFloat();
@@ -67,9 +67,9 @@ public sealed partial class Robot : Luban.BeanBase
     /// </summary>
     public readonly int SkillId;
     /// <summary>
-    /// 攻击间隔（秒）
+    /// 最小接触触发间隔（秒）
     /// </summary>
-    public readonly float AttackInterval;
+    public readonly float MinTriggerInterval;
     /// <summary>
     /// 基础攻击伤害
     /// </summary>
@@ -109,7 +109,7 @@ public sealed partial class Robot : Luban.BeanBase
         + "robotIcon:" + RobotIcon + ","
         + "shapeId:" + ShapeId + ","
         + "skillId:" + SkillId + ","
-        + "attackInterval:" + AttackInterval + ","
+        + "minTriggerInterval:" + MinTriggerInterval + ","
         + "attackDamage:" + AttackDamage + ","
         + "damagePerLevel:" + DamagePerLevel + ","
         + "bulletFlightTime:" + BulletFlightTime + ","

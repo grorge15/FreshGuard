@@ -18,6 +18,71 @@ namespace GameLogic.Tests
     public sealed class RobotCombatPlaybackTests
     {
         [UnityTest]
+        public IEnumerator ShopOfferDeployedDuringBerserkUsesTriggersAndDragRestoreKeepsMode()
+        {
+            var host = Object.FindObjectOfType<BattleShopSceneController>();
+            if (host != null && ConfigSystem.Instance.Tables != null)
+            {
+                host.EndBattle();
+                host.SendMessage("Start");
+            }
+            else
+            {
+                EditorSceneManager.LoadSceneInPlayMode("Assets/Scenes/main.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                host = null;
+            }
+            var deadline = Time.realtimeSinceStartup + 60f;
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                host = Object.FindObjectOfType<BattleShopSceneController>();
+                if (host != null && host.IsCombatRunning) break;
+                yield return null;
+            }
+            Assert.IsNotNull(host);
+            Assert.IsTrue(host.IsCombatRunning);
+            try
+            {
+                // 阈值和真实碰撞由 BerserkPlaybackTests 覆盖，这里只准备暴走状态，走实际商品拖拽入口。
+                typeof(PlacementBoardsBootstrap).GetMethod("EnterBerserk", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Invoke(host.Bootstrap, new object[] { host.Bootstrap.PlayerBall });
+                Assert.IsTrue(host.Bootstrap.IsBerserk(BattleSide.Player));
+                host.SetFrozen(true);
+                var slot = host.Context.GetState(BattleSide.Player).Slots.First(s => s.Offer != null);
+                var source = RobotDragSource.Offer(slot.SlotId, slot.Offer.OfferId);
+                GameConfig.robot.Robot config;
+                int level;
+                PlaceableDefinition definition;
+                Assert.AreEqual(ShopOperationResult.Success, host.Context.GetDragContent(BattleSide.Player, source,
+                    out config, out level, out definition));
+                var board = Object.FindObjectsOfType<PlacementBoardView>()
+                    .Single(b => host.Placement.GetBoardSide(b) == BattleSide.Player);
+                BoardCoordinate? anchor = null;
+                for (var row = 0; row < board.Model.Rows && !anchor.HasValue; row++)
+                    for (var column = 0; column < board.Model.Columns && !anchor.HasValue; column++)
+                    {
+                        var candidate = new BoardCoordinate(column, row);
+                        if (board.Model.Evaluate(candidate, definition).IsValid) anchor = candidate;
+                    }
+                Assert.IsTrue(anchor.HasValue);
+                RobotDragSession session;
+                Assert.AreEqual(ShopOperationResult.Success, host.Context.TryBeginDrag(BattleSide.Player, source, out session));
+                yield return host.DeployDragAsync(session, new BoardPlacementTarget(board, anchor.Value), CancellationToken.None)
+                    .ToCoroutine(result => Assert.AreEqual(ShopOperationResult.Success, result));
+                var view = Object.FindObjectsOfType<RobotView>().Single();
+                var colliders = view.GetComponentsInChildren<Collider2D>();
+                Assert.IsTrue(colliders.All(c => c.enabled && c.isTrigger), "新部署机器人启用时必须已是 Trigger。");
+                Assert.AreEqual(ShopOperationResult.Success, host.Context.TryBeginDrag(BattleSide.Player,
+                    RobotDragSource.Owned(view.InstanceId), out session));
+                Assert.IsTrue(colliders.All(c => !c.enabled));
+                host.Context.CancelInteraction(session.InteractionId);
+                Assert.IsTrue(colliders.All(c => c.enabled && c.isTrigger), "取消拖拽恢复时不能重新变为实体障碍。");
+                host.Bootstrap.StopBalls();
+                Assert.IsTrue(colliders.All(c => c.enabled && !c.isTrigger));
+            }
+            finally { host.EndBattle(); }
+        }
+
+        [UnityTest]
         public IEnumerator LaunchSceneDeploysBothSidesFreezesHitsAndRestartsWithoutGhostBullets()
         {
             var host = Object.FindObjectOfType<BattleShopSceneController>();
@@ -45,13 +110,17 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, BulletAssetSpawnCount(), "预检后资源池使用计数必须归零");
             Assert.AreEqual(0, host.Enemies.LiveCount);
             host.SetFrozen(true);
+            // 本测试显式提交接触，停止实体球以保持伤害及资源计数断言确定。
+            host.Bootstrap.StopBalls();
             RobotEntity player = null;
+            var deployed = new List<RobotEntity>();
             foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
             {
                 var offer = host.Context.GetState(side).Slots[0].Offer;
                 RobotEntity robot;
                 Assert.AreEqual(ShopOperationResult.Success, host.Context.TryPurchase(side, 0, offer.OfferId, out robot));
                 if (side == BattleSide.Player) player = robot;
+                deployed.Add(robot);
                 var board = Object.FindObjectsOfType<PlacementBoardView>().Single(b => host.Placement.GetBoardSide(b) == side);
                 BoardCoordinate? anchor = null;
                 for (var row = 0; row < board.Model.Rows && !anchor.HasValue; row++)
@@ -68,14 +137,31 @@ namespace GameLogic.Tests
             }
             host.SetFrozen(false);
             deadline = Time.realtimeSinceStartup + 20f;
+            while (!host.IsCombatRunning && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.IsTrue(host.IsCombatRunning);
+            // host 在准备倒计时结束时会重新发射双方球，必须在战斗启动后再停止。
+            host.Bootstrap.StopBalls();
+            while (BulletAssetSpawnCount() < deployed.Count && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.AreEqual(deployed.Count, BulletAssetSpawnCount(), "双方待发子弹应已准备完成");
+            Assert.Greater(host.Enemies.LiveCount, 0);
+            var noContactUntil = Time.realtimeSinceStartup + 0.25f;
+            while (Time.realtimeSinceStartup < noContactUntil) yield return null;
+            Assert.AreEqual(0, host.Combat.LiveBulletCount, "资源和目标就绪后，超过触发间隔仍不能自动攻击");
+            Assert.IsTrue(deployed.All(robot => robot.TriggerCooldownRemaining == 0f));
+            deadline = Time.realtimeSinceStartup + 20f;
             RobotBulletView[] bullets = null;
+            var contacted = new HashSet<int>();
             while (Time.realtimeSinceStartup < deadline)
             {
+                foreach (var robot in deployed)
+                    if (!contacted.Contains(robot.InstanceId) &&
+                        TryContact(host, robot)) contacted.Add(robot.InstanceId);
                 bullets = Object.FindObjectsOfType<RobotBulletView>();
                 if (bullets.Length >= 2 && bullets.All(b => b.Elapsed > 0.05f)) break;
                 yield return null;
             }
             Assert.IsTrue(host.IsCombatRunning);
+            Assert.AreEqual(2, contacted.Count, "双方机器人必须通过接触入口成功发射");
             Assert.AreEqual(2, bullets.Length);
             Assert.AreEqual(2, bullets.Select(b => b.Side).Distinct().Count());
             Assert.Greater(BulletAssetSpawnCount(), 0, "飞行中的真实子弹应占用对应资源引用");
@@ -123,6 +209,9 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, BulletAssetSpawnCount());
             host.EndBattle();
         }
+
+        private static bool TryContact(BattleShopSceneController host, RobotEntity robot)
+            => host.Combat.TryAttackFromContact(host.Context.BattleId, robot.Side, robot.InstanceId);
 
         private static int BulletResourceReferences()
         {

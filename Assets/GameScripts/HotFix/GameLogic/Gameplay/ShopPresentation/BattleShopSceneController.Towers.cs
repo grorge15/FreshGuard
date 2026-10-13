@@ -24,6 +24,11 @@ namespace GameLogic
             return _towers.ApplyDamage(battleId, targetSide, damage);
         }
 
+        public bool ApplyTowerDamageBatch(long battleId, int playerDamage, int opponentDamage)
+        {
+            return IsCombatRunning && _towers != null && _towers.ApplyDamageBatch(battleId, playerDamage, opponentDamage);
+        }
+
         public bool TryGetTowerTarget(BattleSide side, out int instanceId, out Transform target)
         {
             instanceId = 0;

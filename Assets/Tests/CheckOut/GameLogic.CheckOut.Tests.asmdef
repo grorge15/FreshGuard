@@ -1,0 +1,8 @@
+{
+  "name": "GameLogic.CheckOut.Tests",
+  "rootNamespace": "GameLogic.Tests",
+  "references": ["GameLogic", "GameProto", "TEngine.Runtime", "UniTask"],
+  "includePlatforms": [],
+  "autoReferenced": false,
+  "optionalUnityReferences": ["TestAssemblies"]
+}

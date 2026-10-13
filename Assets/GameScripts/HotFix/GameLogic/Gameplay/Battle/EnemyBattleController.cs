@@ -301,37 +301,48 @@ namespace GameLogic
                 enemy.TrySetRouteProgress(Mathf.Clamp(progress, 0f, lengths[lengths.Length - 1]));
                 if (entry.NextPoint == points.Length) arrivals.Add(id);
             }
-            // 同一时间段的所有位置先推进，再通知抵塔；回调冻结不会让后遍历者少走这段时间。
-            foreach (var id in arrivals)
-            {
-                if (!IsRunning) return;
-                if (!_active.TryGetValue(id, out var entry) || !_context.Registry.TryGet(id, out var entity) ||
-                    !(entity is EnemyEntity enemy) || !enemy.IsAlive) continue;
-                Arrive(id, entry);
-            }
+            // 同一抵塔时刻一次提交双方伤害，不能由敌人实例 ID 的顺序决定胜负。
+            ArriveBatch(arrivals);
         }
 
-        private void Arrive(int id, MoveEntry entry)
+        private void ArriveBatch(List<int> arrivals)
         {
+            if (arrivals.Count == 0 || !IsRunning) return;
             var context = _context;
             var host = _host;
-            var side = entry.Group.Side;
-            if (!context.Registry.Remove(id, EntityRemovalReason.Leaked, out var snapshot)) return;
-            _active.Remove(id);
+            var committed = new List<(MoveEntry entry, EntityRemovalSnapshot snapshot)>();
+            var playerDamage = 0;
+            var opponentDamage = 0;
+            foreach (var id in arrivals)
+            {
+                if (!_active.TryGetValue(id, out var entry) || !context.Registry.TryGet(id, out var entity) ||
+                    !(entity is EnemyEntity enemy) || !enemy.IsAlive) continue;
+                var side = entry.Group.Side;
+                var validTarget = host.TryGetTowerTarget(side, out var targetId, out _) && targetId == entry.Group.TowerId;
+                if (!context.Registry.Remove(id, EntityRemovalReason.Leaked, out var snapshot)) continue;
+                _active.Remove(id);
+                committed.Add((entry, snapshot));
+                if (!validTarget) continue;
+                if (side == BattleSide.Player) playerDamage++;
+                else opponentDamage++;
+            }
             try
             {
-                // 先提交伤害，再通知表现，移除监听方冻结或终局不会吞掉此次抵塔。
-                if (OwnsBattle && host.IsCombatRunning && host.TryGetTowerTarget(side, out var targetId, out _) && targetId == entry.Group.TowerId)
-                    host.ApplyTowerDamage(context.BattleId, side, 1);
+                if (OwnsBattle) host.ApplyTowerDamageBatch(context.BattleId, playerDamage, opponentDamage);
             }
             finally
             {
-                if (entry.View != null)
+                // 已经提交的抵塔表现都必须释放；某个表现回调抛异常也不能遗留其余对象。
+                Exception failure = null;
+                foreach (var arrival in committed)
                 {
-                    var instance = entry.View.gameObject;
-                    try { entry.View.PlayRemoval(snapshot); }
+                    if (arrival.entry.View == null) continue;
+                    var instance = arrival.entry.View.gameObject;
+                    try { arrival.entry.View.PlayRemoval(arrival.snapshot); }
+                    catch (Exception exception) { if (failure == null) failure = exception; }
                     finally { Release(instance); }
                 }
+                if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
             }
         }
 

@@ -161,7 +161,7 @@ namespace GameLogic.Tests
             Assert.IsTrue(f.Host.Towers.IsEnded);
             Assert.IsFalse(f.Host.IsCombatRunning);
             Assert.That(f.Spawned(BattleSide.Player), Is.LessThan(10));
-            Assert.AreEqual(5, f.Host.Towers.OpponentTower.CurrentHp);
+            Assert.AreEqual(4, f.Host.Towers.OpponentTower.CurrentHp, "同一抵塔时刻敌方也受到已提交的1点伤害，后续时刻停止");
         }
 
         [Test]
@@ -199,6 +199,27 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, f.LiveCount);
             Assert.AreEqual(0, f.Spawned(BattleSide.Player));
             f.Prepare(); f.Start(); Assert.AreEqual(2, f.LiveCount);
+        }
+
+        [Test]
+        public void SimultaneousLethalArrivalsCommitBothTowersAndPreferPlayerVictory()
+        {
+            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.63f, 0f, 0f) });
+            var points = (Transform[])f.Controller.GetType().GetField("_opponentRoutePoints", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f.Controller);
+            points[0].position = new Vector3(9.37f, 0f, 0f);
+            f.Prepare();
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Player, 4);
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Opponent, 4);
+            var requests = 0;
+            f.Host.Towers.SettlementRequested += snapshot =>
+            {
+                requests++;
+                Assert.AreEqual(BattleSide.Opponent, snapshot.DefeatedSide);
+            };
+            f.Start(); f.Advance(0.5f);
+            Assert.AreEqual(0, f.Host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(0, f.Host.Towers.OpponentTower.CurrentHp);
+            Assert.AreEqual(1, requests);
         }
 
         [Test]

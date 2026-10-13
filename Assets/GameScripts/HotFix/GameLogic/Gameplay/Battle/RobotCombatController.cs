@@ -19,7 +19,6 @@ namespace GameLogic
         private readonly Dictionary<int, Reserve> _reserves = new Dictionary<int, Reserve>();
         private readonly List<RobotBulletView> _bullets = new List<RobotBulletView>();
         private readonly Func<string, Transform, CancellationToken, UniTask<GameObject>> _load;
-        private readonly Func<RobotEntity, bool> _tryFire;
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
         private readonly Transform _preparedRoot;
         private readonly Transform _flightRoot;
@@ -56,7 +55,6 @@ namespace GameLogic
             _views = views ?? throw new ArgumentNullException(nameof(views));
             _load = load ?? throw new ArgumentNullException(nameof(load));
             _targets = new SharedEnemyTargetSelector(context, enemies);
-            _tryFire = TryFire;
             _preparedRoot = new GameObject("PreparedRobotBullets").transform;
             _preparedRoot.SetParent(host.transform, false);
             _preparedRoot.gameObject.SetActive(false);
@@ -144,8 +142,6 @@ namespace GameLogic
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!IsRunning) return;
             SyncRobots();
-            var player = _targets.GetTarget(BattleSide.Player);
-            var opponent = _targets.GetTarget(BattleSide.Opponent);
             foreach (var pair in _reserves.OrderBy(p => p.Key).ToArray())
             {
                 if (!IsRunning) return;
@@ -153,16 +149,27 @@ namespace GameLogic
                 reserve.RetryRemaining = Mathf.Max(0f, reserve.RetryRemaining - deltaTime);
                 if (!reserve.Loading && reserve.Ready == null && reserve.RetryRemaining <= 0f)
                     PrepareNextAsync(reserve).Forget();
-                var hasTarget = reserve.Robot.Side == BattleSide.Player ? player.HasValue : opponent.HasValue;
-                reserve.Robot.TickCombat(hasTarget && reserve.View != null && reserve.View.isActiveAndEnabled, _tryFire);
             }
+        }
+
+        /// <summary>每次接触只尝试一次；冷却、无目标或资源未就绪时直接丢弃，不排队补发。</summary>
+        public bool TryAttackFromContact(long battleId, BattleSide side, int robotId)
+        {
+            if (!IsRunning || battleId != _context.BattleId ||
+                (side != BattleSide.Player && side != BattleSide.Opponent) ||
+                !_context.Registry.TryGet(robotId, out var entity) || !(entity is RobotEntity robot) ||
+                robot.Side != side || !robot.CanParticipate || robot.TriggerCooldownRemaining > 0f) return false;
+            var fired = TryFire(robot);
+            robot.TickCombat(fired);
+            return fired;
         }
 
         private bool TryFire(RobotEntity robot)
         {
             if (!IsRunning || !robot.CanParticipate || robot.TriggerCooldownRemaining > 0f ||
                 !_reserves.TryGetValue(robot.InstanceId, out var reserve) || reserve.Ready == null ||
-                reserve.View == null || !reserve.View.isActiveAndEnabled ||
+                !ReferenceEquals(reserve.Robot, robot) || reserve.View == null ||
+                reserve.View.InstanceId != robot.InstanceId || !reserve.View.isActiveAndEnabled ||
                 !_context.Registry.TryGet(robot.InstanceId, out var current) || !ReferenceEquals(current, robot)) return false;
             var target = _targets.GetTarget(robot.Side);
             if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out _)) return false;
@@ -170,7 +177,7 @@ namespace GameLogic
             var config = robot.Configuration;
             bullet.Initialize(_host, _context, _enemies, robot.Side, target.Value, robot.GetAttackDamage(),
                 reserve.View.GetAttackOrigin(), config.BulletFlightTime, config.BulletArcHeight, checked(++_sequence));
-            if (!robot.TryConsumeAttackTrigger(config.AttackInterval)) return false;
+            if (!robot.TryConsumeAttackTrigger(config.MinTriggerInterval)) return false;
             var instance = reserve.Ready;
             reserve.Ready = null;
             instance.transform.SetParent(_flightRoot, true);

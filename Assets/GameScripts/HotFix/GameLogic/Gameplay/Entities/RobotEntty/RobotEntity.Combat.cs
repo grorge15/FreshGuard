@@ -21,10 +21,10 @@ namespace GameLogic
             _combatFsm.Start<RobotIdleState>();
         }
 
-        internal void TickCombat(bool hasTarget, Func<RobotEntity, bool> tryFire)
+        internal void TickCombat(bool canAttack)
         {
             if (_combatFsm == null || _combatFsm.IsDestroyed) return;
-            ((RobotCombatState)_combatFsm.CurrentState).Tick(_combatFsm, hasTarget && CanParticipate, tryFire);
+            ((RobotCombatState)_combatFsm.CurrentState).Tick(_combatFsm, canAttack && CanParticipate);
         }
 
         internal void ClearCombat()
@@ -37,11 +37,11 @@ namespace GameLogic
         internal static void ValidateAttackConfig(Robot config, int maxLevel)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
-            EntityValidation.RequireFiniteNonNegative(config.AttackInterval, nameof(config.AttackInterval));
+            EntityValidation.RequireFiniteNonNegative(config.MinTriggerInterval, nameof(config.MinTriggerInterval));
             EntityValidation.RequireFiniteNonNegative(config.BulletFlightTime, nameof(config.BulletFlightTime));
             EntityValidation.RequireFiniteNonNegative(config.BulletArcHeight, nameof(config.BulletArcHeight));
             EntityValidation.RequirePositive(config.AttackDamage, nameof(config.AttackDamage));
-            if (config.AttackInterval <= 0f || config.BulletFlightTime <= 0f || config.DamagePerLevel < 0 ||
+            if (config.MinTriggerInterval <= 0f || config.BulletFlightTime <= 0f || config.DamagePerLevel < 0 ||
                 string.IsNullOrWhiteSpace(config.BulletPrefab)) throw new ArgumentException("机器人攻击配置无效。", nameof(config));
             checked { var maxDamage = config.AttackDamage + (maxLevel - 1) * config.DamagePerLevel; }
         }
@@ -54,26 +54,24 @@ namespace GameLogic
 
         private abstract class RobotCombatState : FsmState<RobotEntity>
         {
-            // 框架 OnUpdate 保持空实现；业务只在场景规定的攻击阶段调用 Tick。
-            public abstract void Tick(IFsm<RobotEntity> fsm, bool canAttack, Func<RobotEntity, bool> tryFire);
+            // 框架 OnUpdate 保持空实现；Tick 只维护状态，发射由接触入口显式完成。
+            public abstract void Tick(IFsm<RobotEntity> fsm, bool canAttack);
         }
 
         private sealed class RobotIdleState : RobotCombatState
         {
-            public override void Tick(IFsm<RobotEntity> fsm, bool canAttack, Func<RobotEntity, bool> tryFire)
+            public override void Tick(IFsm<RobotEntity> fsm, bool canAttack)
             {
                 if (!canAttack) return;
                 ChangeState<RobotAttackState>(fsm);
-                ((RobotCombatState)fsm.CurrentState).Tick(fsm, true, tryFire);
             }
         }
 
         private sealed class RobotAttackState : RobotCombatState
         {
-            public override void Tick(IFsm<RobotEntity> fsm, bool canAttack, Func<RobotEntity, bool> tryFire)
+            public override void Tick(IFsm<RobotEntity> fsm, bool canAttack)
             {
                 if (!canAttack) { ChangeState<RobotIdleState>(fsm); return; }
-                if (fsm.Owner.TriggerCooldownRemaining <= 0f) tryFire?.Invoke(fsm.Owner);
             }
         }
     }

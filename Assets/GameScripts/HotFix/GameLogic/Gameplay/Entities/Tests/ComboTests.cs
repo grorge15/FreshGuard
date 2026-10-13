@@ -245,6 +245,44 @@ namespace GameLogic.Tests
             Assert.IsTrue(_ball.IsLaunched);
         }
 
+        [Test]
+        public void FiftyComboRequestsBerserkOnceAndKeepsMainDirection()
+        {
+            Bind();
+            var direction = _ball.CurrentDirection;
+            var requests = 0;
+            var threshold = typeof(PhysicalCollisionBall).GetEvent("ComboThresholdReached");
+            Assert.IsNotNull(threshold, "50 Combo需要通知暴走装配入口。");
+            Action<PhysicalCollisionBall> enter = ball => { requests++; ball.SetBerserk(true); };
+            threshold.AddEventHandler(_ball, enter);
+            for (var i = 0; i < 50; i++) Hit(Robot());
+            Assert.AreEqual(1, requests);
+            Assert.AreEqual(0, Count);
+            Assert.AreEqual(direction, _ball.CurrentDirection);
+            for (var i = 0; i < 5; i++) Hit(Robot());
+            Assert.AreEqual(1, requests);
+            Assert.AreEqual(0, Count);
+        }
+
+        [Test]
+        public void TemporaryBallReportsOneRobotContactWithoutComboBinding()
+        {
+            var bind = typeof(PhysicalCollisionBall).GetMethod("BindRobotContacts");
+            Assert.IsNotNull(bind, "临时球不能依赖Combo装配才能触发机器人攻击。");
+            bind.Invoke(_ball, new object[] { _registry });
+            var contactEvent = typeof(PhysicalCollisionBall).GetEvent("RobotContactDetected");
+            Assert.IsNotNull(contactEvent);
+            var requests = 0;
+            Action<PhysicalCollisionBall, int> attack = (ball, id) => requests++;
+            contactEvent.AddEventHandler(_ball, attack);
+            _ball.SetBerserk(true);
+            _ball.LaunchAt(Vector2.zero, 90f);
+            var view = Robot();
+            Hit(view); Hit(view);
+            Assert.AreEqual(1, requests);
+            Assert.AreEqual(0, Count);
+        }
+
         private int Count
         {
             get { var property = typeof(PhysicalCollisionBall).GetProperty("ComboCount"); Assert.IsNotNull(property, "ComboCount尚未实现"); return (int)property.GetValue(_ball); }

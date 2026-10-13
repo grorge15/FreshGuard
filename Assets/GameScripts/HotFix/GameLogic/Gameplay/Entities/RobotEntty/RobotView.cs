@@ -18,6 +18,7 @@ namespace GameLogic
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
         private bool _mergeCandidate;
+        private bool _berserkTrigger;
         private float _feedbackUntil;
         public int MergeFeedbackCount { get; private set; }
 
@@ -53,7 +54,11 @@ namespace GameLogic
                 if (label != null) _levelLabel = label.GetComponent<TextMesh>();
             }
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
-            foreach (var collider in _colliders) collider.enabled = visible;
+            foreach (var collider in _colliders)
+            {
+                collider.isTrigger = _berserkTrigger;
+                collider.enabled = visible;
+            }
             foreach (var cell in _cells)
             {
                 cell.enabled = visible;
@@ -66,6 +71,13 @@ namespace GameLogic
                 _levelLabel.text = "Lv" + robot.Level;
                 _levelLabel.gameObject.SetActive(visible);
             }
+        }
+
+        public void SetBerserkTrigger(bool enabled)
+        {
+            _berserkTrigger = enabled;
+            if (_colliders == null) _colliders = GetComponentsInChildren<Collider2D>(true);
+            foreach (var collider in _colliders) if (collider != null) collider.isTrigger = enabled;
         }
 
         public void SetMergeCandidate(bool candidate) { _mergeCandidate = candidate; if (_robot != null) Render(_robot); }

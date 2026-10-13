@@ -99,6 +99,7 @@ namespace GameLogic
                 preparation.SetActive(false);
                 _preparedRoot = preparation.transform;
                 Context = new BattleShopContext(_rules, _playerCandidates, _opponentCandidates, tables.TbRobot.Get);
+                BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
                 _rewards = new BattleRewardAdapter(Context);
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
                 GameEvent.AddEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
@@ -109,6 +110,8 @@ namespace GameLogic
                 _comboPopupRoot = popupRoot.transform;
                 _bootstrap.BindBattle(context.BattleId, () => IsCombatRunning && Context == context,
                     context.Registry, _comboPopupRoot);
+                _bootstrap.RobotContactDetected += OnRobotContact;
+                _bootstrap.BerserkChanged += OnBerserkChanged;
                 _playerGlass = GetGlassController(_playerBoard);
                 _opponentGlass = GetGlassController(_opponentBoard);
                 await _playerGlass.PrepareAsync(this, context, _playerBoard, BattleSide.Player, layout, tables, cancellationToken);
@@ -198,6 +201,38 @@ namespace GameLogic
             if (_bootstrap != null && _bootstrap.PlayerBall != null) _bootstrap.PlayerBall.SetDragging(dragging);
         }
 
+        private void OnRobotContact(PhysicalCollisionBall ball, int robotId)
+        {
+            if (IsCombatRunning && ball != null && Context != null && ball.BattleId == Context.BattleId)
+                _combat?.TryAttackFromContact(ball.BattleId, ball.Side, robotId);
+        }
+
+        private void OnBerserkChanged(BattleSide side, bool active)
+        {
+            var views = new List<RobotView>();
+            foreach (var instance in _views.Values)
+            {
+                if (instance == null) continue;
+                var view = instance.GetComponent<RobotView>();
+                if (view != null && Context != null && Context.Registry.TryGet(view.InstanceId, out var entity) && entity.Side == side)
+                    views.Add(view);
+            }
+            if (!active)
+            {
+                var main = side == BattleSide.Player ? _bootstrap.PlayerBall : _bootstrap.OpponentBall;
+                if (main != null) main.ProtectOverlappingRobots(views);
+            }
+            foreach (var view in views) view.SetBerserkTrigger(active);
+        }
+
+        private void SyncRobotCollisionMode(RobotView view, BattleSide side)
+        {
+            if (view == null || _bootstrap == null) return;
+            view.SetBerserkTrigger(_bootstrap.IsBerserk(side));
+            var main = side == BattleSide.Player ? _bootstrap.PlayerBall : _bootstrap.OpponentBall;
+            if (main != null) main.RefreshProtectedRobot(view);
+        }
+
         public void UpdateMergeCandidates(RobotDragSource source)
         {
             if (Context == null) return;
@@ -252,6 +287,8 @@ namespace GameLogic
                 if (this == null || Context != context || context.IsEnded || robot.IsRemoved) return ShopOperationResult.Success;
                 var instance = existing != null ? existing : prepared;
                 var view = instance.GetComponent<RobotView>();
+                // Bind 会 Render 并启用格子碰撞体，先同步阵营模式，再恢复已有重叠保护。
+                SyncRobotCollisionMode(view, robot.Side);
                 view.Bind(context.Registry, robot.InstanceId);
                 view.BindInput(this);
                 instance.transform.SetParent(target.EntityParent, false);
@@ -261,6 +298,7 @@ namespace GameLogic
                 _views[robot.InstanceId] = instance;
                 instance.SetActive(true);
                 view.Render(robot);
+                SyncRobotCollisionMode(view, robot.Side);
                 _combat?.SyncRobots();
                 prepared = null;
                 target.Board.RefreshAllCells();
@@ -292,6 +330,7 @@ namespace GameLogic
                 var view = prepared.GetComponent<RobotView>();
                 if (view == null) return ShopOperationResult.ResourceFailed;
                 view.Bind(context.Registry, instanceId);
+                SyncRobotCollisionMode(view, robot.Side);
                 view.BindInput(this);
                 var result = context.TryDeploy(robot.Side, instanceId, _placement.GetBoardSide(target.Board),
                     target.Board.Model, target.Anchor);
@@ -308,6 +347,7 @@ namespace GameLogic
                 prepared.transform.localScale = Vector3.one;
                 _views.Add(instanceId, prepared);
                 prepared.SetActive(true);
+                SyncRobotCollisionMode(view, robot.Side);
                 _combat?.SyncRobots();
                 prepared = null;
                 target.Board.RefreshOccupied(target.Board.Model.Evaluate(target.Anchor, robot.Definition).Cells);
@@ -343,6 +383,8 @@ namespace GameLogic
                     startedThisFrame = true;
                 }
                 Context.Registry.AdvanceTime(Time.deltaTime);
+                _bootstrap.AdvanceBerserk(Time.deltaTime);
+                if (!IsCombatRunning) return;
                 _playerGlass?.Advance(Time.deltaTime);
                 _opponentGlass?.Advance(Time.deltaTime);
                 if (!startedThisFrame && IsCombatRunning)
@@ -380,7 +422,10 @@ namespace GameLogic
                             instance.transform.SetParent(board.transform, false);
                             instance.transform.position = board.GetCellWorldPosition(robot.Anchor.Value);
                         }
-                        instance.GetComponent<RobotView>()?.Render(robot);
+                        var view = instance.GetComponent<RobotView>();
+                        SyncRobotCollisionMode(view, robot.Side);
+                        view?.Render(robot);
+                        SyncRobotCollisionMode(view, robot.Side);
                     }
                     continue;
                 }
@@ -445,7 +490,12 @@ namespace GameLogic
             ShopWindow = null;
             _ready = _running = _frozen = false;
             _preparationRemaining = 0f;
-            if (_bootstrap != null) _bootstrap.StopBalls();
+            if (_bootstrap != null)
+            {
+                _bootstrap.UnbindBattle();
+                _bootstrap.RobotContactDetected -= OnRobotContact;
+                _bootstrap.BerserkChanged -= OnBerserkChanged;
+            }
             var popupRoot = _comboPopupRoot;
             _comboPopupRoot = null;
             if (popupRoot != null) Destroy(popupRoot.gameObject);

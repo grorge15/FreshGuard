@@ -13,6 +13,12 @@ namespace GameLogic.Tests
         [TearDown] public void TearDown() { _fixture.Dispose(); }
 
         [Test]
+        public void GeneratedGlobal41ContainsSixSecondRageDuration()
+        {
+            Assert.AreEqual(6f, _fixture.Tables.TbGlobal.Get(41).Value);
+        }
+
+        [Test]
         public void SharedTargetLocksUntilInvalidAndNeverCrossesBattleSides()
         {
             var f = _fixture;
@@ -96,31 +102,26 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void EachRobotHasItsOwnFsmAndOnlyExplicitCombatTicksFire()
+        public void EachRobotKeepsItsOwnFsmAndCombatTicksNeverFire()
         {
             var registry = _fixture.Context.Registry;
             var robots = new[] { registry.CreateRobot(101, BattleSide.Player, 1, 1),
                 registry.CreateRobot(101, BattleSide.Player, 1, 1) };
-            var fired = 0;
-            Func<RobotEntity, bool> fire = robot =>
-            {
-                if (!robot.TryConsumeAttackTrigger(1f)) return false;
-                fired++; return true;
-            };
             foreach (var robot in robots)
             {
                 robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
                 Call(robot, "InitializeCombat", _fixture.Context.BattleId);
-                Call(robot, "TickCombat", true, fire);
-                Call(robot, "TickCombat", true, fire);
+                Call(robot, "TickCombat", true);
+                Assert.AreEqual("Attack", robot.CombatState);
+                Assert.AreEqual(0f, robot.TriggerCooldownRemaining, "FSM 更新不能消费攻击触发");
             }
-            Assert.AreEqual(2, fired, "同类型实例应独立攻击，冷却阻止重复触发");
             TEngine.ModuleSystem.Update(10f, 10f);
-            Assert.AreEqual(2, fired, "框架自动更新不能绕过固定战斗顺序发射");
             registry.AdvanceTime(1f);
             robots[0].TrySetDragging(true);
-            foreach (var robot in robots) Call(robot, "TickCombat", true, fire);
-            Assert.AreEqual(3, fired, "拖拽只停止自己的新攻击");
+            foreach (var robot in robots) Call(robot, "TickCombat", true);
+            Assert.AreEqual("Idle", robots[0].CombatState);
+            Assert.AreEqual("Attack", robots[1].CombatState, "同类型实例的 FSM 应互相独立");
+            Assert.IsTrue(robots.All(robot => robot.TriggerCooldownRemaining == 0f));
         }
 
         [Test]

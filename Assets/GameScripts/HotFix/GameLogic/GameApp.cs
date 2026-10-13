@@ -37,6 +37,7 @@ public partial class GameApp
     {
         // Initialize while the launch scene's UIRoot still exists; it persists into Main.
         var ui = GameModule.UI;
+        BattleSettlementPresenter.Instance.Active();
         // GameEvent.Get<ILoginUI>().ShowLoginUI();
         //GameModule.UI.ShowUIAsync<BattleMainUI>();
         GameModule.Scene.LoadSceneAsync("Main");
