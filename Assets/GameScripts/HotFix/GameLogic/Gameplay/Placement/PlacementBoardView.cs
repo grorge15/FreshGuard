@@ -18,11 +18,11 @@ namespace GameLogic
         private Sprite _slotSprite;
         [SerializeField] private PhysicalCollisionBoundary _boundary;
         private SpriteRenderer[,] _slots;
+        private Color[,] _slotBaseColors;
         private BoardModel _model;
         private bool _initialized;
         private readonly Dictionary<BoardCoordinate, BoardSlotState> _previewStates = new Dictionary<BoardCoordinate, BoardSlotState>();
 
-        private static readonly Color NormalColor = new Color(0.11f, 0.15f, 0.20f, 0.94f);
         private static readonly Color OccupiedColor = new Color(0.30f, 0.45f, 0.65f, 0.98f);
         private static readonly Color ValidColor = new Color(0.20f, 0.80f, 0.35f, 0.98f);
         private static readonly Color InvalidColor = new Color(0.85f, 0.22f, 0.22f, 0.98f);
@@ -84,6 +84,8 @@ namespace GameLogic
                 // The outer ring stays visible and addressable, but cannot hold robots.
                 _model = new BoardModel(_columns, _rows, null, reservedBorderWidth: 1);
                 _slots = new SpriteRenderer[_columns, _rows];
+                var previousBaseColors = _slotBaseColors;
+                _slotBaseColors = new Color[_columns, _rows];
                 for (var column = 0; column < _columns; column++)
                 {
                     for (var row = 0; row < _rows; row++)
@@ -102,7 +104,10 @@ namespace GameLogic
                         slot.transform.localScale = new Vector3(_cellSize * 0.94f / slotSize.x, _cellSize * 0.94f / slotSize.y, 1f);
                         slot.sortingLayerName = "Default";
                         slot.sortingOrder = -10;
-                        slot.color = NormalColor;
+                        // Keep the prefab/scene tint; state effects restore this original color.
+                        _slotBaseColors[column, row] = existing != null && previousBaseColors != null &&
+                            column < previousBaseColors.GetLength(0) && row < previousBaseColors.GetLength(1)
+                            ? previousBaseColors[column, row] : slot.color;
                         slot.gameObject.SetActive(true);
                         _slots[column, row] = slot;
                     }
@@ -214,7 +219,7 @@ namespace GameLogic
         {
             if (!_initialized || !_model.IsInside(coordinate)) return;
             _slots[coordinate.Column, coordinate.Row].color = _model.IsHighlighted(coordinate) ? HighlightedColor :
-                _model.IsOccupied(coordinate) ? OccupiedColor : NormalColor;
+                _model.IsOccupied(coordinate) ? OccupiedColor : _slotBaseColors[coordinate.Column, coordinate.Row];
         }
 
         private void OnDisable() { ClearPreview(); }
