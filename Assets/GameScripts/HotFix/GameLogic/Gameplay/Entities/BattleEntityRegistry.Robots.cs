@@ -36,6 +36,15 @@ namespace GameLogic
                 case PulseRobotEntity.CONFIG_ID:
                     robot = new PulseRobotEntity(_nextInstanceId, config, side, level, maxLevel);
                     break;
+                case SingleCellRobotEntity.CONFIG_ID:
+                    robot = new SingleCellRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    break;
+                case VerticalRobotEntity.CONFIG_ID:
+                    robot = new VerticalRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    break;
+                case SmallCornerRobotEntity.CONFIG_ID:
+                    robot = new SmallCornerRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    break;
                 default:
                     throw new ArgumentException("未注册对应机器人实体类型：" + config.Id, nameof(config));
             }

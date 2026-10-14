@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using GameConfig;
+using Luban;
 using UnityEditor;
 using UnityEngine;
 
@@ -12,14 +15,16 @@ namespace FreshGuard.Editor
         {
             if (Application.isPlaying || EditorApplication.isCompiling)
                 throw new InvalidOperationException("请退出运行模式并等待编译完成。");
-            foreach (var name in new[] { "RobotI", "RobotL", "RobotT" })
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
+                Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            foreach (var config in tables.TbRobot.DataList)
             {
-                var path = "Assets/AssetRaw/Actor/Robots/Prefabs/" + name + ".prefab";
+                var path = "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab";
                 var root = PrefabUtility.LoadPrefabContents(path);
                 try
                 {
                     var cells = root.GetComponentsInChildren<SpriteRenderer>(true);
-                    if (cells.Length != 4 || root.GetComponent<GameLogic.RobotView>() == null)
+                    if (cells.Length != config.ShapeId_Ref.CellOffsets.Length || root.GetComponent<GameLogic.RobotView>() == null)
                         throw new InvalidOperationException("机器人实体格或视图组件不完整：" + path);
                     foreach (var cell in cells)
                     {
@@ -41,7 +46,7 @@ namespace FreshGuard.Editor
                 finally { PrefabUtility.UnloadPrefabContents(root); }
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("[Robot Collision] I/L/T 已装配逐格静态碰撞体；重复执行不增加组件。");
+            Debug.Log("[Robot Collision] 配置中的机器人已装配逐格静态碰撞体；重复执行不增加组件。");
         }
     }
 }
