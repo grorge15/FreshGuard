@@ -219,6 +219,48 @@ public partial class Tables
             m_TbWaveSpawn.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 道具基础表
+    /// </summary>
+    private item.TbItemBase m_TbItemBase;
+    public item.TbItemBase TbItemBase 
+    {
+        get
+        {
+            if (m_TbItemBase == null)
+            {
+                m_TbItemBase = new item.TbItemBase(defaultLoader("item_tbitembase"));
+                m_TbItemBase.ResolveRef(this);
+            }
+            return m_TbItemBase;
+        }
+        set
+        {
+            m_TbItemBase = value;
+            m_TbItemBase.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 结算奖励表
+    /// </summary>
+    private settlement.TbResultAward m_TbResultAward;
+    public settlement.TbResultAward TbResultAward 
+    {
+        get
+        {
+            if (m_TbResultAward == null)
+            {
+                m_TbResultAward = new settlement.TbResultAward(defaultLoader("settlement_tbresultaward"));
+                m_TbResultAward.ResolveRef(this);
+            }
+            return m_TbResultAward;
+        }
+        set
+        {
+            m_TbResultAward = value;
+            m_TbResultAward.ResolveRef(this);
+        }
+    }
 
     #endregion
 
