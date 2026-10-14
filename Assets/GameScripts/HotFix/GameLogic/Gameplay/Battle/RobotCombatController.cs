@@ -16,6 +16,7 @@ namespace GameLogic
         private readonly EnemyBattleController _enemies;
         private readonly IDictionary<int, GameObject> _views;
         private readonly SharedEnemyTargetSelector _targets;
+        private readonly ICombatResolutionPort _resolution;
         private readonly Dictionary<int, Reserve> _reserves = new Dictionary<int, Reserve>();
         private readonly List<RobotBulletView> _bullets = new List<RobotBulletView>();
         private readonly Func<string, Transform, CancellationToken, UniTask<GameObject>> _load;
@@ -24,7 +25,6 @@ namespace GameLogic
         private readonly Transform _flightRoot;
         private bool _prepared;
         private bool _disposed;
-        private long _sequence;
 
         private sealed class Reserve
         {
@@ -55,6 +55,7 @@ namespace GameLogic
             _views = views ?? throw new ArgumentNullException(nameof(views));
             _load = load ?? throw new ArgumentNullException(nameof(load));
             _targets = new SharedEnemyTargetSelector(context, enemies);
+            _resolution = new EnemyCombatResolutionPort(context, enemies);
             _preparedRoot = new GameObject("PreparedRobotBullets").transform;
             _preparedRoot.SetParent(host.transform, false);
             _preparedRoot.gameObject.SetActive(false);
@@ -172,11 +173,14 @@ namespace GameLogic
                 reserve.View.InstanceId != robot.InstanceId || !reserve.View.isActiveAndEnabled ||
                 !_context.Registry.TryGet(robot.InstanceId, out var current) || !ReferenceEquals(current, robot)) return false;
             var target = _targets.GetTarget(robot.Side);
-            if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out _)) return false;
+            if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out var aimPoint)) return false;
             var bullet = reserve.Ready.GetComponent<RobotBulletView>();
             var config = robot.Configuration;
-            bullet.Initialize(_host, _context, _enemies, robot.Side, target.Value, robot.GetAttackDamage(),
-                reserve.View.GetAttackOrigin(), config.BulletFlightTime, config.BulletArcHeight, checked(++_sequence));
+            var action = _context.Combat.CaptureAttack(new CombatActionSnapshot(_context.BattleId,
+                robot.InstanceId, robot.Side, robot.SkillId, new[] { target.Value }, CombatOutcomeTag.SingleDamage,
+                robot.GetAttackDamage(), reserve.View.GetAttackOrigin(), aimPoint, sequence: 1));
+            bullet.Initialize(_host, _context, _enemies, action, _resolution,
+                config.BulletFlightTime, config.BulletArcHeight);
             if (!robot.TryConsumeAttackTrigger(config.MinTriggerInterval)) return false;
             var instance = reserve.Ready;
             reserve.Ready = null;

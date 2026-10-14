@@ -190,8 +190,14 @@ namespace GameLogic.Tests
             Assert.IsNotNull(type, "缺少独立子弹飞行与命中链路");
             var go = new GameObject("TestBullet"); go.transform.SetParent(_fixture.Root.transform);
             var bullet = go.AddComponent(type);
-            Call(bullet, "Initialize", _fixture.Host, _fixture.Context, _fixture.Controller, BattleSide.Player,
-                targetId, damage, start, 0.6f, 1f, 1L);
+            var enemies = (EnemyBattleController)_fixture.Controller;
+            Assert.IsTrue(enemies.TryGetTargetPosition(BattleSide.Player, targetId, out var aimPoint));
+            var robot = _fixture.Context.Registry.CreateRobot(101, BattleSide.Player, 1, 1);
+            var action = _fixture.Context.Combat.CaptureAttack(new CombatActionSnapshot(_fixture.Context.BattleId,
+                robot.InstanceId, robot.Side, robot.SkillId, new[] { targetId }, CombatOutcomeTag.SingleDamage,
+                damage, start, aimPoint, sequence: 1));
+            Call(bullet, "Initialize", _fixture.Host, _fixture.Context, _fixture.Controller, action,
+                new EnemyCombatResolutionPort(_fixture.Context, enemies), 0.6f, 1f);
             return bullet;
         }
 

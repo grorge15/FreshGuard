@@ -10,6 +10,28 @@ namespace GameLogic.Tests
 {
     public class ShopConfigTests
     {
+        [TestCase(1004, BattleSide.Player)]
+        [TestCase(1005, BattleSide.Player)]
+        [TestCase(1006, BattleSide.Player)]
+        [TestCase(1004, BattleSide.Opponent)]
+        [TestCase(1005, BattleSide.Opponent)]
+        [TestCase(1006, BattleSide.Opponent)]
+        public void SixCandidateShopCanOfferAndPurchaseEachNewRobot(int id, BattleSide side)
+        {
+            var tables = RealTables();
+            var rules = ShopRules.FromTables(tables);
+            var candidates = new[] { 1001, 1002, 1003, 1004, 1005, 1006 };
+            var random = new ShopSequenceRandom { DefaultValue = (id - 1001 + 0.5) / 6d };
+            using (var context = new BattleShopContext(rules, candidates, candidates, tables.TbRobot.Get, random))
+            {
+                Assert.AreEqual(id, context.GetState(side).Slots[0].Offer.RobotId);
+                var robot = ShopTestData.Purchase(context, 0, side);
+                Assert.AreEqual(id, robot.ConfigId);
+                Assert.AreEqual(tables.TbRobot.Get(id).ShapeId_Ref.CellOffsets.Length, robot.Definition.Cells.Count);
+                Assert.AreEqual(side, robot.Side);
+            }
+        }
+
         private static Tables RealTables()
         {
             return new Tables(name => new ByteBuf(File.ReadAllBytes(
@@ -138,7 +160,7 @@ namespace GameLogic.Tests
 
         [TestCase(new[] { 1, 1, 2 })]
         [TestCase(new[] { 1, -1 })]
-        [TestCase(new[] { 4, 1 })]
+        [TestCase(new[] { 0, 1 })]
         [TestCase(new[] { 1, 1, 1, 2 })]
         [TestCase(new[] { 1, 0, 2, 0, 3, 0 })]
         public void MalformedDropPackageRejectsRules(int[] package)

@@ -18,8 +18,8 @@ namespace GameLogic
         [SerializeField] private PlacementBoardsBootstrap _bootstrap;
         [SerializeField] private EnemyBattleController _enemies;
         [SerializeField] private int _layoutConfigId = 1;
-        [SerializeField] private int[] _playerCandidates = { 1001, 1002, 1003 };
-        [SerializeField] private int[] _opponentCandidates = { 1001, 1002, 1003 };
+        [SerializeField] private int[] _playerCandidates = { 1001, 1002, 1003, 1004, 1005, 1006 };
+        [SerializeField] private int[] _opponentCandidates = { 1001, 1002, 1003, 1004, 1005, 1006 };
         private readonly Dictionary<int, GameObject> _views = new Dictionary<int, GameObject>();
         private Transform _preparedRoot;
         private Transform _comboPopupRoot;
@@ -131,6 +131,7 @@ namespace GameLogic
                 _preparationRemaining = 3f;
                 _running = _frozen = false;
                 _ready = true;
+                InitializeOpponentAi();
                 _playerTowerView.gameObject.SetActive(true);
                 _opponentTowerView.gameObject.SetActive(true);
             }
@@ -286,27 +287,33 @@ namespace GameLogic
                 // 同步通知可以终局；已提交结果仍为成功，不激活已清理对局的视图。
                 if (this == null || Context != context || context.IsEnded || robot.IsRemoved) return ShopOperationResult.Success;
                 var instance = existing != null ? existing : prepared;
-                var view = instance.GetComponent<RobotView>();
-                // Bind 会 Render 并启用格子碰撞体，先同步阵营模式，再恢复已有重叠保护。
-                SyncRobotCollisionMode(view, robot.Side);
-                view.Bind(context.Registry, robot.InstanceId);
-                view.BindInput(this);
-                instance.transform.SetParent(target.EntityParent, false);
-                instance.transform.position = target.AnchorWorldPosition;
-                instance.transform.localRotation = Quaternion.identity;
-                instance.transform.localScale = Vector3.one;
-                _views[robot.InstanceId] = instance;
-                instance.SetActive(true);
-                view.Render(robot);
-                SyncRobotCollisionMode(view, robot.Side);
-                _combat?.SyncRobots();
+                BindDeployedRobotView(context, robot, instance, target);
                 prepared = null;
-                target.Board.RefreshAllCells();
                 return ShopOperationResult.Success;
             }
             catch (OperationCanceledException) { return ShopOperationResult.ResourceFailed; }
             catch (Exception e) { Debug.LogException(e, this); return ShopOperationResult.ResourceFailed; }
             finally { if (prepared != null) Destroy(prepared); }
+        }
+
+        private void BindDeployedRobotView(BattleShopContext context, RobotEntity robot, GameObject instance,
+            BoardPlacementTarget target)
+        {
+            var view = instance.GetComponent<RobotView>();
+            // Bind 会启用碰撞体；双方同步同一套碰撞、视图和战斗注册流程。
+            SyncRobotCollisionMode(view, robot.Side);
+            view.Bind(context.Registry, robot.InstanceId);
+            view.BindInput(this);
+            instance.transform.SetParent(target.EntityParent, false);
+            instance.transform.position = target.AnchorWorldPosition;
+            instance.transform.localRotation = Quaternion.identity;
+            instance.transform.localScale = Vector3.one;
+            _views[robot.InstanceId] = instance;
+            instance.SetActive(true);
+            view.Render(robot);
+            SyncRobotCollisionMode(view, robot.Side);
+            _combat?.SyncRobots();
+            target.Board.RefreshAllCells();
         }
 
         public async UniTask<ShopOperationResult> DeployRobotAsync(int instanceId, BoardPlacementTarget target,
@@ -367,6 +374,8 @@ namespace GameLogic
                 var startedThisFrame = false;
                 _rewards?.Advance();
                 if (!IsReady) return;
+                AdvanceOpponentAi(Time.deltaTime);
+                if (!IsReady) return;
                 if (!_running)
                 {
                     _preparationRemaining = Mathf.Max(0f, _preparationRemaining - Time.deltaTime);
@@ -382,7 +391,19 @@ namespace GameLogic
                     catch (Exception e) { Debug.LogException(e, this); return; }
                     startedThisFrame = true;
                 }
-                Context.Registry.AdvanceTime(Time.deltaTime);
+                var frameContext = Context;
+                try
+                {
+                    frameContext.Registry.AdvanceTime(Time.deltaTime);
+                    frameContext.Combat.AdvanceTime(Time.deltaTime);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e, this);
+                    if (Context == frameContext) EndBattle();
+                    return;
+                }
+                if (Context != frameContext || !IsCombatRunning) return;
                 _bootstrap.AdvanceBerserk(Time.deltaTime);
                 if (!IsCombatRunning) return;
                 _playerGlass?.Advance(Time.deltaTime);
@@ -406,6 +427,7 @@ namespace GameLogic
 
         private void OnShopChanged(int side)
         {
+            _opponentAi?.MarkDirty();
             if (Context == null) return;
             if (Context.IsEnded) { EndBattle(); return; }
             foreach (var id in new List<int>(_views.Keys))
@@ -487,6 +509,7 @@ namespace GameLogic
 
         private void Cleanup()
         {
+            DisposeOpponentAi();
             ShopWindow = null;
             _ready = _running = _frozen = false;
             _preparationRemaining = 0f;

@@ -23,6 +23,82 @@ namespace GameLogic.Tests
         [TearDown] public void TearDown() { _combat?.Dispose(); _f.Dispose(); }
 
         [Test]
+        public void ModifierAcquiredDuringFlightOnlyChangesTheNextBullet()
+        {
+            Prepare(); var robot = AddRobot();
+            var target = _f.PlayerView.InstanceId;
+            Assert.IsTrue(Contact(robot));
+            _f.Context.Combat.AddModifier(BattleSide.Player,
+                new PercentCombatModifier(CombatOutcomeTag.SingleDamage, CombatModifierGroup.GlobalDamage, 0.5f));
+            _combat.AdvanceExistingBullets(0.6f);
+            _f.Context.Registry.TryGet(target, out var entity);
+            Assert.AreEqual(80, ((EnemyEntity)entity).CurrentHp);
+            _f.Context.Registry.AdvanceTime(0.2f);
+            Assert.IsTrue(Contact(robot));
+            var bullet = _f.Root.GetComponentInChildren<RobotBulletView>();
+            Assert.AreEqual(robot.InstanceId, bullet.Action.SourceInstanceId);
+            Assert.AreEqual(robot.SkillId, bullet.Action.SkillId);
+            Assert.AreEqual(30, bullet.Damage);
+            _combat.AdvanceExistingBullets(0.6f);
+            Assert.AreEqual(50, ((EnemyEntity)entity).CurrentHp);
+        }
+
+        [Test]
+        public void LethalModifiedShotUsesRegistryAndCancelsOtherShotsToRemovedTarget()
+        {
+            Prepare(); var robot = AddRobot(); var second = AddRobot();
+            var target = _f.PlayerView.InstanceId;
+            _f.Context.Combat.AddModifier(BattleSide.Player,
+                new PercentCombatModifier(CombatOutcomeTag.SingleDamage, CombatModifierGroup.GlobalDamage, 9f));
+            Assert.IsTrue(Contact(robot)); Assert.IsTrue(Contact(second));
+            _combat.AdvanceExistingBullets(0.6f);
+            Assert.IsFalse(_f.Context.Registry.TryGet(target, out _));
+            Assert.IsFalse(((EnemyBattleController)_f.Controller).TryGetTargetPosition(BattleSide.Player, target, out _));
+            Assert.AreEqual(0, _combat.LiveBulletCount);
+        }
+
+        [Test]
+        public void FrozenBattleKeepsBulletAndCombatTimeStillAndEndClearsRuntime()
+        {
+            Prepare(); var robot = AddRobot(); Assert.IsTrue(Contact(robot));
+            _f.Context.Combat.AddModifier(BattleSide.Player,
+                new PercentCombatModifier(CombatOutcomeTag.SingleDamage, CombatModifierGroup.GlobalDamage, 0.5f));
+            _f.Host.SetFrozen(true);
+            var time = _f.Context.Combat.BattleTime;
+            typeof(BattleShopSceneController).GetMethod("Update",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(_f.Host, null);
+            _combat.AdvanceExistingBullets(2f);
+            Assert.AreEqual(time, _f.Context.Combat.BattleTime);
+            Assert.AreEqual(0f, _f.Root.GetComponentInChildren<RobotBulletView>().Elapsed);
+            _f.Context.EndBattle();
+            Assert.IsTrue(_f.Context.Combat.IsDisposed);
+            Assert.AreEqual(0, _f.Context.Combat.GetModifierCount(BattleSide.Player));
+        }
+
+        [Test]
+        public void ModifierTickFailureEndsBattleAndClearsRuntime()
+        {
+            Prepare(); var robot = AddRobot(); Assert.IsTrue(Contact(robot));
+            var context = _f.Context;
+            context.Combat.AddModifier(BattleSide.Player, new ThrowingTickModifier());
+            LogAssert.Expect(LogType.Exception, new System.Text.RegularExpressions.Regex("InvalidOperationException: expected modifier tick failure"));
+            Assert.DoesNotThrow(() => typeof(BattleShopSceneController).GetMethod("Update",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(_f.Host, null));
+            Assert.IsTrue(context.IsEnded);
+            Assert.IsTrue(context.Combat.IsDisposed);
+            Assert.AreEqual(0, context.Combat.GetModifierCount(BattleSide.Player));
+            Assert.IsFalse(_f.Host.IsCombatRunning);
+        }
+
+        private sealed class ThrowingTickModifier : ICombatModifier
+        {
+            public ICombatModifier CaptureForAction() => new ThrowingTickModifier();
+            public void Modify(CombatOutcomeDraft outcome, CombatModifierContext context) { }
+            public void OnResolved(CombatResolutionResult result, CombatModifierContext context) { }
+            public void AdvanceTime(float deltaTime) => throw new InvalidOperationException("expected modifier tick failure");
+        }
+
+        [Test]
         public void UpgradeThenConsumeSourceDoesNotChangeOrCancelAnAlreadyFiredBullet()
         {
             Prepare(); var robot = AddRobot();
@@ -263,6 +339,7 @@ namespace GameLogic.Tests
         }
 
         [TestCase(1001)] [TestCase(1002)] [TestCase(1003)]
+        [TestCase(1004)] [TestCase(1005)] [TestCase(1006)]
         public void EveryConfiguredRobotUsesTheMinimumContactTriggerInterval(int configId)
         {
             Prepare(); var robot = AddRobot(configId: configId);

@@ -102,8 +102,8 @@ namespace GameLogic
                         slot.transform.localPosition = GetLocalPosition(new BoardCoordinate(column, row)) + Vector3.forward;
                         slot.transform.localRotation = Quaternion.identity;
                         slot.transform.localScale = new Vector3(_cellSize * 0.94f / slotSize.x, _cellSize * 0.94f / slotSize.y, 1f);
-                        slot.sortingLayerName = "Default";
-                        slot.sortingOrder = -10;
+                        slot.sortingLayerID = _slotPrefab.sortingLayerID;
+                        slot.sortingOrder = _slotPrefab.sortingOrder;
                         // Keep the prefab/scene tint; state effects restore this original color.
                         _slotBaseColors[column, row] = existing != null && previousBaseColors != null &&
                             column < previousBaseColors.GetLength(0) && row < previousBaseColors.GetLength(1)
@@ -239,6 +239,11 @@ namespace GameLogic
                 var slot = child.GetComponent<SpriteRenderer>();
                 if (slot == null) continue;
                 slot.sprite = sprite;
+                if (_slotPrefab != null)
+                {
+                    slot.sortingLayerID = _slotPrefab.sortingLayerID;
+                    slot.sortingOrder = _slotPrefab.sortingOrder;
+                }
                 slot.transform.localScale = new Vector3(_cellSize * 0.94f / size.x, _cellSize * 0.94f / size.y, 1f);
             }
         }

@@ -38,6 +38,7 @@ namespace GameLogic
         public ShopRules Rules { get; }
         public int RefreshPrice => Rules.RefreshPrice;
         public BattleEntityRegistry Registry { get; } = new BattleEntityRegistry();
+        public CombatRuntime Combat { get; }
         public ShopRewardService Rewards { get; }
 
         public BattleShopContext(ShopRules rules, IReadOnlyList<int> playerCandidates,
@@ -63,12 +64,61 @@ namespace GameLogic
             };
             Rewards = new ShopRewardService(this);
             foreach (var state in _states) ApplyBatch(state, GenerateBatch(state, true));
+            Combat = new CombatRuntime(BattleId);
         }
 
         public BattleShopState GetState(BattleSide side)
         {
             EntityValidation.RequireSide(side);
             return _states[(int)side];
+        }
+
+        public OpponentAiSnapshot CreateOpponentAiSnapshot(BoardModel opponentBoard)
+        {
+            if (opponentBoard == null) throw new ArgumentNullException(nameof(opponentBoard));
+            var state = GetState(BattleSide.Opponent);
+            var offers = new List<OpponentAiOfferSnapshot>(state.Slots.Count);
+            var hasPurchased = false;
+            foreach (var slot in state.Slots)
+            {
+                hasPurchased |= slot.IsPurchased;
+                if (slot.Offer == null) continue;
+                Robot config;
+                if (!_configs.TryGetValue(slot.Offer.RobotId, out config)) continue;
+                var profile = CreateOpponentAiProfile(config, "offer:" + slot.Offer.OfferId);
+                offers.Add(new OpponentAiOfferSnapshot(slot.SlotId, slot.Offer.OfferId, profile,
+                    slot.Offer.Level, slot.Offer.Price, slot.IsPurchased));
+            }
+
+            var robots = new List<OpponentAiRobotSnapshot>();
+            foreach (var robot in _owned.Values)
+            {
+                if (robot.Side != BattleSide.Opponent || robot.IsRemoved || robot.Configuration == null) continue;
+                var profile = CreateOpponentAiProfile(robot.Configuration, "profile:" + robot.ConfigId);
+                robots.Add(new OpponentAiRobotSnapshot(robot.InstanceId, profile, robot.Level, robot.MaxLevel,
+                    robot.GetAttackDamage(), robot.Configuration.MinTriggerInterval, robot.Location, robot.Anchor,
+                    robot.Definition));
+            }
+
+            robots.Sort((a, b) => a.InstanceId.CompareTo(b.InstanceId));
+            var candidates = new List<OpponentAiRobotProfile>();
+            foreach (var id in _candidates[(int)BattleSide.Opponent])
+            {
+                Robot config;
+                if (_configs.TryGetValue(id, out config)) candidates.Add(CreateOpponentAiProfile(config, "candidate:" + id));
+            }
+            return new OpponentAiSnapshot(BattleSide.Opponent, state.EnergyCoins, opponentBoard,
+                offers, robots, candidates, state.StorageInstanceId, RefreshPrice, BattleId, hasPurchased);
+        }
+
+        private OpponentAiRobotProfile CreateOpponentAiProfile(Robot config, string definitionId)
+        {
+            var cells = new List<BoardCoordinate>();
+            foreach (var offset in config.ShapeId_Ref.CellOffsets)
+                cells.Add(new BoardCoordinate(offset[0], offset[1]));
+            return new OpponentAiRobotProfile(config.Id, config.QualityId, config.AttackDamage,
+                config.MinTriggerInterval, new PlaceableDefinition(definitionId, cells), config.DamagePerLevel,
+                Rules.GetPrice(config.QualityId, 1));
         }
 
         public ShopOperationResult TryPurchase(BattleSide side, int slotId, long offerId, out RobotEntity robot)
@@ -196,6 +246,7 @@ namespace GameLogic
             IsEnded = true;
             try
             {
+                Combat.Dispose();
                 RestoreInteraction();
                 CompleteInteraction();
                 foreach (var pair in _boards)
@@ -330,13 +381,13 @@ namespace GameLogic
         private int[] CopyCandidates(IReadOnlyList<int> source)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
-            if (source.Count != Rules.SlotCount) throw new ArgumentException("必须传入三个候选：1001、1002、1003。", nameof(source));
+            if (source.Count < Rules.SlotCount) throw new ArgumentException("至少需要三个候选机器人。", nameof(source));
             var copy = new int[source.Count];
             var unique = new HashSet<int>();
             for (var index = 0; index < source.Count; index++)
             {
                 var id = source[index];
-                if (id < 1001 || id > 1003 || !unique.Add(id)) throw new ArgumentException("候选必须是1001..1003且不重复。", nameof(source));
+                if (id <= 0 || !unique.Add(id)) throw new ArgumentException("候选机器人ID必须为正数且不重复。", nameof(source));
                 copy[index] = id;
             }
             return copy;

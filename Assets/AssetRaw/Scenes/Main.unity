@@ -243,8 +243,8 @@ MonoBehaviour:
   _bootstrap: {fileID: 1784076934}
   _enemies: {fileID: 164109971}
   _layoutConfigId: 1
-  _playerCandidates: e9030000ea030000eb030000
-  _opponentCandidates: e9030000ea030000eb030000
+  _playerCandidates: e9030000ea030000eb030000ec030000ed030000ee030000
+  _opponentCandidates: e9030000ea030000eb030000ec030000ed030000ee030000
   _playerTowerView: {fileID: 436032437}
   _opponentTowerView: {fileID: 1519177346}
   _towerConfigId: 3001
