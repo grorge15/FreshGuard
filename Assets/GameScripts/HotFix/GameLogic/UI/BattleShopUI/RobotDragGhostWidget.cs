@@ -29,7 +29,8 @@ namespace GameLogic
         {
             Vector2 local;
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)transform.parent, position, camera, out local))
-                rectTransform.anchoredPosition = local;
+                // local 是相对父节点 pivot 的坐标，不能当作相对自身锚点的 anchoredPosition。
+                rectTransform.localPosition = new Vector3(local.x, local.y, 0);
         }
     }
 }

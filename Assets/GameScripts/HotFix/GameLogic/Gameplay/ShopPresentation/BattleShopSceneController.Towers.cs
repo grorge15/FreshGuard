@@ -69,6 +69,8 @@ namespace GameLogic
             Context.RequestEndBattle();
             _running = false;
             _bootstrap?.StopBalls();
+            // 最后广播，监听方可以同步结束本局，回调后不再写入口状态。
+            PublishBattleProgress(true);
         }
 
         private void ClearTowers()

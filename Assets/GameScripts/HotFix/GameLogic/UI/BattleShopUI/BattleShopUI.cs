@@ -4,8 +4,7 @@ using UnityEngine.UI;
 
 namespace GameLogic
 {
-    [Window(UILayer.UI, "BattleShopUI", fullScreen: false)]
-    public sealed class BattleShopUI : UIWindow
+    public sealed class BattleShopUI : UIWidget
     {
         private Text _coins;
         private Text _refreshPrice;
@@ -21,8 +20,21 @@ namespace GameLogic
         private Font _font;
         public BattleShopContext Context { get; private set; }
         public RobotDragController Drag { get; private set; }
-        private Camera EventCamera => Canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null :
-            (Canvas.worldCamera != null ? Canvas.worldCamera : GameModule.UI.UICamera);
+        private Camera EventCamera
+        {
+            get
+            {
+                var canvas = OwnerWindow.Canvas.rootCanvas;
+                return canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null :
+                    (canvas.worldCamera != null ? canvas.worldCamera : GameModule.UI.UICamera);
+            }
+        }
+
+        public void Bind(BattleShopContext context, BattleShopSceneController host)
+        {
+            _userDatas = new object[] { context, host };
+            OnRefresh();
+        }
 
         protected override void ScriptGenerator()
         {
@@ -147,6 +159,7 @@ namespace GameLogic
             Drag?.Cancel();
             Context = null;
             _host = null;
+            _userDatas = null;
             if (_font != null) Object.Destroy(_font);
         }
     }
