@@ -21,13 +21,15 @@ namespace GameLogic.Tests
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
         }
 
-        [TestCase(1001, "StraightRobotEntity")]
-        [TestCase(1002, "CornerRobotEntity")]
-        [TestCase(1003, "PulseRobotEntity")]
-        [TestCase(1004, "SingleCellRobotEntity")]
-        [TestCase(1005, "VerticalRobotEntity")]
-        [TestCase(1006, "SmallCornerRobotEntity")]
-        public void ConfigCreatesConcreteRobotWithoutSkillAndKeepsRegistryLifecycle(int configId, string typeName)
+        [TestCase(501, "CannonRobotEntity")]
+        [TestCase(502, "ScatterRobotEntity")]
+        [TestCase(503, "PiercingRobotEntity")]
+        [TestCase(504, "RapidFireRobotEntity")]
+        [TestCase(505, "ImpactRobotEntity")]
+        [TestCase(601, "FrostRobotEntity")]
+        [TestCase(602, "TractorRobotEntity")]
+        [TestCase(603, "PoisonRobotEntity")]
+        public void ConfigCreatesConcreteRobotAndKeepsRegistryLifecycle(int configId, string typeName)
         {
             var config = _tables.TbRobot.Get(configId);
             using (var registry = new BattleEntityRegistry())
@@ -36,7 +38,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(typeName, robot.GetType().Name);
                 Assert.AreEqual(configId, robot.ConfigId);
                 Assert.AreEqual(config.ShapeId, robot.ShapeId);
-                Assert.AreEqual(0, robot.SkillId);
+                Assert.AreEqual(config.SkillId, robot.SkillId);
                 Assert.AreEqual(2, robot.Level);
                 Assert.AreEqual(config.QualityId, robot.QualityId);
                 Assert.AreEqual(config.ShapeId_Ref.CellOffsets.Length, robot.Definition.Cells.Count);
@@ -66,7 +68,7 @@ namespace GameLogic.Tests
         {
             using (var registry = new BattleEntityRegistry())
             {
-                var config = _tables.TbRobot.Get(1001);
+                var config = _tables.TbRobot.Get(501);
                 var first = registry.CreateRobotFromConfig(config, BattleSide.Player);
                 var second = registry.CreateRobotFromConfig(config, BattleSide.Player);
                 var board = new BoardModel(4, 2);
@@ -82,7 +84,7 @@ namespace GameLogic.Tests
         {
             using (var registry = new BattleEntityRegistry())
             {
-                var config = _tables.TbRobot.Get(1001);
+                var config = _tables.TbRobot.Get(501);
                 Assert.Throws<ArgumentNullException>(() => registry.CreateRobotFromConfig(null, BattleSide.Player));
                 Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateRobotFromConfig(config, BattleSide.Player, 0));
                 Assert.AreEqual(1, registry.CreateRobotFromConfig(config, BattleSide.Player).InstanceId);
@@ -90,12 +92,14 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void AllSixRobotsHaveCollectedPrefabAndIconAddresses()
+        public void AllEightRobotsHaveCollectedPrefabAndIconAddresses()
         {
             var settings = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(
                 "Assets/Editor/AssetBundleCollector/AssetBundleCollectorSetting.asset");
             var assets = settings.BeginCollect("DefaultPackage", true, false).CollectAssets;
-            foreach (var id in new[] { 1001, 1002, 1003, 1004, 1005, 1006 })
+            Assert.AreEqual(8, _tables.TbRobot.DataList.Count);
+            Assert.AreEqual(28, _tables.TbRobotShape.DataList.Count);
+            foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603 })
             {
                 var config = _tables.TbRobot.Get(id);
                 Assert.AreEqual(config.RobotPrefab, assets.Single(asset => asset.AssetInfo.AssetPath ==
@@ -105,12 +109,14 @@ namespace GameLogic.Tests
             }
         }
 
-        [TestCase(1001, "0,0;1,0")]
-        [TestCase(1002, "0,0;0,1;1,0")]
-        [TestCase(1003, "0,0;1,0;2,0;1,1")]
-        [TestCase(1004, "0,0")]
-        [TestCase(1005, "0,0;0,1")]
-        [TestCase(1006, "0,0;0,1;1,1")]
+        [TestCase(501, "0,0;1,0")]
+        [TestCase(502, "0,0;1,0;0,1")]
+        [TestCase(503, "0,0;0,1;0,2")]
+        [TestCase(504, "0,0;0,1")]
+        [TestCase(505, "0,0;1,0;2,0;1,1")]
+        [TestCase(601, "0,0;1,0;0,1;1,1")]
+        [TestCase(602, "0,0;0,1;1,1")]
+        [TestCase(603, "0,0;1,0;1,1;2,1")]
         public void PrefabAndIconMatchRequestedFootprint(int configId, string expectedOffsets)
         {
             var config = _tables.TbRobot.Get(configId);

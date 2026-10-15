@@ -338,8 +338,9 @@ namespace GameLogic.Tests
             Assert.AreEqual(side, target.Side);
         }
 
-        [TestCase(1001)] [TestCase(1002)] [TestCase(1003)]
-        [TestCase(1004)] [TestCase(1005)] [TestCase(1006)]
+        [TestCase(501)] [TestCase(502)] [TestCase(505)]
+        [TestCase(503)] [TestCase(504)] [TestCase(602)]
+        [TestCase(601)] [TestCase(603)]
         public void EveryConfiguredRobotUsesTheMinimumContactTriggerInterval(int configId)
         {
             Prepare(); var robot = AddRobot(configId: configId);
@@ -367,7 +368,7 @@ namespace GameLogic.Tests
                 "Assets/AssetRaw/Actor/Bullets/Prefabs/" + name + ".prefab"), parent));
         }
 
-        private RobotEntity AddRobot(int level = 1, BattleSide side = BattleSide.Player, int configId = 1001)
+        private RobotEntity AddRobot(int level = 1, BattleSide side = BattleSide.Player, int configId = 501)
         {
             var config = _f.Tables.TbRobot.Get(configId);
             var robot = _f.Context.Registry.CreateRobotFromConfig(config, side, level);

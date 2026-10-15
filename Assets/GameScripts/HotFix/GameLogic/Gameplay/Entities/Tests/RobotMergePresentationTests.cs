@@ -17,9 +17,9 @@ namespace GameLogic.Tests
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             using (var registry = new BattleEntityRegistry())
             {
-                var robot = registry.CreateRobotFromConfig(tables.TbRobot.Get(1001), BattleSide.Player);
+                var robot = registry.CreateRobotFromConfig(tables.TbRobot.Get(501), BattleSide.Player);
                 robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(4, 3));
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotI.prefab");
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotCannon.prefab");
                 var instance = Object.Instantiate(prefab);
                 try
                 {

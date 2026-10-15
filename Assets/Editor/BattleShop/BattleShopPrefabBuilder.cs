@@ -97,7 +97,7 @@ namespace FreshGuard.Editor
             element.preferredHeight = 132;
             element.flexibleWidth = 0;
             var icon = Image(Rect("m_img_RobotIcon", root, new Vector2(94, 88), new Vector2(0, 7)), Color.white);
-            icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/Icons/RobotIIcon.png");
+            icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/Icons/RobotCannonIcon.png");
             icon.type = UnityEngine.UI.Image.Type.Simple;
             icon.preserveAspect = true;
             Image(Rect("m_img_Quality", root, new Vector2(100, 4), new Vector2(0, -40)), new Color(0.37f, 0.67f, 0.42f));

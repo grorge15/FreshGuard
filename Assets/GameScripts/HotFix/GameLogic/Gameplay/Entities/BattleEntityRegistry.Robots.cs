@@ -27,23 +27,29 @@ namespace GameLogic
             RobotEntity robot;
             switch (config.Id)
             {
-                case StraightRobotEntity.CONFIG_ID:
-                    robot = new StraightRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                case CannonRobotEntity.CONFIG_ID:
+                    robot = new CannonRobotEntity(_nextInstanceId, config, side, level, maxLevel);
                     break;
-                case CornerRobotEntity.CONFIG_ID:
-                    robot = new CornerRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                case ScatterRobotEntity.CONFIG_ID:
+                    robot = new ScatterRobotEntity(_nextInstanceId, config, side, level, maxLevel);
                     break;
-                case PulseRobotEntity.CONFIG_ID:
-                    robot = new PulseRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                case ImpactRobotEntity.CONFIG_ID:
+                    robot = new ImpactRobotEntity(_nextInstanceId, config, side, level, maxLevel);
                     break;
-                case SingleCellRobotEntity.CONFIG_ID:
-                    robot = new SingleCellRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                case PiercingRobotEntity.CONFIG_ID:
+                    robot = new PiercingRobotEntity(_nextInstanceId, config, side, level, maxLevel);
                     break;
-                case VerticalRobotEntity.CONFIG_ID:
-                    robot = new VerticalRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                case RapidFireRobotEntity.CONFIG_ID:
+                    robot = new RapidFireRobotEntity(_nextInstanceId, config, side, level, maxLevel);
                     break;
-                case SmallCornerRobotEntity.CONFIG_ID:
-                    robot = new SmallCornerRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                case TractorRobotEntity.CONFIG_ID:
+                    robot = new TractorRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    break;
+                case FrostRobotEntity.CONFIG_ID:
+                    robot = new FrostRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    break;
+                case PoisonRobotEntity.CONFIG_ID:
+                    robot = new PoisonRobotEntity(_nextInstanceId, config, side, level, maxLevel);
                     break;
                 default:
                     throw new ArgumentException("未注册对应机器人实体类型：" + config.Id, nameof(config));
