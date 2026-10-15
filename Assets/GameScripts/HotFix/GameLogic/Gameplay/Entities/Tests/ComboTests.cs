@@ -301,10 +301,10 @@ namespace GameLogic.Tests
         private RobotView Robot(BattleSide side = BattleSide.Player, BattleEntityRegistry registry = null)
         {
             registry = registry ?? _registry;
-            var go = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotI.prefab"));
+            var go = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotCannon.prefab"));
             _objects.Add(go); go.transform.position = Vector3.right * (20f + _objects.Count * 2f);
             var view = go.GetComponent<RobotView>();
-            var entity = registry.CreateRobot(1001, side, 1, 1);
+            var entity = registry.CreateRobot(501, side, 1, 1);
             entity.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0)); view.Bind(registry, entity.InstanceId);
             return view;
         }

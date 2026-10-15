@@ -14,7 +14,7 @@ namespace GameLogic.Tests
 
         private static OpponentAiSnapshot Snapshot(long battleId = 123)
         {
-            var profile = new OpponentAiRobotProfile(1001, 1, 10, 1f, new PlaceableDefinition("p", 1, 1));
+            var profile = new OpponentAiRobotProfile(501, 1, 10, 1f, new PlaceableDefinition("p", 1, 1));
             return new OpponentAiSnapshot(BattleSide.Opponent, 100, new BoardModel(5, 5),
                 new[] { new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false),
                     new OpponentAiOfferSnapshot(1, 12, profile, 1, 6, false) },
@@ -133,7 +133,7 @@ namespace GameLogic.Tests
         [Test]
         public void ThreeSuccessesEndRoundEvenWhenMoreLegalActionsExist()
         {
-            var profile = new OpponentAiRobotProfile(1001, 1, 10, 1f, new PlaceableDefinition("p", 1, 1), 20);
+            var profile = new OpponentAiRobotProfile(501, 1, 10, 1f, new PlaceableDefinition("p", 1, 1), 20);
             var board = new BoardModel(5, 5);
             var robots = new List<OpponentAiRobotSnapshot>();
             foreach (var anchor in new[] { new BoardCoordinate(1, 1), new BoardCoordinate(3, 1),
@@ -167,7 +167,7 @@ namespace GameLogic.Tests
         [TestCase(OpponentAiActionKind.Move, 10f)]
         public void CooldownsSurviveRoundBoundariesAndFreezeDuringPause(OpponentAiActionKind kind, float cooldown)
         {
-            var profile = new OpponentAiRobotProfile(1001, 1, 10, 1f, new PlaceableDefinition("p", 1, 1));
+            var profile = new OpponentAiRobotProfile(501, 1, 10, 1f, new PlaceableDefinition("p", 1, 1));
             var board = new BoardModel(5, 5);
             var robots = new List<OpponentAiRobotSnapshot>();
             if (kind == OpponentAiActionKind.Move)

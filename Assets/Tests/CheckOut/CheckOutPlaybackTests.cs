@@ -57,7 +57,7 @@ namespace GameLogic.Tests
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             for (var scenario = 0; scenario < 3; scenario++)
             {
-                var context = new BattleShopContext(ShopRules.FromTables(tables), new[] { 1001, 1002, 1003 }, new[] { 1001, 1002, 1003 }, tables.TbRobot.Get);
+                var context = new BattleShopContext(ShopRules.FromTables(tables), new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, tables.TbRobot.Get);
                 var root = new GameObject("CheckOutBattle");
                 var host = root.AddComponent<BattleShopSceneController>();
                 var towers = new TowerBattleSession(context.BattleId, context.Registry, 5);

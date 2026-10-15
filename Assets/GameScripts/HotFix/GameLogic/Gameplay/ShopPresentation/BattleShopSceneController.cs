@@ -18,8 +18,8 @@ namespace GameLogic
         [SerializeField] private PlacementBoardsBootstrap _bootstrap;
         [SerializeField] private EnemyBattleController _enemies;
         [SerializeField] private int _layoutConfigId = 1;
-        [SerializeField] private int[] _playerCandidates = { 1001, 1002, 1003, 1004, 1005, 1006 };
-        [SerializeField] private int[] _opponentCandidates = { 1001, 1002, 1003, 1004, 1005, 1006 };
+        [SerializeField] private int[] _playerCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
+        [SerializeField] private int[] _opponentCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
         private readonly Dictionary<int, GameObject> _views = new Dictionary<int, GameObject>();
         private Transform _preparedRoot;
         private Transform _comboPopupRoot;
@@ -37,6 +37,7 @@ namespace GameLogic
         private GlassBoardController _playerGlass;
         private GlassBoardController _opponentGlass;
         private RobotCombatController _combat;
+        public MainCombatUI CombatWindow { get; private set; }
         public BattleShopUI ShopWindow { get; private set; }
         public BattleShopContext Context { get; private set; }
         public PlacementController Placement => _placement;
@@ -92,8 +93,8 @@ namespace GameLogic
                             !GameModule.Resource.CheckLocationValid(config.RobotIcon))
                             throw new InvalidOperationException("商店机器人资源未收集：" + id);
                     }
-                if (!GameModule.Resource.CheckLocationValid("BattleShopUI"))
-                    throw new InvalidOperationException("BattleShopUI 未加入 YooAsset 资源收集。");
+                if (!GameModule.Resource.CheckLocationValid("MainCombatUI"))
+                    throw new InvalidOperationException("MainCombatUI 未加入 YooAsset 资源收集。");
                 var preparation = new GameObject("PreparedRobotViews");
                 preparation.transform.SetParent(transform, false);
                 preparation.SetActive(false);
@@ -121,13 +122,22 @@ namespace GameLogic
                 await _enemies.PrepareAsync(this, context, tables, cancellationToken);
                 _combat = new RobotCombatController(this, context, _enemies, _views);
                 await _combat.PrepareAsync(tables, cancellationToken);
-                var window = await GameModule.UI.ShowUIAsyncAwait<BattleShopUI>(context, this)
-                    .AttachExternalCancellation(cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (this == null || Context != context || context.IsEnded) return;
-                if (window == null || !window.IsPrepare || window.IsDestroyed)
-                    throw new InvalidOperationException("商店窗口加载失败。");
-                ShopWindow = window;
+                // 完整等待加载，取消后也要收回本局迟到的窗口，避免遗留 UI。
+                var window = await GameModule.UI.ShowUIAsyncAwait<MainCombatUI>(context, this, Progress);
+                if (cancellationToken.IsCancellationRequested || this == null || Context != context ||
+                    context.IsEnded || context.IsEndRequested)
+                {
+                    if (window != null && ReferenceEquals(window.Context, context) && ReferenceEquals(window.Host, this))
+                        GameModule.UI.CloseUI<MainCombatUI>();
+                    throw new OperationCanceledException(cancellationToken);
+                }
+                if (window == null || !window.IsPrepare || window.IsDestroyed ||
+                    !ReferenceEquals(window.Context, context) || !ReferenceEquals(window.Host, this))
+                    throw new InvalidOperationException("主战斗窗口加载失败或归属已变化。");
+                CombatWindow = window;
+                ShopWindow = window.Shop;
+                _battleInfoWindow = window.Info;
+                PublishBattleProgress(true);
                 _preparationRemaining = 3f;
                 _running = _frozen = false;
                 _ready = true;
@@ -387,7 +397,7 @@ namespace GameLogic
                         Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
                         return;
                     }
-                    try { _enemies?.StartFirstWave(); }
+                    try { _enemies?.StartBattle(); }
                     catch (Exception e) { Debug.LogException(e, this); return; }
                     startedThisFrame = true;
                 }
@@ -485,12 +495,12 @@ namespace GameLogic
         private void CloseOwnedWindow()
         {
             if (_closingWindow || UIModule.UIRoot == null) return;
-            var window = GameModule.UI.GetUI<BattleShopUI>();
+            var window = GameModule.UI.GetUI<MainCombatUI>();
             if (window != null && window.UserDatas != null && window.UserDatas.Length > 1 &&
                 ReferenceEquals(window.UserDatas[1], this))
             {
                 _closingWindow = true;
-                try { GameModule.UI.CloseUI<BattleShopUI>(); }
+                try { GameModule.UI.CloseUI<MainCombatUI>(); }
                 finally { _closingWindow = false; }
             }
         }
@@ -510,7 +520,12 @@ namespace GameLogic
         private void Cleanup()
         {
             DisposeOpponentAi();
+            CombatWindow = null;
             ShopWindow = null;
+            _battleInfoWindow = null;
+            _lastProgressBattleId = 0;
+            _lastProgressWave = 0;
+            _lastProgressSecond = -1;
             _ready = _running = _frozen = false;
             _preparationRemaining = 0f;
             if (_bootstrap != null)

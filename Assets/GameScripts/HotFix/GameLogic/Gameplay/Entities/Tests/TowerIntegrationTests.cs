@@ -38,7 +38,7 @@ namespace GameLogic.Tests
                 for (var battle = 0; battle < 2; battle++)
                 {
                     using (var context = new BattleShopContext(ShopRules.FromTables(tables),
-                        new[] { 1001, 1002, 1003 }, new[] { 1001, 1002, 1003 }, tables.TbRobot.Get))
+                        new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, tables.TbRobot.Get))
                     {
                         SetField(controller, "<Context>k__BackingField", context);
                         controller.GetType().GetMethod("PrepareTowers", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -72,7 +72,7 @@ namespace GameLogic.Tests
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             using (var context = new BattleShopContext(ShopRules.FromTables(tables),
-                new[] { 1001, 1002, 1003 }, new[] { 1001, 1002, 1003 }, tables.TbRobot.Get))
+                new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, tables.TbRobot.Get))
             using (var session = new TowerBattleSession(context.BattleId, context.Registry, 100))
             {
                 var root = new GameObject("TowerIntegrationTest");

@@ -57,7 +57,7 @@ namespace FreshGuard.Editor
                 angleMax = ballSettings.FindProperty("initialAngleMax").floatValue;
                 var board = GameObject.Find("PlayerBoardWorldRoot").GetComponentInChildren<PlacementBoardView>();
                 var body = ball.GetComponent<Rigidbody2D>();
-                foreach (var configId in new[] { 1001, 1002, 1003 })
+                foreach (var configId in new[] { 501, 502, 505 })
                 {
                     host.EndBattle();
                     await host.InitializeAsync();

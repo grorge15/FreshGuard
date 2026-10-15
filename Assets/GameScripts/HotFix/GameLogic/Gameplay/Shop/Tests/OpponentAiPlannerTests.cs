@@ -9,7 +9,7 @@ namespace GameLogic.Tests
         public void PlansPurchaseAndDeployWhenBoardHasFewerThanThreeRobots()
         {
             var board = new BoardModel(5, 5);
-            var profile = Profile(1001, 10, 1f, 1);
+            var profile = Profile(501, 10, 1f, 1);
             var offer = new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false);
             var snapshot = Snapshot(board, 20, new[] { offer }, new OpponentAiRobotSnapshot[0], profile);
 
@@ -24,7 +24,7 @@ namespace GameLogic.Tests
         public void EstablishesThreeRobotsBeforeOfferMerge()
         {
             var board = new BoardModel(5, 5);
-            var profile = Profile(1001, 20, 1f, 1);
+            var profile = Profile(501, 20, 1f, 1);
             var existing = Robot(7, profile, 1, new BoardCoordinate(1, 1));
             var offer = new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false);
             var snapshot = Snapshot(board, 20, new[] { offer }, new[] { existing }, profile);
@@ -40,7 +40,7 @@ namespace GameLogic.Tests
         public void DoesNotMergeExistingRobotsWhenItWouldLoseTooMuchOutput()
         {
             var board = new BoardModel(5, 5);
-            var profile = Profile(1001, 10, 10f, 1);
+            var profile = Profile(501, 10, 10f, 1);
             var first = Robot(7, profile, 1, new BoardCoordinate(1, 1));
             var second = Robot(8, profile, 1, new BoardCoordinate(3, 1));
             var snapshot = Snapshot(board, 0, new OpponentAiOfferSnapshot[0], new[] { first, second }, profile);
@@ -56,7 +56,7 @@ namespace GameLogic.Tests
         public void SnapshotDoesNotFollowLiveBoardChanges()
         {
             var board = new BoardModel(5, 5);
-            var profile = Profile(1001, 10, 1f, 1);
+            var profile = Profile(501, 10, 1f, 1);
             var snapshot = Snapshot(board, 20, new OpponentAiOfferSnapshot[0], new OpponentAiRobotSnapshot[0], profile);
             board.TryPlace(new BoardCoordinate(2, 2), profile.Definition);
             Assert.IsFalse(snapshot.Board.IsOccupied(new BoardCoordinate(2, 2)));
@@ -66,8 +66,8 @@ namespace GameLogic.Tests
         public void DeploymentRanksDamagePerCoinBeforePosition()
         {
             var board = new BoardModel(5, 5);
-            var expensive = Profile(1001, 30, 1f, 1);
-            var efficient = Profile(1002, 20, 1f, 1);
+            var expensive = Profile(501, 30, 1f, 1);
+            var efficient = Profile(502, 20, 1f, 1);
             var snapshot = Snapshot(board, 100, new[] {
                 new OpponentAiOfferSnapshot(0, 11, expensive, 1, 30, false),
                 new OpponentAiOfferSnapshot(1, 12, efficient, 1, 5, false)
@@ -79,7 +79,7 @@ namespace GameLogic.Tests
         public void RefreshRequiresAtLeastOneCandidateShapeToFit()
         {
             var board = new BoardModel(1, 1, new BoardCoordinate[0]);
-            var profile = Profile(1001, 10, 1f, 1);
+            var profile = Profile(501, 10, 1f, 1);
             var snapshot = Snapshot(board, 100, new[] {
                 new OpponentAiOfferSnapshot(0, 11, profile, 1, 5, false)
             }, new OpponentAiRobotSnapshot[0], profile);
@@ -89,7 +89,7 @@ namespace GameLogic.Tests
         [Test]
         public void DirectOfferMergeStartsAfterCoverageAndStopsAtLevelFive()
         {
-            var p = Profile(1001, 10, 1f, 1);
+            var p = Profile(501, 10, 1f, 1);
             var board = new BoardModel(5, 5);
             var robots = new[] { Robot(1, p, 1, new BoardCoordinate(1, 1)),
                 Robot(2, p, 5, new BoardCoordinate(3, 1)), Robot(3, p, 5, new BoardCoordinate(1, 3)) };
@@ -107,7 +107,7 @@ namespace GameLogic.Tests
         [TestCase(20, OpponentAiActionKind.Merge)]
         public void BoardMergeUsesLinearDamageGrowthAndKeepsThreeRobots(int growth, OpponentAiActionKind expected)
         {
-            var p = new OpponentAiRobotProfile(1001, 1, 10, 1f, new PlaceableDefinition("p", 1, 1), growth);
+            var p = new OpponentAiRobotProfile(501, 1, 10, 1f, new PlaceableDefinition("p", 1, 1), growth);
             var board = new BoardModel(5, 5);
             var robots = new[] { Robot(1, p, 1, new BoardCoordinate(1, 1)), Robot(2, p, 1, new BoardCoordinate(3, 1)),
                 Robot(3, p, 1, new BoardCoordinate(1, 3)), Robot(4, p, 1, new BoardCoordinate(3, 3)) };
@@ -124,9 +124,9 @@ namespace GameLogic.Tests
         [Test]
         public void MoveFreesBlockedOfferWithinTenPercentOutputLossWithoutTouchingLiveBoard()
         {
-            var low = Profile(1001, 10, 1f, 1);
-            var high = Profile(1002, 100, 1f, 1);
-            var square = new OpponentAiRobotProfile(1003, 1, 20, 1f, new PlaceableDefinition("square", 2, 2));
+            var low = Profile(501, 10, 1f, 1);
+            var high = Profile(502, 100, 1f, 1);
+            var square = new OpponentAiRobotProfile(505, 1, 20, 1f, new PlaceableDefinition("square", 2, 2));
             var board = new BoardModel(3, 3);
             var robots = new[] { Robot(1, low, 1, new BoardCoordinate(1, 1)), Robot(2, high, 1, new BoardCoordinate(0, 0)) };
             foreach (var robot in robots) board.TryPlace(robot.Anchor.Value, robot.Definition);
@@ -150,9 +150,9 @@ namespace GameLogic.Tests
         [TestCase(4)]
         public void MergeCanFreeBlockedOfferWithSmallOutputLoss(int count)
         {
-            var low = Profile(1001, 10, 1f, 1);
-            var high = Profile(1002, 200, 1f, 1);
-            var square = new OpponentAiRobotProfile(1003, 1, 20, 1f, new PlaceableDefinition("square", 2, 2));
+            var low = Profile(501, 10, 1f, 1);
+            var high = Profile(502, 200, 1f, 1);
+            var square = new OpponentAiRobotProfile(505, 1, 20, 1f, new PlaceableDefinition("square", 2, 2));
             var board = new BoardModel(3, 3);
             var robots = new List<OpponentAiRobotSnapshot> {
                 Robot(1, low, 1, new BoardCoordinate(1, 1)), Robot(2, low, 1, new BoardCoordinate(0, 0)),
@@ -169,7 +169,7 @@ namespace GameLogic.Tests
         [Test]
         public void RefreshUsesCandidatePriceAndProtectsPurchasedSlotsEvenWithoutOffers()
         {
-            var p = new OpponentAiRobotProfile(1001, 1, 10, 1f, new PlaceableDefinition("p", 1, 1), levelOnePrice: 7);
+            var p = new OpponentAiRobotProfile(501, 1, 10, 1f, new PlaceableDefinition("p", 1, 1), levelOnePrice: 7);
             var board = new BoardModel(3, 3);
             var empty = new OpponentAiOfferSnapshot[0];
             Assert.AreEqual(OpponentAiActionKind.Wait, OpponentAiPlanner.Plan(Snapshot(board, 11, empty,
@@ -184,7 +184,7 @@ namespace GameLogic.Tests
         [Test]
         public void SnapshotCopiesListsAndOccupantsAndActionsCarryBattleIdentity()
         {
-            var p = Profile(1001, 10, 1f, 1);
+            var p = Profile(501, 10, 1f, 1);
             var board = new BoardModel(3, 3);
             board.TryPlace(new BoardCoordinate(1, 1), new PlaceableDefinition("obstacle", 1, 1));
             var offers = new List<OpponentAiOfferSnapshot> { new OpponentAiOfferSnapshot(0, 11, p, 1, 6, false) };
@@ -202,7 +202,7 @@ namespace GameLogic.Tests
         [Test]
         public void CooldownAndOfferBlacklistAllowOtherDecisions()
         {
-            var p = Profile(1001, 10, 1f, 1);
+            var p = Profile(501, 10, 1f, 1);
             var offers = new[] { new OpponentAiOfferSnapshot(0, 11, p, 1, 6, false),
                 new OpponentAiOfferSnapshot(1, 12, p, 1, 6, false) };
             var action = OpponentAiPlanner.Plan(Snapshot(new BoardModel(5, 5), 20, offers,
@@ -214,7 +214,7 @@ namespace GameLogic.Tests
         [Test]
         public void EqualPlacementScoresBreakTiesByRowThenColumn()
         {
-            var p = Profile(1001, 10, 1f, 1);
+            var p = Profile(501, 10, 1f, 1);
             var action = OpponentAiPlanner.Plan(Snapshot(new BoardModel(4, 4), 20,
                 new[] { new OpponentAiOfferSnapshot(0, 11, p, 1, 6, false) }, new OpponentAiRobotSnapshot[0], p));
             Assert.AreEqual(new BoardCoordinate(1, 1), action.Anchor);

@@ -139,10 +139,10 @@ namespace GameLogic.Tests
         [Test]
         public void InvalidConfigPurchaseDoesNotDeductOrAllocateAnEntity()
         {
-            var config = ShopTestData.Robot(1001);
+            var config = ShopTestData.Robot(501);
             var shape = config.ShapeId_Ref;
             using (var context = new BattleShopContext(ShopTestData.Rules(1, 0, 0), ShopTestData.Candidates,
-                ShopTestData.Candidates, id => id == 1001 ? config : ShopTestData.Robot(id), new ShopSequenceRandom()))
+                ShopTestData.Candidates, id => id == 501 ? config : ShopTestData.Robot(id), new ShopSequenceRandom()))
             {
                 var offer = context.GetState(BattleSide.Player).Slots[0].Offer;
                 config.ShapeId_Ref = null;

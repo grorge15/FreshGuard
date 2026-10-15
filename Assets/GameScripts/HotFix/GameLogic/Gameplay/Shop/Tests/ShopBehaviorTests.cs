@@ -72,7 +72,7 @@ namespace GameLogic.Tests
                     Assert.AreEqual(20, state.EnergyCoins);
                     Assert.AreEqual(3, state.Slots.Count);
                     Assert.IsNull(state.StorageInstanceId);
-                    CollectionAssert.AreEqual(new[] { 1003, 1003, 1003 }, state.LastBatchRobotIds);
+                    CollectionAssert.AreEqual(new[] { 505, 505, 505 }, state.LastBatchRobotIds);
                     foreach (var slot in state.Slots)
                     {
                         Assert.AreEqual(1, slot.Offer.Level);
@@ -97,8 +97,8 @@ namespace GameLogic.Tests
             random.Enqueue(0, 0.499, 0.5, 0.99, 0.1, 0.7);
             using (var context = ShopTestData.Context(ShopTestData.Rules(1, 0, 1), random))
             {
-                CollectionAssert.AreEqual(new[] { 1001, 1001, 1003 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
-                CollectionAssert.AreEqual(new[] { 1003, 1001, 1003 }, context.GetState(BattleSide.Opponent).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 501, 501, 505 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 505, 501, 505 }, context.GetState(BattleSide.Opponent).LastBatchRobotIds);
             }
         }
 
@@ -337,7 +337,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(ShopOperationResult.IncompatibleMerge, context.TryMerge(BattleSide.Player, first.InstanceId, first.InstanceId));
                 Assert.AreEqual(ShopOperationResult.WrongSide, context.TryMerge(BattleSide.Player, same.InstanceId, enemy.InstanceId));
                 Assert.AreEqual(ShopOperationResult.Success, context.TryMerge(BattleSide.Player, same.InstanceId, first.InstanceId));
-                var unowned = context.Registry.CreateRobotFromConfig(ShopTestData.Robot(1001), BattleSide.Player);
+                var unowned = context.Registry.CreateRobotFromConfig(ShopTestData.Robot(501), BattleSide.Player);
                 Assert.AreEqual(ShopOperationResult.EntityNotFound, context.TryMerge(BattleSide.Player, unowned.InstanceId, first.InstanceId));
                 Assert.AreEqual(2, first.Level);
                 Assert.AreEqual(1, different.Level);
@@ -398,7 +398,7 @@ namespace GameLogic.Tests
                 context.TryRefresh(BattleSide.Player);
                 Assert.AreEqual(37, random.DoubleCalls - before, "初抽3+追加重抽30+兜底权重抽1+星级3。");
                 Assert.AreEqual(1, random.IntCalls);
-                CollectionAssert.AreEqual(new[] { 1001, 1001, 1002 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 501, 501, 502 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
             }
         }
 
@@ -413,7 +413,7 @@ namespace GameLogic.Tests
                 var before = random.DoubleCalls;
                 context.TryRefresh(BattleSide.Player);
                 Assert.AreEqual(36, random.DoubleCalls - before);
-                CollectionAssert.AreEqual(new[] { 1003, 1001, 1002 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 505, 501, 502 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
             }
         }
 
@@ -426,7 +426,7 @@ namespace GameLogic.Tests
                 var before = random.DoubleCalls;
                 context.TryRefresh(BattleSide.Player);
                 Assert.AreEqual(36, random.DoubleCalls - before);
-                CollectionAssert.AreEqual(new[] { 1001, 1001, 1001 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 501, 501, 501 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
                 Assert.AreEqual(1, random.IntCalls);
             }
         }
@@ -548,23 +548,23 @@ namespace GameLogic.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => ShopTestData.Rules(double.NaN));
             Assert.Throws<ArgumentOutOfRangeException>(() => ShopTestData.Rules(double.PositiveInfinity));
             Assert.Throws<ArgumentException>(() => new BattleShopContext(ShopTestData.Rules(),
-                new[] { 1001, 1001, 1003 }, ShopTestData.Candidates, id => ShopTestData.Robot(id)));
+                new[] { 501, 501, 505 }, ShopTestData.Candidates, id => ShopTestData.Robot(id)));
             Assert.Throws<ArgumentException>(() => new BattleShopContext(ShopTestData.Rules(),
-                new[] { 1001, 1002 }, ShopTestData.Candidates, id => ShopTestData.Robot(id)));
+                new[] { 501, 502 }, ShopTestData.Candidates, id => ShopTestData.Robot(id)));
         }
 
         [Test]
         public void CandidatesAndWeightsAreCopiedSoCallerCannotChangeFutureDraws()
         {
-            var weights = new Dictionary<int, double> { { 1001, 1 }, { 1002, 0 }, { 1003, 0 } };
-            var ids = new[] { 1001, 1002, 1003 };
+            var weights = new Dictionary<int, double> { { 501, 1 }, { 502, 0 }, { 505, 0 } };
+            var ids = new[] { 501, 502, 505 };
             using (var context = new BattleShopContext(new ShopRules(weights), ids, ids, id => ShopTestData.Robot(id), new ShopSequenceRandom()))
             {
-                weights[1001] = 0;
-                weights[1002] = 100;
+                weights[501] = 0;
+                weights[502] = 100;
                 ids[0] = 9999;
                 context.TryRefresh(BattleSide.Player);
-                CollectionAssert.AreEqual(new[] { 1001, 1001, 1001 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 501, 501, 501 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
             }
         }
     }

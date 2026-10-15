@@ -167,7 +167,7 @@ namespace GameLogic.Tests
             var instance = new GameObject("PreparedRobot");
             instance.transform.SetParent(_root.transform);
             var view = instance.AddComponent<RobotView>();
-            Set(view, "_configId", 1001);
+            Set(view, "_configId", 501);
             var cell = new GameObject("Cell_0_0");
             cell.transform.SetParent(instance.transform);
             cell.AddComponent<SpriteRenderer>();

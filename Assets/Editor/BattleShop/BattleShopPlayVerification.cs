@@ -71,7 +71,7 @@ namespace FreshGuard.Editor
                 Require(state.EnergyCoins == beforeReward + 50, "真实奖励适配器漏发或重复发币。");
                 while (state.EnergyCoins >= context.RefreshPrice)
                     Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.Success, "刷新消耗失败。");
-                var ui = GameModule.UI.GetUI<BattleShopUI>();
+                var ui = GameModule.UI.GetUI<MainCombatUI>()?.Shop;
                 var refresh = ui.transform.Find("m_rect_ShopPanel/m_btn_Refresh").gameObject;
                 var coins = ui.transform.Find("m_rect_ShopPanel/m_text_EnergyCoins").GetComponent<Text>();
                 var pointer = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
@@ -118,7 +118,7 @@ namespace FreshGuard.Editor
                 Require(result == ShopOperationResult.BattleEnded && context.IsEnded && !host.IsReady,
                     "部署通知内终局未阻止晚到视图。");
                 Require(UnityEngine.Object.FindObjectsOfType<RobotView>().Length == 0 &&
-                    player.Model.GetOccupant(new BoardCoordinate(4, 3)) == null && GameModule.UI.GetUI<BattleShopUI>() == null,
+                    player.Model.GetOccupant(new BoardCoordinate(4, 3)) == null && GameModule.UI.GetUI<MainCombatUI>()?.Shop == null,
                     "终局留下视图、占格或窗口。");
                 Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.BattleEnded, "终局仍可刷新。");
                 host.EndBattle();
@@ -140,7 +140,7 @@ namespace FreshGuard.Editor
                 try
                 {
                     host.EndBattle();
-                    await UniTask.WaitUntil(() => host.IsReady && GameModule.UI.GetUI<BattleShopUI>()?.IsPrepare == true)
+                    await UniTask.WaitUntil(() => host.IsReady && GameModule.UI.GetUI<MainCombatUI>()?.Shop?.IsPrepare == true)
                         .Timeout(TimeSpan.FromSeconds(15));
                     Require(host.Context.BattleId != last.BattleId && host.transform.Find("PreparedRobotViews") != null,
                         "清理通知内启动的新局被外层Cleanup销毁。");

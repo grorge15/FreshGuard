@@ -34,7 +34,7 @@ namespace GameLogic.Tests
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             var context = new BattleShopContext(ShopRules.FromTables(tables),
-                new[] { 1001, 1002, 1003 }, new[] { 1001, 1002, 1003 }, tables.TbRobot.Get);
+                new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, tables.TbRobot.Get);
             var session = new TowerBattleSession(context.BattleId, context.Registry, 100);
             var root = new GameObject("TowerBattlePlayback");
             var controller = root.AddComponent<BattleShopSceneController>();

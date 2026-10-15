@@ -243,8 +243,22 @@ MonoBehaviour:
   _bootstrap: {fileID: 1784076934}
   _enemies: {fileID: 164109971}
   _layoutConfigId: 1
-  _playerCandidates: e9030000ea030000eb030000ec030000ed030000ee030000
-  _opponentCandidates: e9030000ea030000eb030000ec030000ed030000ee030000
+  _playerCandidates: f5010000f6010000f7010000f8010000f9010000590200005a0200005b020000
+  _opponentCandidates: f5010000f6010000f7010000f8010000f9010000590200005a0200005b020000
+  _opponentAiSettings:
+    Enabled: 1
+    InitialDelay: 0.8
+    ThinkMin: 2
+    ThinkMax: 4
+    ActionMin: 0.8
+    ActionMax: 1.5
+    BusyRetryDelay: 0.5
+    ActionsPerRound: 3
+    PurchasesPerRound: 2
+    InitialRobotTarget: 3
+    MoveCooldown: 10
+    RefreshCooldown: 8
+    ResourceRetryDelay: 5
   _playerTowerView: {fileID: 436032437}
   _opponentTowerView: {fileID: 1519177346}
   _towerConfigId: 3001

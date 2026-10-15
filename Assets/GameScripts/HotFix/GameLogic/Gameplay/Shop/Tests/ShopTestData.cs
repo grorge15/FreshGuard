@@ -8,13 +8,13 @@ namespace GameLogic.Tests
 {
     internal static class ShopTestData
     {
-        internal static readonly int[] Candidates = { 1001, 1002, 1003 };
+        internal static readonly int[] Candidates = { 501, 502, 505 };
 
         internal static ShopRules Rules(double first = 1, double second = 1, double third = 1)
         {
             return new ShopRules(new Dictionary<int, double>
             {
-                { 1001, first }, { 1002, second }, { 1003, third }
+                { 501, first }, { 502, second }, { 505, third }
             });
         }
 
