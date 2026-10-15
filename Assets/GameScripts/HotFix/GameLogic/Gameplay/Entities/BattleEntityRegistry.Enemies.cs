@@ -9,19 +9,9 @@ namespace GameLogic
         public int CreateEnemyFromConfig(Enemy config, BattleSide side, int cycle = 1)
         {
             ThrowIfDisposed();
-            if (config == null) throw new ArgumentNullException(nameof(config));
-            EntityValidation.RequirePositive(config.Id, nameof(config.Id));
+            ValidateEnemyConfig(config);
             EntityValidation.RequireSide(side);
             if (cycle != 1 && cycle != 2) throw new ArgumentOutOfRangeException(nameof(cycle));
-            EntityValidation.RequirePositive(config.HpC1, nameof(config.HpC1));
-            EntityValidation.RequirePositive(config.HpC2, nameof(config.HpC2));
-            EntityValidation.RequireFiniteNonNegative(config.EnemySpeed, nameof(config.EnemySpeed));
-            if (config.EnemyType < 1 || config.EnemyType > 3) throw new ArgumentOutOfRangeException(nameof(config.EnemyType));
-            if (config.CanDropRogue != 0 && config.CanDropRogue != 1) throw new ArgumentOutOfRangeException(nameof(config.CanDropRogue));
-            if (config.LeakDamage < 0) throw new ArgumentOutOfRangeException(nameof(config.LeakDamage));
-            RequireRatio(config.ControlResist, nameof(config.ControlResist));
-            RequireRatio(config.KnockbackResist, nameof(config.KnockbackResist));
-            if (string.IsNullOrWhiteSpace(config.EnemyPrefab)) throw new ArgumentException("敌人预制体资源名不能为空。", nameof(config));
             var nextId = checked(_nextInstanceId + 1);
             EnemyEntity enemy;
             switch (config.Id)
@@ -44,6 +34,24 @@ namespace GameLogic
             }
             _nextInstanceId = nextId;
             return instanceId;
+        }
+
+        internal static void ValidateEnemyConfig(Enemy config)
+        {
+            if (config == null) throw new ArgumentNullException(nameof(config));
+            EntityValidation.RequirePositive(config.Id, nameof(config.Id));
+            EntityValidation.RequirePositive(config.HpC1, nameof(config.HpC1));
+            EntityValidation.RequirePositive(config.HpC2, nameof(config.HpC2));
+            EntityValidation.RequireFiniteNonNegative(config.EnemySpeed, nameof(config.EnemySpeed));
+            if (config.EnemyType < 1 || config.EnemyType > 3) throw new ArgumentOutOfRangeException(nameof(config.EnemyType));
+            if (config.CanDropRogue != 0 && config.CanDropRogue != 1) throw new ArgumentOutOfRangeException(nameof(config.CanDropRogue));
+            if (config.LeakDamage < 0) throw new ArgumentOutOfRangeException(nameof(config.LeakDamage));
+            RequireRatio(config.ControlResist, nameof(config.ControlResist));
+            RequireRatio(config.KnockbackResist, nameof(config.KnockbackResist));
+            if (string.IsNullOrWhiteSpace(config.EnemyPrefab)) throw new ArgumentException("敌人预制体资源名不能为空。", nameof(config));
+            if (config.Id != SkeletonEnemy.CONFIG_ID && config.Id != EliteSkeletonEnemy.CONFIG_ID &&
+                config.Id != SkeletonBossEnemy.CONFIG_ID)
+                throw new ArgumentException("未注册对应敌人实体类型：" + config.Id, nameof(config));
         }
 
         private static void RequireRatio(float value, string name)

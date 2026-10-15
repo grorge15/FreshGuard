@@ -17,11 +17,10 @@ public sealed partial class WaveSpawn : Luban.BeanBase
     public WaveSpawn(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
-        WaveId = _buf.ReadInt();
+        {int __n0 = _buf.ReadSize(); SpawnSecRange = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); SpawnSecRange[__index0] = __e0;}}
         EnemyId = _buf.ReadInt();
         EnemyId_Ref = null;
-        Count = _buf.ReadInt();
-        SpawnInterval = _buf.ReadFloat();
+        EnemyCount = _buf.ReadInt();
     }
 
     public static WaveSpawn DeserializeWaveSpawn(ByteBuf _buf)
@@ -30,26 +29,22 @@ public sealed partial class WaveSpawn : Luban.BeanBase
     }
 
     /// <summary>
-    /// 出兵组ID
+    /// 生成组唯一ID
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 波次ID
+    /// 正式开战累计时间窗口[开始,结束)
     /// </summary>
-    public readonly int WaveId;
+    public readonly int[] SpawnSecRange;
     /// <summary>
     /// 敌人配置ID
     /// </summary>
     public readonly int EnemyId;
     public enemy.Enemy EnemyId_Ref;
     /// <summary>
-    /// 每侧数量
+    /// 每侧生成数量
     /// </summary>
-    public readonly int Count;
-    /// <summary>
-    /// 生成间隔（秒），首个立即生成
-    /// </summary>
-    public readonly float SpawnInterval;
+    public readonly int EnemyCount;
    
     public const int __ID__ = 1608501037;
     public override int GetTypeId() => __ID__;
@@ -63,10 +58,9 @@ public sealed partial class WaveSpawn : Luban.BeanBase
     {
         return "{ "
         + "id:" + Id + ","
-        + "waveId:" + WaveId + ","
+        + "spawnSecRange:" + Luban.StringUtil.CollectionToString(SpawnSecRange) + ","
         + "enemyId:" + EnemyId + ","
-        + "count:" + Count + ","
-        + "spawnInterval:" + SpawnInterval + ","
+        + "enemyCount:" + EnemyCount + ","
         + "}";
     }
 }

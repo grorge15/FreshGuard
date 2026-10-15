@@ -261,6 +261,27 @@ public partial class Tables
             m_TbResultAward.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 波次方案（演示20波，数值可由策划调整）
+    /// </summary>
+    private wave.TbWavePlan m_TbWavePlan;
+    public wave.TbWavePlan TbWavePlan
+    {
+        get
+        {
+            if (m_TbWavePlan == null)
+            {
+                m_TbWavePlan = new wave.TbWavePlan(defaultLoader("wave_tbwaveplan"));
+                m_TbWavePlan.ResolveRef(this);
+            }
+            return m_TbWavePlan;
+        }
+        set
+        {
+            m_TbWavePlan = value;
+            m_TbWavePlan.ResolveRef(this);
+        }
+    }
 
     #endregion
 
