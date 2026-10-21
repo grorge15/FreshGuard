@@ -12,6 +12,7 @@ namespace GameLogic
         [SerializeField] private int _columns = 11;
         [SerializeField] private int _rows = 9;
         [SerializeField] private float _cellSize = 0.35f;
+        [SerializeField] private float _referenceCellSize = MapGridMath.REFERENCE_CELL_SIZE;
         [SerializeField] private float _wallThickness = 0.25f;
         [SerializeField] private SpriteRenderer _slotPrefab;
         [SerializeField, Tooltip("当前棋盘的格子图片；Player 和 Enemy 可分别配置。留空使用 Slot Prefab 的图片。")]
@@ -20,9 +21,11 @@ namespace GameLogic
         private SpriteRenderer[,] _slots;
         private BoardModel _model;
         private bool _initialized;
+        private float _boundaryThicknessScale = 1f;
         private readonly Dictionary<BoardCoordinate, BoardSlotState> _previewStates = new Dictionary<BoardCoordinate, BoardSlotState>();
 
         private static readonly Color NormalColor = new Color(0.11f, 0.15f, 0.20f, 0.94f);
+        private static readonly Color TrackColor = new Color(0.32f, 0.29f, 0.20f, 0.94f);
         private static readonly Color OccupiedColor = new Color(0.30f, 0.45f, 0.65f, 0.98f);
         private static readonly Color ValidColor = new Color(0.20f, 0.80f, 0.35f, 0.98f);
         private static readonly Color InvalidColor = new Color(0.85f, 0.22f, 0.22f, 0.98f);
@@ -34,11 +37,16 @@ namespace GameLogic
         public PhysicalCollisionBoundary Boundary => _boundary;
 
         public float CellSize => _cellSize;
+        public float ReferenceCellSize => _referenceCellSize;
+        public int Columns => _columns;
+        public int Rows => _rows;
 
         /// <summary>仅在新局、尚无部署实体时重置；同局初始化不恢复破碎格。</summary>
         public bool ResetForBattle(BoardLayoutRules layout)
         {
             if (layout == null) throw new ArgumentNullException(nameof(layout));
+            if (layout.IsTerrainMap && (float.IsNaN(ReferenceCellSize) || float.IsInfinity(ReferenceCellSize) || ReferenceCellSize <= 0f))
+                throw new InvalidOperationException("棋盘参考格距必须为有限正数。");
             ClearPreview();
             if (_initialized && (_columns != layout.Columns || _rows != layout.Rows || _cellSize != layout.CellSize))
             {
@@ -50,8 +58,11 @@ namespace GameLogic
             _columns = layout.Columns;
             _rows = layout.Rows;
             _cellSize = layout.CellSize;
+            _boundaryThicknessScale = layout.IsTerrainMap ? _cellSize / ReferenceCellSize : 1f;
             if (!Initialize()) return false;
-            _model = new BoardModel(_columns, _rows, layout.OpenCells, layout.ReservedBorderWidth);
+            _boundary.Configure(Size, _wallThickness * _boundaryThicknessScale);
+            _model = layout.IsTerrainMap ? new BoardModel(layout.CreateMap()) :
+                new BoardModel(_columns, _rows, layout.OpenCells, layout.ReservedBorderWidth);
             RefreshAllCells();
             return true;
         }
@@ -60,6 +71,7 @@ namespace GameLogic
         {
             if (_initialized)
             {
+                SetBattleContentVisible(true);
                 RefreshSlotSprites();
                 _boundary.SetWallsEnabled(true);
                 return true;
@@ -81,6 +93,7 @@ namespace GameLogic
                     slotRoot = new GameObject("Slots").transform;
                     slotRoot.SetParent(transform, false);
                 }
+                slotRoot.gameObject.SetActive(true);
                 // The outer ring stays visible and addressable, but cannot hold robots.
                 _model = new BoardModel(_columns, _rows, null, reservedBorderWidth: 1);
                 _slots = new SpriteRenderer[_columns, _rows];
@@ -118,7 +131,7 @@ namespace GameLogic
                 boundaryRoot.localScale = Vector3.one;
                 _boundary = boundaryRoot.GetComponent<PhysicalCollisionBoundary>();
                 if (_boundary == null) _boundary = boundaryRoot.gameObject.AddComponent<PhysicalCollisionBoundary>();
-                _boundary.Configure(Size, _wallThickness);
+                _boundary.Configure(Size, _wallThickness * _boundaryThicknessScale);
                 _initialized = true;
                 return true;
             }
@@ -139,14 +152,25 @@ namespace GameLogic
                 foreach (var collider in root.GetComponentsInChildren<Collider2D>(true)) collider.enabled = false;
         }
 
+        /// <summary>停止地图适配时隐藏仍按上一局尺寸生成的内容，避免恢复父缩放后残留放大的网格和外墙。</summary>
+        public void SetBattleContentVisible(bool visible)
+        {
+            var slots = transform.Find("Slots");
+            if (slots != null) slots.gameObject.SetActive(visible);
+            var glasses = transform.Find("Glasses");
+            if (glasses != null) glasses.gameObject.SetActive(visible);
+            if (_boundary != null) _boundary.SetWallsEnabled(visible);
+            if (!visible)
+                foreach (var robot in GetComponentsInChildren<RobotView>(true)) robot.gameObject.SetActive(false);
+        }
+
         public bool TryGetCoordinate(Vector3 worldPosition, out BoardCoordinate coordinate)
         {
             coordinate = default(BoardCoordinate);
             if (!_initialized) return false;
             var point = transform.InverseTransformPoint(worldPosition);
             if (float.IsNaN(point.x) || float.IsNaN(point.y) || float.IsInfinity(point.x) || float.IsInfinity(point.y)) return false;
-            coordinate = new BoardCoordinate(Mathf.FloorToInt((point.x + Size.x * 0.5f) / _cellSize),
-                Mathf.FloorToInt((point.y + Size.y * 0.5f) / _cellSize));
+            coordinate = MapGridMath.GetCoordinate(point, _columns, _rows, _cellSize);
             return _model.IsInside(coordinate);
         }
 
@@ -197,8 +221,7 @@ namespace GameLogic
 
         private Vector3 GetLocalPosition(BoardCoordinate coordinate)
         {
-            return new Vector3((coordinate.Column + 0.5f) * _cellSize - Size.x * 0.5f,
-                (coordinate.Row + 0.5f) * _cellSize - Size.y * 0.5f, 0f);
+            return MapGridMath.GetLocalPosition(coordinate, _columns, _rows, _cellSize);
         }
 
         private void Refresh(BoardCoordinate coordinate)
@@ -214,7 +237,8 @@ namespace GameLogic
         {
             if (!_initialized || !_model.IsInside(coordinate)) return;
             _slots[coordinate.Column, coordinate.Row].color = _model.IsHighlighted(coordinate) ? HighlightedColor :
-                _model.IsOccupied(coordinate) ? OccupiedColor : NormalColor;
+                _model.IsOccupied(coordinate) ? OccupiedColor :
+                _model.IsTerrainMap && _model.GetTerrain(coordinate) == TerrainType.Track ? TrackColor : NormalColor;
         }
 
         private void OnDisable() { ClearPreview(); }

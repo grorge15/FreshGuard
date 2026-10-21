@@ -16,6 +16,16 @@ namespace GameLogic
         private Collider2D[] _colliders;
         private TextMesh _levelLabel;
         private RobotEntity _robot;
+        private Vector3? _authoredScale;
+
+        public void ApplyBoardScale(PlacementBoardView board)
+        {
+            if (board == null) throw new ArgumentNullException(nameof(board));
+            if (!_authoredScale.HasValue) _authoredScale = transform.localScale;
+            var factor = board.CellSize / MapGridMath.REFERENCE_CELL_SIZE;
+            var original = _authoredScale.Value;
+            transform.localScale = new Vector3(original.x * factor, original.y * factor, original.z);
+        }
         private bool _mergeCandidate;
         private float _feedbackUntil;
         public int MergeFeedbackCount { get; private set; }

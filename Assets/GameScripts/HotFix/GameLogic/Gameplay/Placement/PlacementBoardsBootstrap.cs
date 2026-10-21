@@ -25,6 +25,17 @@ namespace GameLogic
         {
             if (_launched) return true;
             if (_ball == null || _opponentBall == null) return false;
+            try
+            {
+                MapBattleValidation.RequireClearSpawn(player, _ball);
+                MapBattleValidation.RequireClearSpawn(opponent, _opponentBall);
+            }
+            catch (System.Exception e)
+            {
+                StopBalls();
+                Debug.LogError("能源球中心出生检查失败：" + e.Message, this);
+                return false;
+            }
             var angle = Random.Range(20f, 70f);
             _ball.LaunchAt(player.transform.position, angle);
             _opponentBall.LaunchAt(opponent.transform.position, angle);

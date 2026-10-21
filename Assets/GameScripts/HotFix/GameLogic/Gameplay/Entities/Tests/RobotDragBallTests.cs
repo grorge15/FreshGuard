@@ -46,6 +46,29 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void MapScaleComposesWithDraggingBerserkAndFreezeWithoutChangingConfiguredSpeed()
+        {
+            _ball.SetMapScale(0.5f);
+            Launch();
+            AssertSpeed(3.5f);
+            SetDragging(true);
+            AssertSpeed(2.45f);
+            _ball.SetFrozen(true);
+            AssertStopped();
+            _ball.SetBerserk(true);
+            _ball.SetFrozen(false);
+            AssertSpeed(3.5f);
+            _ball.SetBerserk(false);
+            AssertSpeed(2.45f);
+            Assert.AreEqual(7f, _ball.Speed, Tolerance);
+            Assert.Throws<InvalidOperationException>(() => _ball.SetMapScale(1f));
+            _ball.Stop();
+            _ball.SetMapScale(1f);
+            Launch();
+            AssertSpeed(7f);
+        }
+
+        [Test]
         public void SetDraggingHasPublicBoolContractAndEffectiveSpeedIsReadOnly()
         {
             var method = DraggingMethod();

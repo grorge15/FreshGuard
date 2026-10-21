@@ -8,6 +8,8 @@ namespace GameLogic
     public sealed class BoardLayoutRules
     {
         private readonly HashSet<BoardCoordinate> _open = new HashSet<BoardCoordinate>();
+        private readonly MapData _map;
+        public bool IsTerrainMap => _map != null;
         public int Columns { get; }
         public int Rows { get; }
         public float CellSize { get; }
@@ -16,6 +18,31 @@ namespace GameLogic
         public int ColoredGlassId { get; }
         public BoardCoordinate ColoredGlassCell { get; }
         public IReadOnlyCollection<BoardCoordinate> OpenCells => _open;
+
+        public BoardLayoutRules(MapData map)
+        {
+            MapValidator.ThrowIfInvalid(map);
+            _map = map.Clone();
+            Columns = map.Columns; Rows = map.Rows; CellSize = map.CellSize;
+            NormalGlassId = map.NormalGlassId; ColoredGlassId = map.ColoredGlassId;
+            ReservedBorderWidth = 0;
+            for (var row = 0; row < Rows; row++)
+                for (var column = 0; column < Columns; column++)
+                {
+                    var cell = new BoardCoordinate(column, row);
+                    if (_map.CanPlaceUnit(cell)) _open.Add(cell);
+                }
+        }
+
+        public MapData CreateMap() => _map?.Clone();
+        public TerrainType GetInitialTerrain(BoardCoordinate cell)
+        {
+            if (_map != null) return _map.GetTerrain(cell);
+            if (cell.Column < 0 || cell.Column >= Columns || cell.Row < 0 || cell.Row >= Rows)
+                throw new ArgumentOutOfRangeException(nameof(cell));
+            return _open.Contains(cell) ? TerrainType.Empty : cell.Equals(ColoredGlassCell) ? TerrainType.GlassColored : TerrainType.GlassNormal;
+        }
+        public int GetGlassConfigId(BoardCoordinate cell) => GetInitialTerrain(cell) == TerrainType.GlassColored ? ColoredGlassId : NormalGlassId;
 
         public BoardLayoutRules(BoardLayout config)
         {
@@ -50,7 +77,11 @@ namespace GameLogic
             cell.Column >= ReservedBorderWidth && cell.Column < Columns - ReservedBorderWidth &&
             cell.Row >= ReservedBorderWidth && cell.Row < Rows - ReservedBorderWidth;
 
-        public bool HasInitialGlass(BoardCoordinate cell) =>
-            cell.Column >= 0 && cell.Column < Columns && cell.Row >= 0 && cell.Row < Rows && !_open.Contains(cell);
+        public bool HasInitialGlass(BoardCoordinate cell)
+        {
+            if (cell.Column < 0 || cell.Column >= Columns || cell.Row < 0 || cell.Row >= Rows) return false;
+            var terrain = GetInitialTerrain(cell);
+            return terrain == TerrainType.GlassNormal || terrain == TerrainType.GlassColored;
+        }
     }
 }

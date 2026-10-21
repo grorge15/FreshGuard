@@ -41,7 +41,7 @@ namespace GameLogic
                     {
                         var cell = new BoardCoordinate(column, row);
                         if (!layout.HasInitialGlass(cell)) continue;
-                        var config = tables.TbGlass.Get(cell.Equals(layout.ColoredGlassCell) ? layout.ColoredGlassId : layout.NormalGlassId);
+                        var config = tables.TbGlass.Get(layout.GetGlassConfigId(cell));
                         pending = await GameModule.Resource.LoadGameObjectAsync(config.PrefabLocation, transform, token);
                         token.ThrowIfCancellationRequested();
                         if (_context != context || host == null || host.Context != context || context.IsEnded)

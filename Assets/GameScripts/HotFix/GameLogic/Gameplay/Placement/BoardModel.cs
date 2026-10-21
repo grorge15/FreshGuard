@@ -93,11 +93,31 @@ namespace GameLogic
     {
         private readonly string[,] _occupants;
         private readonly bool[,] _open;
+        private readonly MapData _map;
         private readonly int _reservedBorderWidth;
         private readonly HashSet<BoardCoordinate> _highlighted = new HashSet<BoardCoordinate>();
 
         public int Columns { get; }
         public int Rows { get; }
+        public bool IsTerrainMap => _map != null;
+
+        public BoardModel(MapData map)
+        {
+            MapValidator.ThrowIfInvalid(map);
+            _map = map.Clone();
+            Columns = map.Columns;
+            Rows = map.Rows;
+            _occupants = new string[Columns, Rows];
+        }
+
+        public MapData CaptureMap() => _map?.Clone();
+        public TerrainType GetTerrain(BoardCoordinate coordinate)
+        {
+            if (!IsInside(coordinate)) throw new ArgumentOutOfRangeException(nameof(coordinate));
+            return _map != null ? _map.GetTerrain(coordinate) : IsOpen(coordinate) ? TerrainType.Empty : TerrainType.GlassNormal;
+        }
+        public bool CanPlaceUnit(BoardCoordinate coordinate) => IsOpen(coordinate);
+        public bool CanEnergyBallPass(BoardCoordinate coordinate) => _map != null ? _map.CanEnergyBallPass(coordinate) : IsOpen(coordinate);
 
         public BoardModel(int columns, int rows)
             : this(columns, rows, null)
@@ -133,6 +153,7 @@ namespace GameLogic
 
         public bool IsOpen(BoardCoordinate coordinate)
         {
+            if (_map != null) return _map.CanPlaceUnit(coordinate);
             return IsInsidePlacementArea(coordinate) && _open[coordinate.Column, coordinate.Row];
         }
 
@@ -146,6 +167,14 @@ namespace GameLogic
         public bool SetOpen(BoardCoordinate coordinate, bool open)
         {
             if (!IsInside(coordinate) || (open && !IsInsidePlacementArea(coordinate)) || (!open && IsOccupied(coordinate))) return false;
+            if (_map != null)
+            {
+                var terrain = _map.GetTerrain(coordinate);
+                if (open && (terrain == TerrainType.GlassNormal || terrain == TerrainType.GlassColored))
+                { _map.SetTerrain(coordinate, TerrainType.Empty); return true; }
+                // 轨道不可通过旧开放接口变成可部署格，也不允许制造无对应实体的玻璃。
+                return open == (terrain == TerrainType.Empty);
+            }
             _open[coordinate.Column, coordinate.Row] = open;
             return true;
         }
