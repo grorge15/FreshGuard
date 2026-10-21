@@ -48,6 +48,11 @@ namespace GameLogic
             public bool AttackHandled;
         }
 
+        private Vector3? _mapOriginalScale;
+        private float _mapScale = 1f;
+        public float MapScale => _mapScale;
+        public float WorldRadius => radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
+
         public int ComboCount { get; private set; }
         public Func<int, float> GlobalValueProvider { get; set; }
         public Vector2 CurrentDirection => _direction;
@@ -56,7 +61,7 @@ namespace GameLogic
         {
             get
             {
-                return !_dragging || IsBerserk ? speed : speed * ReadDraggingMultiplier();
+                return speed * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
             }
         }
         public int BounceCount { get; private set; }
@@ -68,6 +73,21 @@ namespace GameLogic
         public event Action<PhysicalCollisionBall> EffectiveInteraction;
         public event Action<PhysicalCollisionBall> ComboThresholdReached;
         public event Action<PhysicalCollisionBall, int> RobotContactDetected;
+
+        public void SetMapScale(float scale)
+        {
+            if (_launched) throw new InvalidOperationException("能源球运行中不能修改地图倍率。");
+            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(scale));
+            if (!_mapOriginalScale.HasValue) _mapOriginalScale = transform.localScale;
+            var original = _mapOriginalScale.Value;
+            var scaled = new Vector3(original.x * scale, original.y * scale, original.z);
+            if (float.IsNaN(scaled.x) || float.IsInfinity(scaled.x) || float.IsNaN(scaled.y) || float.IsInfinity(scaled.y) ||
+                scaled.x == 0f || scaled.y == 0f)
+                throw new ArgumentOutOfRangeException(nameof(scale), "能源球缩放超出有效数值范围。");
+            transform.localScale = scaled;
+            _mapScale = scale;
+        }
 
         private float ReadDraggingMultiplier()
         {

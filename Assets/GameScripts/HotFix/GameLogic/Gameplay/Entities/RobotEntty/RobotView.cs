@@ -17,6 +17,16 @@ namespace GameLogic
         private TextMesh _levelLabel;
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
+        private Vector3? _authoredScale;
+
+        public void ApplyBoardScale(PlacementBoardView board)
+        {
+            if (board == null) throw new ArgumentNullException(nameof(board));
+            if (!_authoredScale.HasValue) _authoredScale = transform.localScale;
+            var factor = board.CellSize / MapGridMath.REFERENCE_CELL_SIZE;
+            var original = _authoredScale.Value;
+            transform.localScale = new Vector3(original.x * factor, original.y * factor, original.z);
+        }
         private bool _mergeCandidate;
         private bool _berserkTrigger;
         private float _feedbackUntil;

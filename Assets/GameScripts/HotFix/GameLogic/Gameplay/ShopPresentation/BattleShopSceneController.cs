@@ -71,9 +71,10 @@ namespace GameLogic
                 if (_placement == null || _playerBoard == null || _opponentBoard == null || _bootstrap == null)
                     throw new InvalidOperationException("商店缺少双方盘面或统一启动器引用。");
                 _bootstrap.StopBalls();
-                var layout = new BoardLayoutRules(tables.TbBoardLayout.Get(_layoutConfigId));
+                var layout = await ReadBoardLayoutAsync(tables, cancellationToken);
                 if (!_playerBoard.ResetForBattle(layout) || !_opponentBoard.ResetForBattle(layout) || !_bootstrap.Initialize())
                     throw new InvalidOperationException("双方棋盘初始化失败。");
+                ApplyMapLayout();
                 _rules = ShopRules.FromTables(tables);
                 foreach (var id in new[] { layout.NormalGlassId, layout.ColoredGlassId })
                 {
@@ -117,6 +118,7 @@ namespace GameLogic
                 _opponentGlass = GetGlassController(_opponentBoard);
                 await _playerGlass.PrepareAsync(this, context, _playerBoard, BattleSide.Player, layout, tables, cancellationToken);
                 await _opponentGlass.PrepareAsync(this, context, _opponentBoard, BattleSide.Opponent, layout, tables, cancellationToken);
+                ValidateMapSpawn();
                 PrepareTowers(context, tables, cancellationToken);
                 if (_enemies == null) throw new InvalidOperationException("缺少 EnemyBattleController 场景引用。");
                 await _enemies.PrepareAsync(this, context, tables, cancellationToken);
@@ -182,6 +184,7 @@ namespace GameLogic
             root.localPosition = Vector3.zero;
             root.localRotation = Quaternion.identity;
             root.localScale = Vector3.one;
+            root.gameObject.SetActive(true);
             var controller = root.GetComponent<GlassBoardController>();
             return controller != null ? controller : root.gameObject.AddComponent<GlassBoardController>();
         }
@@ -317,7 +320,7 @@ namespace GameLogic
             instance.transform.SetParent(target.EntityParent, false);
             instance.transform.position = target.AnchorWorldPosition;
             instance.transform.localRotation = Quaternion.identity;
-            instance.transform.localScale = Vector3.one;
+            view.ApplyBoardScale(target.Board);
             _views[robot.InstanceId] = instance;
             instance.SetActive(true);
             view.Render(robot);
@@ -361,7 +364,7 @@ namespace GameLogic
                 prepared.transform.SetParent(target.EntityParent, false);
                 prepared.transform.position = target.AnchorWorldPosition;
                 prepared.transform.localRotation = Quaternion.identity;
-                prepared.transform.localScale = Vector3.one;
+                view.ApplyBoardScale(target.Board);
                 _views.Add(instanceId, prepared);
                 prepared.SetActive(true);
                 SyncRobotCollisionMode(view, robot.Side);
@@ -453,6 +456,7 @@ namespace GameLogic
                             var board = robot.Side == BattleSide.Player ? _playerBoard : _opponentBoard;
                             instance.transform.SetParent(board.transform, false);
                             instance.transform.position = board.GetCellWorldPosition(robot.Anchor.Value);
+                            instance.GetComponent<RobotView>()?.ApplyBoardScale(board);
                         }
                         var view = instance.GetComponent<RobotView>();
                         SyncRobotCollisionMode(view, robot.Side);
@@ -566,6 +570,7 @@ namespace GameLogic
             _opponentGlass?.Clear();
             _playerGlass = _opponentGlass = null;
             ClearViews();
+            RestoreMapLayout();
             context?.Dispose();
             if (_playerBoard != null) _playerBoard.RefreshAllCells();
             if (_opponentBoard != null) _opponentBoard.RefreshAllCells();
