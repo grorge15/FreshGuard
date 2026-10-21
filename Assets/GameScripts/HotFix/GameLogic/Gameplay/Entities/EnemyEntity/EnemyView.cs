@@ -14,16 +14,25 @@ namespace GameLogic
         [SerializeField] private int _configId;
         private Animator _animator;
         private BattleEntityRegistry _registry;
+        private SpriteRenderer[] _spriteRenderers;
+        private Color[] _baseSpriteColors;
         private bool _moving;
         private bool _attacking;
         private bool _removing;
+        private float _hitFlashRemaining;
+        private float _hitFlashDuration;
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
         public string AnimationState { get; private set; } = "Idle";
+        public bool IsHitFlashing => _hitFlashRemaining > 0f;
         public event Action<int> RemovalAnimationCompleted;
 
-        private void Awake() { _animator = GetComponent<Animator>(); }
+        private void Awake()
+        {
+            _animator = GetComponent<Animator>();
+            CacheVisuals();
+        }
 
         private void OnEnable()
         {
@@ -102,6 +111,7 @@ namespace GameLogic
 
         private void Update()
         {
+            AdvanceHitFeedback(Time.unscaledDeltaTime);
             if (_registry == null || InstanceId <= 0) return;
             if (!HasAliveEntity())
             {
@@ -109,6 +119,56 @@ namespace GameLogic
                 ResetBinding();
                 gameObject.SetActive(false);
             }
+        }
+
+        private void LateUpdate() { RefreshSortingOrder(); }
+
+        public bool PlayHitFeedback(float duration = 0.12f)
+        {
+            if (!HasAliveEntity() || duration <= 0f || float.IsNaN(duration) || float.IsInfinity(duration)) return false;
+            CacheVisuals();
+            _hitFlashDuration = duration;
+            _hitFlashRemaining = duration;
+            ApplyHitFlash(true);
+            return true;
+        }
+
+        private void AdvanceHitFeedback(float deltaTime)
+        {
+            if (_hitFlashRemaining <= 0f) return;
+            _hitFlashRemaining = Mathf.Max(0f, _hitFlashRemaining - Mathf.Max(0f, deltaTime));
+            ApplyHitFlash(_hitFlashRemaining > 0f);
+        }
+
+        private void CacheVisuals()
+        {
+            if (_spriteRenderers != null) return;
+            _spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+            _baseSpriteColors = new Color[_spriteRenderers.Length];
+            for (var i = 0; i < _spriteRenderers.Length; i++) _baseSpriteColors[i] = _spriteRenderers[i].color;
+        }
+
+        private void ApplyHitFlash(bool active)
+        {
+            CacheVisuals();
+            for (var i = 0; i < _spriteRenderers.Length; i++)
+            {
+                if (_spriteRenderers[i] == null) continue;
+                _spriteRenderers[i].color = active ? Color.Lerp(_baseSpriteColors[i], Color.red, 0.85f) : _baseSpriteColors[i];
+            }
+        }
+
+        private void RefreshSortingOrder()
+        {
+            CacheVisuals();
+            // 越靠下越靠前；同一高度再用实例 ID 保证稳定顺序，避免排序相同导致的闪烁。
+            var order = Mathf.RoundToInt(-transform.position.y * 100f) * 10 + Mathf.Abs(InstanceId % 10);
+            foreach (var renderer in _spriteRenderers)
+                if (renderer != null)
+                {
+                    renderer.spriteSortPoint = SpriteSortPoint.Pivot;
+                    renderer.sortingOrder = order;
+                }
         }
 
         private bool HasAliveEntity()
@@ -133,6 +193,9 @@ namespace GameLogic
             _moving = false;
             _attacking = false;
             _removing = false;
+            _hitFlashRemaining = 0f;
+            _hitFlashDuration = 0f;
+            ApplyHitFlash(false);
         }
 
         private void PlayState(string state, bool restart = false)

@@ -140,5 +140,7 @@ MonoBehaviour:
   initialAngleMax: 70
   speed: 5
   radius: 0.2
-  launchOnEnable: 1
+  launchOnEnable: 0
   globalConfig: {fileID: 4900000, guid: dd7d192fb80fcca40a9cd06a02d7ced7, type: 3}
+  _comboPopupPrefab: {fileID: 7490383479568946429, guid: 29c6ecd0140019d4d9aaa55a513d4f18, type: 3}
+  _comboPopupOffset: 0.35

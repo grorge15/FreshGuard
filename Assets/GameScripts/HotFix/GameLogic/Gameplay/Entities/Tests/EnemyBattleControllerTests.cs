@@ -19,6 +19,83 @@ namespace GameLogic.Tests
         [TearDown] public void TearDown() { _fixture?.Dispose(); _fixture = null; }
 
         [Test]
+        public void NewWaveStartsWhilePreviousEnemiesKeepTheirIdentityAndPosition()
+        {
+            _fixture = new Fixture(WaveTestData.Tables(
+                new[] { WaveTestData.Plan(1, 1), WaveTestData.Plan(2, 2) },
+                new[] { WaveTestData.Spawn(1, 0, 8, 2001, 4), WaveTestData.Spawn(2, 3, 5, 2001, 1) }));
+            var f = _fixture; f.Prepare(); f.Start();
+            var oldId = f.PlayerView.InstanceId;
+            f.Context.Registry.ApplyDamage(oldId, 7, out _);
+            f.Advance(3f);
+            var controller = (EnemyBattleController)f.Controller;
+            Assert.AreEqual(2, controller.CurrentWave);
+            Assert.AreEqual(3, f.Spawned(BattleSide.Player));
+            Assert.AreEqual(3, f.Spawned(BattleSide.Opponent));
+            Assert.IsFalse(controller.IsAllSpawnsCompleted, "前波仍有后续出兵，不能在切波时丢弃");
+            Assert.IsTrue(f.Context.Registry.TryGet(oldId, out var old));
+            Assert.AreEqual(93, ((EnemyEntity)old).CurrentHp);
+            Assert.That(((EnemyEntity)old).RouteProgress, Is.EqualTo(0.9f).Within(0.0001f));
+            f.Advance(3f);
+            Assert.AreEqual(5, f.Spawned(BattleSide.Player));
+            Assert.IsTrue(controller.IsAllSpawnsCompleted);
+        }
+
+        [Test]
+        public void CycleTwoUsesNewHealthWithoutResettingEnemiesFromCycleOne()
+        {
+            var plans = Enumerable.Range(1, 11).Select(w => WaveTestData.Plan(w, w)).ToArray();
+            var groups = Enumerable.Range(1, 11).Select(w => WaveTestData.Spawn(w, w - 1, w, 2001, 1)).ToArray();
+            _fixture = new Fixture(WaveTestData.Tables(plans, groups));
+            var f = _fixture; f.Prepare(); f.Start();
+            var oldId = f.PlayerView.InstanceId;
+            f.Context.Registry.ApplyDamage(oldId, 7, out _);
+            f.Advance(10f);
+            var controller = (EnemyBattleController)f.Controller;
+            Assert.AreEqual(11, controller.CurrentWave);
+            Assert.IsTrue(f.Context.Registry.TryGet(oldId, out var old));
+            Assert.AreEqual(93, ((EnemyEntity)old).CurrentHp);
+            Assert.AreEqual(1, ((EnemyEntity)old).Cycle);
+            var latest = f.Views.Where(v => f.Side(v) == BattleSide.Player).OrderBy(v => v.InstanceId).Last();
+            f.Context.Registry.TryGet(latest.InstanceId, out var entity);
+            Assert.AreEqual(220, ((EnemyEntity)entity).CurrentHp);
+            Assert.AreEqual(2, ((EnemyEntity)entity).Cycle);
+            foreach (var view in f.Views) f.Context.Registry.Remove(view.InstanceId, EntityRemovalReason.Manual, out _);
+            f.Advance(10f);
+            Assert.IsTrue(controller.IsAllEnemiesCleared);
+            Assert.IsTrue(f.Host.IsCombatRunning, "全部出完且清空不能自行触发终局");
+            Assert.AreEqual(11, controller.CurrentWave);
+            Assert.That(controller.ElapsedSeconds, Is.EqualTo(20d).Within(0.0001d));
+        }
+
+        [TestCase(2002, 2)]
+        [TestCase(2003, 0)]
+        public void EliteAndBossLeaksReadConfiguredDamageBeforeEntityRecycling(int enemyId, int remainingHp)
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 1, enemyId, 1) }));
+            var f = _fixture; f.SetRoutes(new[] { new Vector3(-0.61f, 0f, 0f) });
+            f.Prepare(); f.Start(); f.Advance(1f);
+            Assert.AreEqual(remainingHp, f.Host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(remainingHp, f.Host.Towers.OpponentTower.CurrentHp);
+        }
+
+        [Test]
+        public void ContinuousClockKeepsAdvancingAfterTheLastEnemyClears()
+        {
+            var f = Create(); f.Start(); f.Advance(4.5f);
+            foreach (var view in f.Views)
+                f.Context.Registry.Remove(view.InstanceId, EntityRemovalReason.Manual, out _);
+            f.Advance(1f);
+            Assert.IsTrue(f.Completed);
+            var elapsed = f.Controller.GetType().GetProperty("ElapsedSeconds");
+            Assert.IsNotNull(elapsed, "波次系统需要持续的整局战斗时钟");
+            Assert.That((double)elapsed.GetValue(f.Controller), Is.EqualTo(5.5d).Within(0.0001d));
+            f.Advance(10f);
+            Assert.That((double)elapsed.GetValue(f.Controller), Is.EqualTo(15.5d).Within(0.0001d));
+        }
+
+        [Test]
         public void FirstWaveTablesSupplyTowerHealthAndReferencedEnemy()
         {
             var tables = LoadTables();
@@ -27,14 +104,35 @@ namespace GameLogic.Tests
             Assert.IsNotNull(towerTable, "缺少 Tower 配置表");
             Assert.IsNotNull(waveTable, "缺少波次出兵表");
             var tower = GetRow(towerTable.GetValue(tables), 3001);
-            var wave = GetRow(waveTable.GetValue(tables), 1);
-            Assert.AreEqual(100, Field<int>(tower, "MaxHp"));
+            var wave = GetRow(waveTable.GetValue(tables), 2300);
+            Assert.AreEqual(5, Field<int>(tower, "MaxHp"));
             Assert.AreEqual("Tower", Field<string>(tower, "Prefab"));
-            Assert.AreEqual(1, Field<int>(wave, "WaveId"));
             Assert.AreEqual(2001, Field<int>(wave, "EnemyId"));
-            Assert.AreEqual(10, Field<int>(wave, "Count"));
-            Assert.AreEqual(0.5f, Field<float>(wave, "SpawnInterval"));
+            Assert.AreEqual(11, Field<int>(wave, "EnemyCount"));
+            CollectionAssert.AreEqual(new[] { 0, 20 }, Field<int[]>(wave, "SpawnSecRange"));
             Assert.AreEqual(1, tables.TbEnemy.Get(Field<int>(wave, "EnemyId")).LeakDamage);
+        }
+
+        [Test]
+        public void EnemyDisappearsAtTowerColliderEdgeAndDealsExactlyOneDamage()
+        {
+            var f = Create(false);
+            var tower = f.Root.GetComponentsInChildren<TowerView>().Single(v => v.transform.position.x == 0f);
+            tower.transform.localScale = Vector3.one;
+            f.SetRoutes(new[] { new Vector3(-0.8f, 0f, 0f) });
+            Physics2D.SyncTransforms();
+            Assert.That(tower.GetComponent<Collider2D>().ClosestPoint(new Vector2(-0.8f, 0f)).x,
+                Is.EqualTo(-0.5f).Within(Physics2D.defaultContactOffset + 0.0001f), "测试塔边缘包含 Unity 的接触容差");
+            f.Prepare(); f.Start();
+            var id = f.PlayerView.InstanceId;
+            f.Advance(0.9f);
+            Assert.IsTrue(f.Context.Registry.TryGet(id, out _));
+            Assert.AreEqual(5, f.Host.Towers.PlayerTower.CurrentHp);
+            f.Advance(0.11f);
+            Assert.IsFalse(f.Context.Registry.TryGet(id, out _), "到达碰撞体边缘即移除，不应继续走到塔中心");
+            Assert.AreEqual(4, f.Host.Towers.PlayerTower.CurrentHp);
+            f.Advance(0f);
+            Assert.AreEqual(4, f.Host.Towers.PlayerTower.CurrentHp);
         }
 
         [Test]
@@ -58,7 +156,7 @@ namespace GameLogic.Tests
             var f = Create(); f.Start(); f.Advance(0.5f);
             Assert.AreEqual(2, f.Spawned(BattleSide.Player));
             var player = f.Views.Where(v => f.Side(v) == BattleSide.Player).OrderBy(v => v.InstanceId).ToArray();
-            Assert.That(player[0].transform.position.y, Is.EqualTo(0.7f).Within(0.0001f));
+            Assert.That(player[0].transform.position.y, Is.EqualTo(0.85f).Within(0.0001f));
             Assert.That(player[1].transform.position.y, Is.EqualTo(1f).Within(0.0001f));
         }
 
@@ -68,11 +166,12 @@ namespace GameLogic.Tests
             var f = Create(); f.Start(); f.Advance(20f); f.Advance(20f);
             Assert.AreEqual(10, f.Spawned(BattleSide.Player));
             Assert.AreEqual(10, f.Spawned(BattleSide.Opponent));
-            Assert.AreEqual(90, f.Host.Towers.PlayerTower.CurrentHp);
-            Assert.AreEqual(90, f.Host.Towers.OpponentTower.CurrentHp);
+            Assert.LessOrEqual(f.Host.Towers.PlayerTower.CurrentHp, 1);
+            Assert.LessOrEqual(f.Host.Towers.OpponentTower.CurrentHp, 1);
+            Assert.IsTrue(f.Host.Towers.IsEnded);
+            f.Host.EndBattle();
             Assert.AreEqual(0, f.LiveCount);
-            Assert.IsTrue(f.Completed);
-            Assert.IsFalse(f.Context.IsEnded);
+            Assert.IsTrue(f.Context.IsEnded);
         }
 
         [Test]
@@ -86,6 +185,17 @@ namespace GameLogic.Tests
             var actual = f.Views.OrderBy(v => v.InstanceId).Select(v => v.transform.position).ToArray();
             Assert.AreEqual(20, actual.Length);
             for (var i = 0; i < actual.Length; i++) Assert.That(Vector3.Distance(expected[i], actual[i]), Is.LessThan(0.0001f));
+        }
+
+        [Test]
+        public void MovementPublishesDistanceAlongTheRouteInsteadOfLeavingProgressAtZero()
+        {
+            var f = Create(); f.Start();
+            var id = f.PlayerView.InstanceId;
+            f.Advance(2.5f);
+            Assert.IsTrue(f.Context.Registry.TryGet(id, out var entity));
+            Assert.That(((EnemyEntity)entity).RouteProgress, Is.EqualTo(0.75f).Within(0.0001f),
+                "敌人速度减半后，走完1单位竖段再走0.25单位横段，应发布0.75单位路线进度");
         }
 
         [Test]
@@ -110,24 +220,24 @@ namespace GameLogic.Tests
             Assert.AreEqual(DamageResult.Killed, f.Context.Registry.ApplyDamage(oldId, 100, out _));
             var unrelatedId = f.Context.Registry.CreateEnemyFromConfig(f.Tables.TbEnemy.Get(2001), BattleSide.Player);
             f.Advance(20f);
-            Assert.AreEqual(91, f.Host.Towers.PlayerTower.CurrentHp);
-            Assert.AreEqual(90, f.Host.Towers.OpponentTower.CurrentHp);
+            Assert.LessOrEqual(f.Host.Towers.PlayerTower.CurrentHp, 4);
+            Assert.LessOrEqual(f.Host.Towers.OpponentTower.CurrentHp, 4);
             Assert.IsTrue(f.Context.Registry.TryGet(unrelatedId, out var entity));
             Assert.AreEqual(100, ((EnemyEntity)entity).CurrentHp);
-            Assert.IsTrue(f.Completed);
+            Assert.IsTrue(f.Host.Towers.IsEnded);
         }
 
         [Test]
         public void TowerDeathStopsFurtherDamageAndGenerationInSameStep()
         {
-            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.1f, 0f, 0f) }); f.Prepare();
-            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Player, 99);
+            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.61f, 0f, 0f) }); f.Prepare();
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Player, 4);
             f.Start(); f.Advance(20f);
             Assert.AreEqual(0, f.Host.Towers.PlayerTower.CurrentHp);
             Assert.IsTrue(f.Host.Towers.IsEnded);
             Assert.IsFalse(f.Host.IsCombatRunning);
             Assert.That(f.Spawned(BattleSide.Player), Is.LessThan(10));
-            Assert.AreEqual(100, f.Host.Towers.OpponentTower.CurrentHp);
+            Assert.AreEqual(4, f.Host.Towers.OpponentTower.CurrentHp, "同一抵塔时刻敌方也受到已提交的1点伤害，后续时刻停止");
         }
 
         [Test]
@@ -135,7 +245,7 @@ namespace GameLogic.Tests
         {
             var f = Create(false); f.SetRoutes(new[] { Vector3.zero, Vector3.zero, Vector3.zero });
             f.Prepare(); f.Start(); f.Advance(0f);
-            Assert.AreEqual(99, f.Host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(4, f.Host.Towers.PlayerTower.CurrentHp);
             f.Dispose(); _fixture = null;
             f = Create(); f.Start();
             var view = f.PlayerView;
@@ -143,7 +253,7 @@ namespace GameLogic.Tests
             SetField(entity, "<BaseSpeed>k__BackingField", 0f);
             f.Advance(4f);
             Assert.AreEqual(new Vector3(-3f, 1f, 0f), view.transform.position);
-            Assert.AreEqual(100, f.Host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(5, f.Host.Towers.PlayerTower.CurrentHp);
         }
 
         [Test]
@@ -168,14 +278,35 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void SimultaneousLethalArrivalsCommitBothTowersAndPreferPlayerVictory()
+        {
+            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.63f, 0f, 0f) });
+            var points = (Transform[])f.Controller.GetType().GetField("_opponentRoutePoints", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f.Controller);
+            points[0].position = new Vector3(9.37f, 0f, 0f);
+            f.Prepare();
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Player, 4);
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Opponent, 4);
+            var requests = 0;
+            f.Host.Towers.SettlementRequested += snapshot =>
+            {
+                requests++;
+                Assert.AreEqual(BattleSide.Opponent, snapshot.DefeatedSide);
+            };
+            f.Start(); f.Advance(0.5f);
+            Assert.AreEqual(0, f.Host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(0, f.Host.Towers.OpponentTower.CurrentHp);
+            Assert.AreEqual(1, requests);
+        }
+
+        [Test]
         public void EarlierArrivalWinsEvenWhenItsEnemyWasCreatedSecond()
         {
-            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.24f, 0f, 0f) });
+            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.63f, 0f, 0f) });
             var points = (Transform[])f.Controller.GetType().GetField("_opponentRoutePoints", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f.Controller);
-            points[0].position = new Vector3(9.94f, 0f, 0f);
+            points[0].position = new Vector3(9.46f, 0f, 0f);
             f.Prepare();
-            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Player, 99);
-            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Opponent, 99);
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Player, 4);
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Opponent, 4);
             f.Start(); f.Advance(0.5f);
             Assert.AreEqual(1, f.Host.Towers.PlayerTower.CurrentHp);
             Assert.AreEqual(0, f.Host.Towers.OpponentTower.CurrentHp);
@@ -184,18 +315,18 @@ namespace GameLogic.Tests
         [Test]
         public void RemovalNotificationFreezingBattleCannotSwallowCommittedLeak()
         {
-            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.1f, 0f, 0f) });
+            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.61f, 0f, 0f) });
             f.Prepare(); f.Start();
             f.PlayerView.RemovalAnimationCompleted += _ => f.Host.SetFrozen(true);
             f.Advance(0.5f);
-            Assert.AreEqual(99, f.Host.Towers.PlayerTower.CurrentHp);
+            Assert.AreEqual(4, f.Host.Towers.PlayerTower.CurrentHp);
             Assert.IsTrue(f.Host.IsFrozen);
         }
 
         [Test]
         public void ArrivalCallbackFreezeKeepsAllEnemiesAtTheSameBattleTime()
         {
-            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.1f, 0f, 0f) });
+            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.61f, 0f, 0f) });
             var points = (Transform[])f.Controller.GetType().GetField("_opponentRoutePoints", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f.Controller);
             points[0].position = new Vector3(9f, 0f, 0f);
             f.Prepare(); f.Start();
@@ -205,13 +336,13 @@ namespace GameLogic.Tests
             Assert.IsTrue(f.Host.IsFrozen);
             Assert.That(opponent.transform.position.x, Is.EqualTo(9.1f).Within(0.00001f));
             f.Host.SetFrozen(false); f.Advance(0.1f);
-            Assert.That(opponent.transform.position.x, Is.EqualTo(9.16f).Within(0.00001f));
+            Assert.That(opponent.transform.position.x, Is.EqualTo(9.13f).Within(0.00001f));
         }
 
         [Test]
         public void ThrowingRemovalNotificationStillReleasesTheArrivedView()
         {
-            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.1f, 0f, 0f) });
+            var f = Create(false); f.SetRoutes(new[] { new Vector3(-0.61f, 0f, 0f) });
             f.Prepare(); f.Start();
             var view = f.PlayerView;
             view.RemovalAnimationCompleted += _ => throw new InvalidOperationException("Expected removal listener failure");
@@ -249,26 +380,27 @@ namespace GameLogic.Tests
             throw new MissingFieldException(target.GetType().Name, name);
         }
 
-        private sealed class Fixture : IDisposable
+        internal sealed class Fixture : IDisposable
         {
             public readonly GameObject Root = new GameObject("EnemyBattleFixture");
-            public readonly Tables Tables = LoadTables();
+            public readonly Tables Tables;
             public readonly BattleShopContext Context;
             public readonly BattleShopSceneController Host;
             public readonly Component Controller;
             private bool _disposed;
-            public Fixture()
+            public Fixture(Tables tables = null)
             {
+                Tables = tables ?? WaveTestData.SingleWaveTables();
                 var type = typeof(EnemyEntity).Assembly.GetType("GameLogic.EnemyBattleController");
                 Assert.IsNotNull(type, "缺少 EnemyBattleController");
                 Host = Root.AddComponent<BattleShopSceneController>();
                 SetField(Host, "_bootstrap", Root.AddComponent<PlacementBoardsBootstrap>());
                 Controller = Root.AddComponent(type);
-                Context = new BattleShopContext(ShopRules.FromTables(Tables), new[] { 1001, 1002, 1003 }, new[] { 1001, 1002, 1003 }, Tables.TbRobot.Get);
+                Context = new BattleShopContext(ShopRules.FromTables(Tables), new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, Tables.TbRobot.Get);
                 SetField(Host, "<Context>k__BackingField", Context);
                 SetField(Host, "_ready", true); SetField(Host, "_running", true);
                 SetField(Host, "_enemies", Controller);
-                var session = new TowerBattleSession(Context.BattleId, Context.Registry, 100);
+                var session = new TowerBattleSession(Context.BattleId, Context.Registry, 5);
                 SetField(Host, "_towers", session);
                 foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
                 {
@@ -305,7 +437,7 @@ namespace GameLogic.Tests
                     .Single(m => m.Name == "PrepareAsync" && m.GetParameters().Length == 5)
                     .Invoke(Controller, new object[] { Host, Context, Tables, CancellationToken.None, load ?? Load });
             public void Prepare(Func<string, Transform, CancellationToken, UniTask<GameObject>> load = null) => PrepareTask(load).GetAwaiter().GetResult();
-            public void Start() => Invoke("StartFirstWave");
+            public void Start() => Invoke("StartBattle");
             public void Advance(float dt) => Invoke("Advance", dt);
             public void Clear() => Invoke("Clear");
             private void Invoke(string name, params object[] args)
@@ -314,7 +446,7 @@ namespace GameLogic.Tests
                 catch (TargetInvocationException e) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e.InnerException).Throw(); }
             }
             public int LiveCount => (int)Controller.GetType().GetProperty("LiveCount").GetValue(Controller);
-            public bool Completed => (bool)Controller.GetType().GetProperty("IsWaveCompleted").GetValue(Controller);
+            public bool Completed => (bool)Controller.GetType().GetProperty("IsAllEnemiesCleared").GetValue(Controller);
             public int Spawned(BattleSide side) => (int)Controller.GetType().GetMethod("GetSpawnedCount").Invoke(Controller, new object[] { side });
             public EnemyView[] Views => Root.GetComponentsInChildren<EnemyView>().Where(v => v.InstanceId > 0).ToArray();
             public EnemyView PlayerView => Views.First(v => Side(v) == BattleSide.Player);

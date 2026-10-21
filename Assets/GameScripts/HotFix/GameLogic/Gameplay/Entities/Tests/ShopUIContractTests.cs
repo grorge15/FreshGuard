@@ -8,13 +8,15 @@ namespace GameLogic.Tests
         [Test]
         public void PlayerShopUsesFrameworkWindowAndSeparateDragController()
         {
-            var window = typeof(RobotEntity).Assembly.GetType("GameLogic.BattleShopUI");
-            Assert.IsNotNull(window, "玩家商店必须接入 TEngine UIWindow。");
+            var window = typeof(RobotEntity).Assembly.GetType("GameLogic.MainCombatUI");
+            Assert.IsNotNull(window, "对局需要唯一全屏 MainCombatUI 窗口。");
             Assert.IsTrue(typeof(UIWindow).IsAssignableFrom(window));
             var attribute = (WindowAttribute)Attribute.GetCustomAttribute(window, typeof(WindowAttribute));
             Assert.IsNotNull(attribute);
-            Assert.AreEqual("BattleShopUI", attribute.Location);
-            Assert.IsFalse(attribute.FullScreen);
+            Assert.AreEqual("MainCombatUI", attribute.Location);
+            Assert.IsTrue(attribute.FullScreen);
+            Assert.IsTrue(typeof(UIWidget).IsAssignableFrom(typeof(BattleShopUI)));
+            Assert.IsTrue(typeof(UIWidget).IsAssignableFrom(typeof(BattleInfoUI)));
             Assert.IsNotNull(typeof(RobotEntity).Assembly.GetType("GameLogic.RobotDragController"));
         }
     }

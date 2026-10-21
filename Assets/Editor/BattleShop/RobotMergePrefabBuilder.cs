@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using GameConfig;
+using Luban;
 using GameLogic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -15,9 +18,11 @@ namespace FreshGuard.Editor
         public static void Upgrade()
         {
             if (Application.isPlaying || EditorApplication.isCompiling) throw new InvalidOperationException("请退出运行并等待编译。");
-            foreach (var name in new[] { "RobotI", "RobotL", "RobotT" })
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
+                Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            foreach (var config in tables.TbRobot.DataList)
             {
-                var path = "Assets/AssetRaw/Actor/Robots/Prefabs/" + name + ".prefab";
+                var path = "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab";
                 var root = PrefabUtility.LoadPrefabContents(path);
                 try
                 {

@@ -10,6 +10,30 @@ namespace GameLogic.Tests
 {
     public class ShopConfigTests
     {
+        [TestCase(501, BattleSide.Player)] [TestCase(501, BattleSide.Opponent)]
+        [TestCase(502, BattleSide.Player)] [TestCase(502, BattleSide.Opponent)]
+        [TestCase(503, BattleSide.Player)] [TestCase(503, BattleSide.Opponent)]
+        [TestCase(504, BattleSide.Player)] [TestCase(504, BattleSide.Opponent)]
+        [TestCase(505, BattleSide.Player)] [TestCase(505, BattleSide.Opponent)]
+        [TestCase(601, BattleSide.Player)] [TestCase(601, BattleSide.Opponent)]
+        [TestCase(602, BattleSide.Player)] [TestCase(602, BattleSide.Opponent)]
+        [TestCase(603, BattleSide.Player)] [TestCase(603, BattleSide.Opponent)]
+        public void EightCandidateShopCanOfferAndPurchaseEveryRobot(int id, BattleSide side)
+        {
+            var tables = RealTables();
+            var rules = ShopRules.FromTables(tables);
+            var candidates = new[] { 501, 502, 503, 504, 505, 601, 602, 603 };
+            var random = new ShopSequenceRandom { DefaultValue = (Array.IndexOf(candidates, id) + 0.5) / candidates.Length };
+            using (var context = new BattleShopContext(rules, candidates, candidates, tables.TbRobot.Get, random))
+            {
+                Assert.AreEqual(id, context.GetState(side).Slots[0].Offer.RobotId);
+                var robot = ShopTestData.Purchase(context, 0, side);
+                Assert.AreEqual(id, robot.ConfigId);
+                Assert.AreEqual(tables.TbRobot.Get(id).ShapeId_Ref.CellOffsets.Length, robot.Definition.Cells.Count);
+                Assert.AreEqual(side, robot.Side);
+            }
+        }
+
         private static Tables RealTables()
         {
             return new Tables(name => new ByteBuf(File.ReadAllBytes(
@@ -29,13 +53,13 @@ namespace GameLogic.Tests
             CollectionAssert.AreEqual(new[] { 6, 8, 12, 16, 20 },
                 Enumerable.Range(2, 5).Select(id => rules.GetPrice(id, 1)));
             foreach (var slot in rules.SlotCandidateWeights)
-                CollectionAssert.AreEqual(new[] { 2000d, 2000d, 2000d }, Enumerable.Range(1, 3).Select(id => slot[id]));
+                CollectionAssert.AreEqual(Enumerable.Repeat(2000d, 8), Enumerable.Range(1, 8).Select(id => slot[id]));
             var random = new ShopSequenceRandom();
             random.Enqueue(0, 0.4, 0.8, 0, 0.4, 0.8);
-            using (var context = new BattleShopContext(rules, ShopTestData.Candidates, ShopTestData.Candidates,
+            using (var context = new BattleShopContext(rules, new[] { 501, 601, 602 }, new[] { 501, 601, 602 },
                 id => tables.TbRobot.Get(id), random))
             {
-                CollectionAssert.AreEqual(new[] { 6, 8, 12 }, context.GetState(BattleSide.Player).Slots.Select(s => s.Offer.Price));
+                CollectionAssert.AreEqual(new[] { 6, 8, 8 }, context.GetState(BattleSide.Player).Slots.Select(s => s.Offer.Price));
                 ShopTestData.Purchase(context, 1);
                 Assert.AreEqual(12, context.GetState(BattleSide.Player).EnergyCoins);
                 Assert.AreEqual(20, context.GetState(BattleSide.Opponent).EnergyCoins);
@@ -84,11 +108,11 @@ namespace GameLogic.Tests
             {
                 new[] { 2, 10 }, new[] { 3, 10 }, new[] { 1, 10 }
             }));
-            using (var context = new BattleShopContext(rules, new[] { 1001, 1002, 1003 }, new[] { 1003, 1001, 1002 },
+            using (var context = new BattleShopContext(rules, new[] { 501, 502, 505 }, new[] { 505, 501, 502 },
                 id => ShopTestData.Robot(id), new ShopSequenceRandom { DefaultValue = 0.8 }))
             {
-                CollectionAssert.AreEqual(new[] { 1002, 1003, 1001 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
-                CollectionAssert.AreEqual(new[] { 1001, 1002, 1003 }, context.GetState(BattleSide.Opponent).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 502, 505, 501 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 501, 502, 505 }, context.GetState(BattleSide.Opponent).LastBatchRobotIds);
                 Assert.AreNotSame(rules.SlotCandidateWeights[0], rules.SlotCandidateWeights[1]);
             }
         }
@@ -106,13 +130,13 @@ namespace GameLogic.Tests
             using (var context = ShopTestData.Context(rules, random))
             {
                 Assert.AreEqual(ShopOperationResult.Success, context.TryRefresh(BattleSide.Player));
-                CollectionAssert.AreEqual(new[] { 1001, 1001, 1003 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 501, 501, 505 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
             }
             random = new ShopSequenceRandom { SlotIndex = 0 };
             using (var context = ShopTestData.Context(rules, random))
             {
                 Assert.AreEqual(ShopOperationResult.Success, context.TryRefresh(BattleSide.Player));
-                CollectionAssert.AreEqual(new[] { 1001, 1001, 1001 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
+                CollectionAssert.AreEqual(new[] { 501, 501, 501 }, context.GetState(BattleSide.Player).LastBatchRobotIds);
             }
         }
 
@@ -138,7 +162,7 @@ namespace GameLogic.Tests
 
         [TestCase(new[] { 1, 1, 2 })]
         [TestCase(new[] { 1, -1 })]
-        [TestCase(new[] { 4, 1 })]
+        [TestCase(new[] { 0, 1 })]
         [TestCase(new[] { 1, 1, 1, 2 })]
         [TestCase(new[] { 1, 0, 2, 0, 3, 0 })]
         public void MalformedDropPackageRejectsRules(int[] package)

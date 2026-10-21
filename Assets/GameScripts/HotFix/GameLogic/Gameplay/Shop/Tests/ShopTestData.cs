@@ -8,13 +8,13 @@ namespace GameLogic.Tests
 {
     internal static class ShopTestData
     {
-        internal static readonly int[] Candidates = { 1001, 1002, 1003 };
+        internal static readonly int[] Candidates = { 501, 502, 505 };
 
         internal static ShopRules Rules(double first = 1, double second = 1, double third = 1)
         {
             return new ShopRules(new Dictionary<int, double>
             {
-                { 1001, first }, { 1002, second }, { 1003, third }
+                { 501, first }, { 502, second }, { 505, third }
             });
         }
 
@@ -37,6 +37,12 @@ namespace GameLogic.Tests
             robotBuffer.WriteString("RobotIcon");
             robotBuffer.WriteInt(1);
             robotBuffer.WriteInt(0);
+            robotBuffer.WriteFloat(1f);
+            robotBuffer.WriteInt(20);
+            robotBuffer.WriteInt(10);
+            robotBuffer.WriteFloat(0.6f);
+            robotBuffer.WriteFloat(1f);
+            robotBuffer.WriteString("RobotBullet");
             return new Robot(robotBuffer) { ShapeId_Ref = new RobotShape(shapeBuffer) };
         }
 

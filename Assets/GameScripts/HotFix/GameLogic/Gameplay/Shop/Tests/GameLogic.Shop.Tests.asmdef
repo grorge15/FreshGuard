@@ -4,7 +4,8 @@
   "references": [
     "GameLogic",
     "GameProto",
-    "TEngine.Runtime"
+    "TEngine.Runtime",
+    "UniTask"
   ],
   "includePlatforms": ["Editor"],
   "autoReferenced": false,

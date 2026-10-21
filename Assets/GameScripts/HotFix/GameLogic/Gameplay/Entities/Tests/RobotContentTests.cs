@@ -1,10 +1,12 @@
 using System;
 using System.IO;
+using System.Linq;
 using GameConfig;
 using Luban;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using YooAsset.Editor;
 
 namespace GameLogic.Tests
 {
@@ -19,10 +21,15 @@ namespace GameLogic.Tests
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
         }
 
-        [TestCase(1001, "StraightRobotEntity")]
-        [TestCase(1002, "CornerRobotEntity")]
-        [TestCase(1003, "PulseRobotEntity")]
-        public void ConfigCreatesConcreteRobotWithoutSkillAndKeepsRegistryLifecycle(int configId, string typeName)
+        [TestCase(501, "CannonRobotEntity")]
+        [TestCase(502, "ScatterRobotEntity")]
+        [TestCase(503, "PiercingRobotEntity")]
+        [TestCase(504, "RapidFireRobotEntity")]
+        [TestCase(505, "ImpactRobotEntity")]
+        [TestCase(601, "FrostRobotEntity")]
+        [TestCase(602, "TractorRobotEntity")]
+        [TestCase(603, "PoisonRobotEntity")]
+        public void ConfigCreatesConcreteRobotAndKeepsRegistryLifecycle(int configId, string typeName)
         {
             var config = _tables.TbRobot.Get(configId);
             using (var registry = new BattleEntityRegistry())
@@ -31,10 +38,10 @@ namespace GameLogic.Tests
                 Assert.AreEqual(typeName, robot.GetType().Name);
                 Assert.AreEqual(configId, robot.ConfigId);
                 Assert.AreEqual(config.ShapeId, robot.ShapeId);
-                Assert.AreEqual(0, robot.SkillId);
+                Assert.AreEqual(config.SkillId, robot.SkillId);
                 Assert.AreEqual(2, robot.Level);
                 Assert.AreEqual(config.QualityId, robot.QualityId);
-                Assert.AreEqual(4, robot.Definition.Cells.Count);
+                Assert.AreEqual(config.ShapeId_Ref.CellOffsets.Length, robot.Definition.Cells.Count);
                 var board = new BoardModel(5, 5);
                 Assert.IsTrue(board.TryPlace(new BoardCoordinate(0, 0), robot.Definition));
                 for (var x = 0; x < 5; x++)
@@ -61,7 +68,7 @@ namespace GameLogic.Tests
         {
             using (var registry = new BattleEntityRegistry())
             {
-                var config = _tables.TbRobot.Get(1001);
+                var config = _tables.TbRobot.Get(501);
                 var first = registry.CreateRobotFromConfig(config, BattleSide.Player);
                 var second = registry.CreateRobotFromConfig(config, BattleSide.Player);
                 var board = new BoardModel(4, 2);
@@ -77,21 +84,44 @@ namespace GameLogic.Tests
         {
             using (var registry = new BattleEntityRegistry())
             {
-                var config = _tables.TbRobot.Get(1001);
+                var config = _tables.TbRobot.Get(501);
                 Assert.Throws<ArgumentNullException>(() => registry.CreateRobotFromConfig(null, BattleSide.Player));
                 Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateRobotFromConfig(config, BattleSide.Player, 0));
                 Assert.AreEqual(1, registry.CreateRobotFromConfig(config, BattleSide.Player).InstanceId);
             }
         }
 
-        [TestCase(1001)]
-        [TestCase(1002)]
-        [TestCase(1003)]
-        public void PrefabAndIconMatchConfiguredFourCellFootprint(int configId)
+        [Test]
+        public void AllEightRobotsHaveCollectedPrefabAndIconAddresses()
+        {
+            var settings = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(
+                "Assets/Editor/AssetBundleCollector/AssetBundleCollectorSetting.asset");
+            var assets = settings.BeginCollect("DefaultPackage", true, false).CollectAssets;
+            Assert.AreEqual(8, _tables.TbRobot.DataList.Count);
+            Assert.AreEqual(28, _tables.TbRobotShape.DataList.Count);
+            foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603 })
+            {
+                var config = _tables.TbRobot.Get(id);
+                Assert.AreEqual(config.RobotPrefab, assets.Single(asset => asset.AssetInfo.AssetPath ==
+                    "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab").Address);
+                Assert.AreEqual(config.RobotIcon, assets.Single(asset => asset.AssetInfo.AssetPath ==
+                    "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png").Address);
+            }
+        }
+
+        [TestCase(501, "0,0;1,0")]
+        [TestCase(502, "0,0;1,0;0,1")]
+        [TestCase(503, "0,0;0,1;0,2")]
+        [TestCase(504, "0,0;0,1")]
+        [TestCase(505, "0,0;1,0;2,0;1,1")]
+        [TestCase(601, "0,0;1,0;0,1;1,1")]
+        [TestCase(602, "0,0;0,1;1,1")]
+        [TestCase(603, "0,0;1,0;1,1;2,1")]
+        public void PrefabAndIconMatchRequestedFootprint(int configId, string expectedOffsets)
         {
             var config = _tables.TbRobot.Get(configId);
             var cells = config.ShapeId_Ref.CellOffsets;
-            Assert.AreEqual(4, cells.Length);
+            Assert.AreEqual(expectedOffsets, string.Join(";", cells.Select(cell => string.Join(",", cell))));
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab");
             Assert.IsNotNull(prefab, "配置中的预制体必须存在");
@@ -99,7 +129,7 @@ namespace GameLogic.Tests
             Assert.IsNotNull(view);
             Assert.AreEqual(configId, new SerializedObject(view).FindProperty("_configId").intValue);
             var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true);
-            Assert.AreEqual(4, renderers.Length);
+            Assert.AreEqual(cells.Length, renderers.Length);
             var unique = new System.Collections.Generic.HashSet<BoardCoordinate>();
             for (var i = 0; i < cells.Length; i++)
             {
@@ -122,8 +152,10 @@ namespace GameLogic.Tests
             }
             Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Sprite>(
                 "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"));
-            Assert.AreEqual(4, prefab.GetComponentsInChildren<Collider2D>(true).Length,
+            Assert.AreEqual(cells.Length, prefab.GetComponentsInChildren<Collider2D>(true).Length,
                 "仅实际占格参与碰撞，不能用根节点包围盒填满L/T空白区。");
+            Assert.IsNotNull(prefab.GetComponent<RobotBoardPointerInput>());
+            Assert.IsNotNull(prefab.transform.Find("LevelLabel"));
             Assert.IsEmpty(prefab.GetComponentsInChildren<Rigidbody2D>(true));
         }
     }

@@ -228,7 +228,7 @@ namespace FreshGuard.Editor
 
         private static string ReadCoins()
         {
-            var ui = GameModule.UI.GetUI<BattleShopUI>();
+            var ui = GameModule.UI.GetUI<MainCombatUI>()?.Shop;
             Require(ui != null, "能源币UI不存在。");
             return ui.transform.Find("m_rect_ShopPanel/m_text_EnergyCoins").GetComponent<Text>().text;
         }

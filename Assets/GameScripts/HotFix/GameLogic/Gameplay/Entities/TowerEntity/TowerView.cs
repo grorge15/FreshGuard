@@ -5,6 +5,7 @@ namespace GameLogic
 {
     /// <summary>共用塔预制体的血量与阵营表现，不处理伤害或对局胜负。</summary>
     [DisallowMultipleComponent]
+    [RequireComponent(typeof(BoxCollider2D))]
     public sealed class TowerView : MonoBehaviour
     {
         [SerializeField] private SpriteRenderer _body;
@@ -15,6 +16,19 @@ namespace GameLogic
         public int InstanceId => _tower != null ? _tower.InstanceId : 0;
         public float HealthFraction { get; private set; } = 1f;
         public bool IsDead { get; private set; }
+
+        private void Awake() { EnsureCollisionBody(); }
+
+        private void OnValidate() { EnsureCollisionBody(); }
+
+        private void EnsureCollisionBody()
+        {
+            var collider = GetComponent<BoxCollider2D>();
+            if (collider == null) collider = gameObject.AddComponent<BoxCollider2D>();
+            collider.isTrigger = true;
+            collider.offset = Vector2.zero;
+            collider.size = Vector2.one;
+        }
 
         public void Bind(TowerEntity tower)
         {

@@ -16,19 +16,25 @@ namespace GameLogic
         private Collider2D[] _colliders;
         private TextMesh _levelLabel;
         private RobotEntity _robot;
-        private Vector3? _authoredScale;
-
-        public void ApplyBoardScale(PlacementBoardView board)
-        {
-            if (board == null) throw new ArgumentNullException(nameof(board));
-            if (!_authoredScale.HasValue) _authoredScale = transform.localScale;
-            var factor = board.CellSize / MapGridMath.REFERENCE_CELL_SIZE;
-            var original = _authoredScale.Value;
-            transform.localScale = new Vector3(original.x * factor, original.y * factor, original.z);
-        }
+        private BattleEntityRegistry _registry;
         private bool _mergeCandidate;
+        private bool _berserkTrigger;
         private float _feedbackUntil;
         public int MergeFeedbackCount { get; private set; }
+
+        public Vector3 GetAttackOrigin()
+        {
+            if (_robot?.Configuration?.ShapeId_Ref == null) return transform.position;
+            var sum = Vector3.zero;
+            var count = 0;
+            foreach (var offset in _robot.Configuration.ShapeId_Ref.CellOffsets)
+            {
+                var cell = transform.Find("Cell_" + offset[0] + "_" + offset[1]);
+                if (cell == null) continue;
+                sum += cell.position; count++;
+            }
+            return count > 0 ? sum / count : transform.position;
+        }
 
         public void BindInput(BattleShopSceneController host)
         {
@@ -48,7 +54,11 @@ namespace GameLogic
                 if (label != null) _levelLabel = label.GetComponent<TextMesh>();
             }
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
-            foreach (var collider in _colliders) collider.enabled = visible;
+            foreach (var collider in _colliders)
+            {
+                collider.isTrigger = _berserkTrigger;
+                collider.enabled = visible;
+            }
             foreach (var cell in _cells)
             {
                 cell.enabled = visible;
@@ -61,6 +71,13 @@ namespace GameLogic
                 _levelLabel.text = "Lv" + robot.Level;
                 _levelLabel.gameObject.SetActive(visible);
             }
+        }
+
+        public void SetBerserkTrigger(bool enabled)
+        {
+            _berserkTrigger = enabled;
+            if (_colliders == null) _colliders = GetComponentsInChildren<Collider2D>(true);
+            foreach (var collider in _colliders) if (collider != null) collider.isTrigger = enabled;
         }
 
         public void SetMergeCandidate(bool candidate) { _mergeCandidate = candidate; if (_robot != null) Render(_robot); }
@@ -85,7 +102,18 @@ namespace GameLogic
                 !(entity is RobotEntity robot) || robot.ConfigId != _configId)
                 throw new ArgumentException("视图与已购买机器人不匹配。", nameof(instanceId));
             InstanceId = instanceId;
+            _registry = registry;
             Render(robot);
+        }
+
+        public bool TryGetComboRobot(BattleEntityRegistry registry, BattleSide side, out RobotEntity robot)
+        {
+            robot = null;
+            if (!isActiveAndEnabled || registry == null || !ReferenceEquals(_registry, registry) ||
+                !registry.TryGet(InstanceId, out var entity) || !ReferenceEquals(entity, _robot) ||
+                _robot == null || _robot.Side != side || !_robot.CanParticipate) return false;
+            robot = _robot;
+            return true;
         }
 
         /// <summary>业务方加载预制体后显式创建实体，不在 Awake 中自动注册。</summary>

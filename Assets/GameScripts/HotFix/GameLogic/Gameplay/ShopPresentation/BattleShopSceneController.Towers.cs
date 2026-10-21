@@ -24,6 +24,11 @@ namespace GameLogic
             return _towers.ApplyDamage(battleId, targetSide, damage);
         }
 
+        public bool ApplyTowerDamageBatch(long battleId, int playerDamage, int opponentDamage)
+        {
+            return IsCombatRunning && _towers != null && _towers.ApplyDamageBatch(battleId, playerDamage, opponentDamage);
+        }
+
         public bool TryGetTowerTarget(BattleSide side, out int instanceId, out Transform target)
         {
             instanceId = 0;
@@ -64,6 +69,8 @@ namespace GameLogic
             Context.RequestEndBattle();
             _running = false;
             _bootstrap?.StopBalls();
+            // 最后广播，监听方可以同步结束本局，回调后不再写入口状态。
+            PublishBattleProgress(true);
         }
 
         private void ClearTowers()

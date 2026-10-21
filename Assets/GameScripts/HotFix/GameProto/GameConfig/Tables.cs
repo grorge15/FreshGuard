@@ -219,6 +219,69 @@ public partial class Tables
             m_TbWaveSpawn.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 道具基础表
+    /// </summary>
+    private item.TbItemBase m_TbItemBase;
+    public item.TbItemBase TbItemBase 
+    {
+        get
+        {
+            if (m_TbItemBase == null)
+            {
+                m_TbItemBase = new item.TbItemBase(defaultLoader("item_tbitembase"));
+                m_TbItemBase.ResolveRef(this);
+            }
+            return m_TbItemBase;
+        }
+        set
+        {
+            m_TbItemBase = value;
+            m_TbItemBase.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 结算奖励表
+    /// </summary>
+    private settlement.TbResultAward m_TbResultAward;
+    public settlement.TbResultAward TbResultAward 
+    {
+        get
+        {
+            if (m_TbResultAward == null)
+            {
+                m_TbResultAward = new settlement.TbResultAward(defaultLoader("settlement_tbresultaward"));
+                m_TbResultAward.ResolveRef(this);
+            }
+            return m_TbResultAward;
+        }
+        set
+        {
+            m_TbResultAward = value;
+            m_TbResultAward.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 波次方案（演示20波，数值可由策划调整）
+    /// </summary>
+    private wave.TbWavePlan m_TbWavePlan;
+    public wave.TbWavePlan TbWavePlan
+    {
+        get
+        {
+            if (m_TbWavePlan == null)
+            {
+                m_TbWavePlan = new wave.TbWavePlan(defaultLoader("wave_tbwaveplan"));
+                m_TbWavePlan.ResolveRef(this);
+            }
+            return m_TbWavePlan;
+        }
+        set
+        {
+            m_TbWavePlan = value;
+            m_TbWavePlan.ResolveRef(this);
+        }
+    }
 
     #endregion
 

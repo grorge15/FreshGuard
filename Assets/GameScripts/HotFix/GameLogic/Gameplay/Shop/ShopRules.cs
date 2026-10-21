@@ -41,7 +41,7 @@ namespace GameLogic
             _sharedRobotWeights = CopyWeights(dropWeights, false);
         }
 
-        /// <summary>每槽权重字典的key是1..3候选序号，顺序对应本方传入候选池。</summary>
+        /// <summary>每槽权重字典的key是从1开始的候选序号，顺序对应本方传入候选池。</summary>
         public ShopRules(IReadOnlyList<IReadOnlyDictionary<int, double>> slotCandidateWeights,
             IReadOnlyDictionary<int, int> qualityPrices, int initialCoins = 20, int refreshPrice = 5,
             double secondStarProbability = 0.05, int additionalRerollLimit = 10,
@@ -89,8 +89,8 @@ namespace GameLogic
                 for (var index = 0; index < drop.Package.Length; index += 2)
                 {
                     var ordinal = drop.Package[index];
-                    if (ordinal < 1 || ordinal > 3 || slotWeights.ContainsKey(ordinal) || drop.Package[index + 1] < 0)
-                        throw new ArgumentException("Drop候选序号须为1..3且不重复，权重须非负：" + slot, nameof(tables));
+                    if (ordinal < 1 || slotWeights.ContainsKey(ordinal) || drop.Package[index + 1] < 0)
+                        throw new ArgumentException("Drop候选序号须为正数且不重复，权重须非负：" + slot, nameof(tables));
                     slotWeights.Add(ordinal, drop.Package[index + 1]);
                 }
                 weights.Add(slotWeights);
@@ -114,7 +114,7 @@ namespace GameLogic
         public double GetCandidateWeight(int slotId, int candidateIndex, int robotId)
         {
             if (slotId < 0 || slotId >= SlotCount) throw new ArgumentOutOfRangeException(nameof(slotId));
-            if (candidateIndex < 0 || candidateIndex >= 3) throw new ArgumentOutOfRangeException(nameof(candidateIndex));
+            if (candidateIndex < 0 || candidateIndex == int.MaxValue) throw new ArgumentOutOfRangeException(nameof(candidateIndex));
             double weight;
             return _sharedRobotWeights != null
                 ? (_sharedRobotWeights.TryGetValue(robotId, out weight) ? weight : 0)
@@ -152,8 +152,8 @@ namespace GameLogic
             var hasPositive = false;
             foreach (var pair in source)
             {
-                if (pair.Key <= 0 || (ordinal && pair.Key > 3) || double.IsNaN(pair.Value) || double.IsInfinity(pair.Value) || pair.Value < 0)
-                    throw new ArgumentOutOfRangeException(nameof(source), "权重须有限非负，候选序号须在1..3内。");
+                if (pair.Key <= 0 || double.IsNaN(pair.Value) || double.IsInfinity(pair.Value) || pair.Value < 0)
+                    throw new ArgumentOutOfRangeException(nameof(source), "权重须有限非负，候选序号须为正数。");
                 copy.Add(pair.Key, pair.Value);
                 hasPositive |= pair.Value > 0;
             }

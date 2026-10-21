@@ -5,7 +5,7 @@ using GameConfig.robot;
 namespace GameLogic
 {
     /// <summary>只维护机器人自身状态；放置、拖拽和合成事务由业务系统完成。</summary>
-    public class RobotEntity : Entity
+    public partial class RobotEntity : Entity
     {
         public override EntityKind Kind => EntityKind.Robot;
         public int Level { get; private set; }
@@ -101,6 +101,7 @@ namespace GameLogic
 
         protected override void OnRemoved()
         {
+            ClearCombat();
             ActionVersion++;
             Location = RobotLocation.Unplaced;
             Anchor = null;

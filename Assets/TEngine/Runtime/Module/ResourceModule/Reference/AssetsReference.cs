@@ -86,6 +86,15 @@ namespace TEngine
 
         private void OnDestroy()
         {
+            ReleaseReferences();
+        }
+
+        /// <summary>
+        /// 销毁前显式归还引用，覆盖从未激活而不会收到 OnDestroy 的实例。
+        /// 调用方须随后销毁实例；重复调用及之后的 OnDestroy 不会重复归还。
+        /// </summary>
+        public void ReleaseReferences()
+        {
             if (_originalRefs.TryGetValue(gameObject, out var reference) && reference == this)
             {
                 _originalRefs.Remove(gameObject);
@@ -94,6 +103,7 @@ namespace TEngine
             if (sourceGameObject != null)
             {
                 CheckRelease();
+                sourceGameObject = null;
             }
 
             ReleaseRefAssetInfoList();

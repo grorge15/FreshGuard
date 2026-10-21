@@ -253,7 +253,7 @@ namespace GameLogic.Tests
                 PlaceableDefinition definition;
                 Assert.AreEqual(ShopOperationResult.Success, context.GetDragContent(BattleSide.Player, source,
                     out config, out level, out definition));
-                Assert.AreEqual(1001, config.Id);
+                Assert.AreEqual(501, config.Id);
                 Assert.AreEqual(1, level);
                 CollectionAssert.AreEqual(new[] { new BoardCoordinate(0, 0), new BoardCoordinate(1, 0) }, definition.Cells);
                 var before = context.GetState(BattleSide.Player).Slots[0].Offer;
@@ -630,7 +630,7 @@ namespace GameLogic.Tests
                 Deploy(context, target, board);
                 RobotActionToken token;
                 Assert.IsTrue(context.TryCreateActionToken(target.InstanceId, out token));
-                var unowned = context.Registry.CreateRobotFromConfig(ShopTestData.Robot(1001), BattleSide.Player);
+                var unowned = context.Registry.CreateRobotFromConfig(ShopTestData.Robot(501), BattleSide.Player);
                 Assert.AreEqual(ShopOperationResult.EntityNotFound, context.CheckMerge(BattleSide.Player,
                     RobotDragSource.Owned(unowned.InstanceId), target.InstanceId));
                 var session = Begin(context, RobotDragSource.Owned(source.InstanceId));
@@ -697,9 +697,9 @@ namespace GameLogic.Tests
         [Test]
         public void StaleOfferAndRemovedOwnedSourceFailWithoutMutationAndInvalidConfigDoesNotConsumeOffer()
         {
-            var config = ShopTestData.Robot(1001);
+            var config = ShopTestData.Robot(501);
             using (var context = new BattleShopContext(ShopTestData.Rules(1, 0, 0), ShopTestData.Candidates,
-                ShopTestData.Candidates, id => id == 1001 ? config : ShopTestData.Robot(id), new ShopSequenceRandom()))
+                ShopTestData.Candidates, id => id == 501 ? config : ShopTestData.Robot(id), new ShopSequenceRandom()))
             {
                 var stale = Offer(context, 0);
                 context.TryRefresh(BattleSide.Player);

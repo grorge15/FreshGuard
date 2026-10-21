@@ -1,0 +1,8 @@
+{
+  "name": "GameLogic.BuffSelect.Tests",
+  "rootNamespace": "GameLogic.Tests",
+  "references": ["GameLogic", "TEngine.Runtime", "UniTask"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false,
+  "optionalUnityReferences": ["TestAssemblies"]
+}
