@@ -35,14 +35,28 @@ namespace GameLogic
         }
 
         public MapData CreateMap() => _map?.Clone();
-        public TerrainType GetInitialTerrain(BoardCoordinate cell)
+        public BaseTerrainType GetInitialBaseTerrain(BoardCoordinate cell)
         {
-            if (_map != null) return _map.GetTerrain(cell);
+            RequireInside(cell);
+            return _map != null ? _map.GetBaseTerrain(cell) : BaseTerrainType.Empty;
+        }
+        public ObstacleType GetInitialObstacle(BoardCoordinate cell)
+        {
+            RequireInside(cell);
+            if (_map != null) return _map.GetObstacle(cell);
+            return _open.Contains(cell) ? ObstacleType.None : cell.Equals(ColoredGlassCell) ? ObstacleType.GlassColored : ObstacleType.GlassNormal;
+        }
+        private void RequireInside(BoardCoordinate cell)
+        {
             if (cell.Column < 0 || cell.Column >= Columns || cell.Row < 0 || cell.Row >= Rows)
                 throw new ArgumentOutOfRangeException(nameof(cell));
-            return _open.Contains(cell) ? TerrainType.Empty : cell.Equals(ColoredGlassCell) ? TerrainType.GlassColored : TerrainType.GlassNormal;
         }
-        public int GetGlassConfigId(BoardCoordinate cell) => GetInitialTerrain(cell) == TerrainType.GlassColored ? ColoredGlassId : NormalGlassId;
+        public int GetGlassConfigId(BoardCoordinate cell)
+        {
+            var obstacle = GetInitialObstacle(cell);
+            if (obstacle == ObstacleType.None) throw new InvalidOperationException("该格没有玻璃障碍。");
+            return obstacle == ObstacleType.GlassColored ? ColoredGlassId : NormalGlassId;
+        }
 
         public BoardLayoutRules(BoardLayout config)
         {
@@ -80,8 +94,7 @@ namespace GameLogic
         public bool HasInitialGlass(BoardCoordinate cell)
         {
             if (cell.Column < 0 || cell.Column >= Columns || cell.Row < 0 || cell.Row >= Rows) return false;
-            var terrain = GetInitialTerrain(cell);
-            return terrain == TerrainType.GlassNormal || terrain == TerrainType.GlassColored;
+            return GetInitialObstacle(cell) != ObstacleType.None;
         }
     }
 }

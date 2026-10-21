@@ -238,7 +238,7 @@ namespace GameLogic
             if (!_initialized || !_model.IsInside(coordinate)) return;
             _slots[coordinate.Column, coordinate.Row].color = _model.IsHighlighted(coordinate) ? HighlightedColor :
                 _model.IsOccupied(coordinate) ? OccupiedColor :
-                _model.IsTerrainMap && _model.GetTerrain(coordinate) == TerrainType.Track ? TrackColor : NormalColor;
+                _model.IsTerrainMap && _model.GetBaseTerrain(coordinate) == BaseTerrainType.Track ? TrackColor : NormalColor;
         }
 
         private void OnDisable() { ClearPreview(); }

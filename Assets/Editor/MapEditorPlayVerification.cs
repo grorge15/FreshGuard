@@ -14,6 +14,8 @@ namespace FreshGuard.Editor
     {
         private const string LAUNCH_PENDING = "FreshGuard.MapVerification.LaunchPending";
         private const string LAUNCH_ACTIVE = "FreshGuard.MapVerification.LaunchActive";
+        private const string TEST_MAP = "FreshGuard.MapVerification.LayerMap";
+        private const string TEST_LARGE_MAP = "FreshGuard.MapVerification.LargeLayerMap";
         private static bool _runningVerification;
 
         [InitializeOnLoadMethod]
@@ -35,6 +37,7 @@ namespace FreshGuard.Editor
             var helper = typeof(TEngine.UnityToolbarExtenderLeft).GetNestedType("SceneHelper", BindingFlags.NonPublic);
             var start = helper?.GetMethod("StartScene", BindingFlags.Public | BindingFlags.Static);
             if (start == null) throw new InvalidOperationException("未找到当前TEngine Launcher入口。");
+            PrepareVerificationAssets();
             SessionState.SetBool(LAUNCH_PENDING, true);
             try { start.Invoke(null, new object[] { "main" }); }
             catch { SessionState.SetBool(LAUNCH_PENDING, false); throw; }
@@ -85,17 +88,17 @@ namespace FreshGuard.Editor
                 var playerScale = player.transform.localScale;
                 var opponentScale = opponent.transform.localScale;
                 var fixedLayout = CaptureFixedLayout(host, player, opponent);
-                SetLocation(host, "Map_Demo");
+                SetLocation(host, SessionState.GetString(TEST_MAP, ""));
                 await host.InitializeAsync();
                 Require(host.IsReady && host.UsesTerrainMap, "二进制地图未就绪。");
                 Require(player.Model.Columns == 11 && player.Model.Rows == 9, "地图尺寸错误。");
-                Require(host.PlayerGlass.LiveCount == 5 && host.OpponentGlass.LiveCount == 5, "应分别生成3普通+2彩色玻璃。");
+                Require(host.PlayerGlass.LiveCount == 4 && host.OpponentGlass.LiveCount == 4, "应分别生成2普通+2彩色玻璃，覆盖四种底层组合。");
                 var track = new BoardCoordinate(0, 0);
-                Require(player.Model.GetTerrain(track) == TerrainType.Track && !player.Model.CanPlaceUnit(track) &&
+                Require(player.Model.GetBaseTerrain(track) == BaseTerrainType.Track && !player.Model.CanPlaceUnit(track) &&
                     player.Model.CanEnergyBallPass(track), "轨道许可错误。");
                 Require(player.Model.TryPlace(new BoardCoordinate(4, 3), new PlaceableDefinition("map-verification", 1, 1)), "空位部署失败。");
                 player.Model.Release("map-verification");
-                checks.Add("PASS 二进制资源加载、双方99格与3普通+2彩色、轨道通行禁部署、空位部署");
+                checks.Add("PASS 二进制资源加载、双方99格与四种玻璃组合、轨道通行禁部署、空位部署");
                 var camera = host.Placement.SceneCamera;
                 var initialPlayer = player.transform.position;
                 var initialOpponent = opponent.transform.position;
@@ -115,38 +118,25 @@ namespace FreshGuard.Editor
                 ball.Stop(); otherBall.Stop();
                 checks.Add("PASS 准备期后双方能源球发射");
 
-                var normalCell = new BoardCoordinate(2, 2);
-                GlassView normal;
-                Require(host.PlayerGlass.TryGetView(normalCell, out normal), "普通玻璃缺失。");
-                for (var i = 0; i < 3; i++)
-                {
-                    await UniTask.Delay(280);
-                    await HitGlassAsync(context, ball, normal, player.GetCellWorldPosition(new BoardCoordinate(2, 4)), 270f);
-                }
-                Require(player.Model.GetTerrain(normalCell) == TerrainType.Empty && player.Model.CanEnergyBallPass(normalCell) &&
-                    player.Model.CanPlaceUnit(normalCell), "普通玻璃破碎未更新地图。");
-                Require(opponent.Model.GetTerrain(normalCell) == TerrainType.GlassNormal, "破碎污染对手地图。");
-                Require(context.GetState(BattleSide.Player).EnergyCoins == beforeCoins + 10, "普通玻璃奖励错误。");
-                checks.Add("PASS 真实物理普通玻璃3次反弹破碎、变Empty、对手隔离和10币奖励");
-
-                GlassView colored;
-                var coloredCell = new BoardCoordinate(7, 6);
-                Require(host.PlayerGlass.TryGetView(coloredCell, out colored), "彩色玻璃缺失。");
-                for (var i = 0; i < 5; i++)
-                {
-                    await UniTask.Delay(280);
-                    await HitGlassAsync(context, ball, colored, player.GetCellWorldPosition(new BoardCoordinate(7, 4)), 90f);
-                }
-                Require(player.Model.GetTerrain(coloredCell) == TerrainType.Empty &&
-                    context.GetState(BattleSide.Player).EnergyCoins == beforeCoins + 40,
-                    $"彩色玻璃破碎或30币奖励错误：terrain={player.Model.GetTerrain(coloredCell)}，coins={context.GetState(BattleSide.Player).EnergyCoins}，expected={beforeCoins + 40}，ended={context.IsEnded}，running={host.IsCombatRunning}。");
+                await VerifyGlassBreakAsync(host, player, opponent, ball, new BoardCoordinate(2, 2),
+                    new BoardCoordinate(2, 4), 270f, BaseTerrainType.Empty, ObstacleType.GlassNormal, 3, 10);
+                checks.Add("PASS 普通玻璃+Empty：真实物理3次命中，保留底层并可部署，奖励10币、双方隔离、重复命中不重复奖励");
+                await VerifyGlassBreakAsync(host, player, opponent, ball, new BoardCoordinate(7, 6),
+                    new BoardCoordinate(7, 4), 90f, BaseTerrainType.Empty, ObstacleType.GlassColored, 5, 30);
+                checks.Add("PASS 彩色玻璃+Empty：真实物理5次命中，保留底层并可部署，奖励30币");
+                await VerifyGlassBreakAsync(host, player, opponent, ball, new BoardCoordinate(8, 2),
+                    new BoardCoordinate(8, 4), 270f, BaseTerrainType.Track, ObstacleType.GlassNormal, 3, 10);
+                checks.Add("PASS 普通玻璃+Track：破碎后球可通行、仍不可部署，底图保持Track，奖励10币");
+                await VerifyGlassBreakAsync(host, player, opponent, ball, new BoardCoordinate(2, 6),
+                    new BoardCoordinate(2, 4), 90f, BaseTerrainType.Track, ObstacleType.GlassColored, 5, 30);
+                checks.Add("PASS 彩色玻璃+Track：破碎后球可通行、仍不可部署，底图保持Track，奖励30币");
+                Require(context.GetState(BattleSide.Player).EnergyCoins == beforeCoins + 80, "四组合奖励总额错误。");
                 Require(context.GetState(BattleSide.Opponent).EnergyCoins == beforeCoins, "奖励污染对手。");
-                checks.Add("PASS 真实物理彩色玻璃5次反弹破碎、变Empty和30币奖励");
 
                 host.EndBattle();
                 await UniTask.Yield();
                 await host.InitializeAsync();
-                Require(host.IsReady && host.PlayerGlass.LiveCount == 5 && host.OpponentGlass.LiveCount == 5, "新局未恢复初始地形。");
+                Require(host.IsReady && host.PlayerGlass.LiveCount == 4 && host.OpponentGlass.LiveCount == 4, "新局未恢复初始地形。");
                 Require(Vector3.Distance(initialPlayer, player.transform.position) < 0.001f &&
                     Vector3.Distance(initialOpponent, opponent.transform.position) < 0.001f &&
                     Vector3.Distance(initialCamera, camera.transform.position) < 0.001f && Mathf.Abs(initialZoom - camera.orthographicSize) < 0.001f,
@@ -154,9 +144,9 @@ namespace FreshGuard.Editor
                 checks.Add("PASS 重开恢复初始地图与布局，无状态串局或布局漂移");
                 host.EndBattle();
                 await UniTask.Yield();
-                SetLocation(host, "Map_Demo2");
+                SetLocation(host, SessionState.GetString(TEST_LARGE_MAP, ""));
                 await host.InitializeAsync();
-                Require(host.IsReady && player.Columns == 13 && player.Rows == 13, "13×13用户地图加载失败。");
+                Require(host.IsReady && player.Columns == 13 && player.Rows == 13, "13×13独立测试地图加载失败。");
                 var fit = 9f / 13f;
                 Require(Mathf.Abs(player.transform.localScale.x - playerScale.x * fit) < 0.0001f &&
                     Mathf.Abs(opponent.transform.localScale.y - opponentScale.y * fit) < 0.0001f &&
@@ -169,7 +159,7 @@ namespace FreshGuard.Editor
                     BoardCoordinate actual;
                     Require(player.TryGetCoordinate(player.GetCellWorldPosition(cell), out actual) && actual.Equals(cell), "缩放后世界坐标往返错误。");
                 }
-                checks.Add("PASS Map_Demo2 13×13：倍率9/13、双方中心及所有固定节点不变、坐标往返、球体速度同步");
+                checks.Add("PASS 独立V2地图13×13：倍率9/13、双方中心及所有固定节点不变、坐标往返、球体速度同步");
                 await UniTask.WaitUntil(() => host.IsCombatRunning).Timeout(TimeSpan.FromSeconds(8));
                 Require(Vector2.Distance(ball.GetComponent<Rigidbody2D>().velocity, ball.CurrentDirection * ball.EffectiveSpeed) < 0.01f,
                     "缩放后球体实际物理速度错误。");
@@ -215,6 +205,70 @@ namespace FreshGuard.Editor
                     EditorApplication.isPlaying = false;
                 }
             }
+        }
+
+        // 仅从已确认工程的Editor入口创建独立临时资源，不读写用户地图。
+        private static void PrepareVerificationAssets()
+        {
+            var suffix = Guid.NewGuid().ToString("N");
+            var map = MapData.Create();
+            for (var row = 0; row < map.Rows; row++)
+                for (var column = 0; column < map.Columns; column++)
+                    if (row == 0 || column == 0 || row == map.Rows - 1 || column == map.Columns - 1)
+                        map.SetBaseTerrain(new BoardCoordinate(column, row), BaseTerrainType.Track);
+            map.SetObstacle(new BoardCoordinate(2, 2), ObstacleType.GlassNormal);
+            map.SetObstacle(new BoardCoordinate(7, 6), ObstacleType.GlassColored);
+            map.SetBaseTerrain(new BoardCoordinate(8, 2), BaseTerrainType.Track);
+            map.SetObstacle(new BoardCoordinate(8, 2), ObstacleType.GlassNormal);
+            map.SetBaseTerrain(new BoardCoordinate(2, 6), BaseTerrainType.Track);
+            map.SetObstacle(new BoardCoordinate(2, 6), ObstacleType.GlassColored);
+            WriteVerificationMap(TEST_MAP, "Map_VerifyLayers_" + suffix, map);
+            WriteVerificationMap(TEST_LARGE_MAP, "Map_VerifyLarge_" + suffix, MapData.Create(13, 13));
+        }
+
+        private static void WriteVerificationMap(string key, string location, MapData map)
+        {
+            var path = "Assets/AssetRaw/Configs/Maps/" + location + ".bytes";
+            File.WriteAllBytes(path, MapBinarySerializer.Serialize(map));
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            SessionState.SetString(key, location);
+        }
+
+        public static void CleanupVerificationAssets()
+        {
+            if (EditorApplication.isPlaying || EditorApplication.isCompiling)
+                throw new InvalidOperationException("停止运行并等待编译后才能清理临时验证地图。");
+            foreach (var key in new[] { TEST_MAP, TEST_LARGE_MAP })
+            {
+                var location = SessionState.GetString(key, "");
+                if (location.StartsWith("Map_Verify", StringComparison.Ordinal))
+                    AssetDatabase.DeleteAsset("Assets/AssetRaw/Configs/Maps/" + location + ".bytes");
+                SessionState.EraseString(key);
+            }
+        }
+
+        private static async UniTask VerifyGlassBreakAsync(BattleShopSceneController host, PlacementBoardView player,
+            PlacementBoardView opponent, PhysicalCollisionBall ball, BoardCoordinate cell, BoardCoordinate origin,
+            float angle, BaseTerrainType baseTerrain, ObstacleType obstacle, int hits, int reward)
+        {
+            var context = host.Context;
+            Require(player.Model.GetBaseTerrain(cell) == baseTerrain && player.Model.GetObstacle(cell) == obstacle &&
+                !player.Model.CanPlaceUnit(cell) && !player.Model.CanEnergyBallPass(cell), "玻璃破碎前的两层或阻挡规则错误。");
+            Require(host.PlayerGlass.TryGetView(cell, out var view), "组合玻璃缺失。");
+            var coins = context.GetState(BattleSide.Player).EnergyCoins;
+            for (var hit = 0; hit < hits; hit++)
+            {
+                await UniTask.Delay(280);
+                await HitGlassAsync(context, ball, view, player.GetCellWorldPosition(origin), angle);
+            }
+            Require(player.Model.GetObstacle(cell) == ObstacleType.None && player.Model.GetBaseTerrain(cell) == baseTerrain &&
+                player.Model.CanEnergyBallPass(cell) && player.Model.CanPlaceUnit(cell) == (baseTerrain == BaseTerrainType.Empty),
+                "破碎后未保留底层规则。");
+            Require(opponent.Model.GetObstacle(cell) == obstacle && opponent.Model.GetBaseTerrain(cell) == baseTerrain,
+                "破碎污染对方地图。");
+            Require(context.GetState(BattleSide.Player).EnergyCoins == coins + reward, "玻璃奖励错误。");
+            Require(host.PlayerGlass.ApplyCollision(view, ball) == GlassCollisionResult.Ignored &&
+                context.GetState(BattleSide.Player).EnergyCoins == coins + reward, "重复命中重复发奖。");
         }
 
         private static void SetLocation(BattleShopSceneController host, string location) =>

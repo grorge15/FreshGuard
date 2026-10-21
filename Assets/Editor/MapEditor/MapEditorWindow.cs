@@ -6,24 +6,33 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 
 namespace FreshGuard.Editor
 {
-    public sealed class MapEditorWindow : EditorWindow
+    public sealed class MapEditorWindow : EditorWindow, ISerializationCallbackReceiver
     {
         private const string DEFAULT_DIRECTORY = "Assets/AssetRaw/Configs/Maps";
         private const string BALL_PREFAB = "Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab";
-        private static readonly TerrainType[] PALETTE =
+        private static readonly MapEditorBrush[] BASE_PALETTE =
         {
-            TerrainType.Track, TerrainType.Empty, TerrainType.GlassNormal, TerrainType.GlassColored
+            MapEditorBrush.Track, MapEditorBrush.Empty
+        };
+        private static readonly MapEditorBrush[] OBSTACLE_PALETTE =
+        {
+            MapEditorBrush.RemoveObstacle, MapEditorBrush.GlassNormal, MapEditorBrush.GlassColored
         };
 
         [SerializeField] private MapEditorDocument _document;
         // 保存基线属于窗口而非Undo对象，保存后撤销仍能正确标记未保存。
-        [SerializeField] private MapData _savedMap;
+        [SerializeField, FormerlySerializedAs("_savedMap")] private MapEditorMapSnapshot _savedState;
+        [NonSerialized] private MapData _savedMap;
+        [SerializeField] private int _sourceVersion;
+        [SerializeField] private bool _memoryMigrationNotice;
+        private string _recoveryError;
         [SerializeField] private string _filePath = "";
         [SerializeField] private bool _newUnsaved;
-        [SerializeField] private TerrainType _brush = TerrainType.Track;
+        [SerializeField] private MapEditorBrush _brush = MapEditorBrush.Track;
         [SerializeField] private bool _rectangleTool;
         [SerializeField] private int _requestedColumns = 11;
         [SerializeField] private int _requestedRows = 9;
@@ -36,7 +45,8 @@ namespace FreshGuard.Editor
         private bool _assetsInvalidated;
         private bool _drawing;
         private bool _gestureRectangle;
-        private TerrainType _gestureTerrain;
+        private MapEditorBrush _gestureBrush;
+        private int _gestureButton;
         private BoardCoordinate _gestureStart;
         private BoardCoordinate _gestureLast;
         private int _undoGroup = -1;
@@ -59,12 +69,23 @@ namespace FreshGuard.Editor
             GetWindow<MapEditorWindow>("Map Editor").Show();
         }
 
+        public void OnBeforeSerialize()
+        {
+            if (_savedMap != null) _savedState = MapEditorMapSnapshot.Capture(_savedMap);
+        }
+
+        public void OnAfterDeserialize() { _savedMap = null; }
+
         private void OnEnable()
         {
             minSize = new Vector2(640f, 500f);
             titleContent = new GUIContent("Map Editor");
             saveChangesMessage = "地图有未保存修改。是否保存为Map_*.bytes？";
-            if (_document == null)
+            _glassAssets = new MapEditorGlassAssets();
+            Undo.undoRedoPerformed += OnUndoRedo;
+            EditorApplication.projectChanged += OnProjectChanged;
+            // 已有窗口丢失文档引用也不能静默新建，保存基线/路径仍是恢复线索。
+            if (_document == null && _savedState == null && string.IsNullOrEmpty(_filePath) && !_newUnsaved && !hasUnsavedChanges)
             {
                 _document = CreateInstance<MapEditorDocument>();
                 _document.name = "Map Editor Document";
@@ -74,11 +95,38 @@ namespace FreshGuard.Editor
                 _newUnsaved = false;
                 _filePath = "";
             }
-            _glassAssets = new MapEditorGlassAssets();
-            Undo.undoRedoPerformed += OnUndoRedo;
-            EditorApplication.projectChanged += OnProjectChanged;
+            if (!TryRestoreMemory()) return;
             SyncDimensions();
             ValidateDocument(true);
+        }
+
+        private bool TryRestoreMemory()
+        {
+            try
+            {
+                if (_document == null || _document.Data == null)
+                    throw new InvalidDataException("窗口内存文档已缺失。");
+                var map = _document.Data;
+                if (map.Cells == null || map.Cells.Length != map.Rows * map.Columns)
+                    throw new InvalidDataException("窗口内存文档的Cells缺失或不完整。");
+                if (_savedMap == null)
+                {
+                    if (_savedState == null) throw new InvalidDataException("窗口保存基线已缺失，无法安全判断未保存内容。");
+                    _savedMap = _savedState.Restore(out var migratedBaseline);
+                    _memoryMigrationNotice |= migratedBaseline;
+                    if (migratedBaseline && !string.IsNullOrEmpty(_filePath) && _sourceVersion == 0) _sourceVersion = 1;
+                }
+                _memoryMigrationNotice |= _document.WasLegacyMemoryMigrated;
+                _recoveryError = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                _recoveryError = exception.Message + " V3升级时旧内存可能已无法恢复；请重新载入地图文件。" +
+                    "当前快照已保留，未自动重置；磁盘文件不包含未保存的编辑，请确认后再放弃。";
+                hasUnsavedChanges = true;
+                return false;
+            }
         }
 
         private void OnDisable()
@@ -112,6 +160,7 @@ namespace FreshGuard.Editor
             _drawing = false;
             _undoGroup = -1;
             if (GUIUtility.hotControl == _gridControl) GUIUtility.hotControl = 0;
+            if (!TryRestoreMemory()) { Repaint(); return; }
             SyncDimensions();
             ValidateDocument(true);
             Repaint();
@@ -125,8 +174,10 @@ namespace FreshGuard.Editor
         public override void DiscardChanges()
         {
             FinishGesture();
+            // 恢复失败时仅允许用户明确关闭并放弃；不替换仍保留着的快照。
+            if (_recoveryError != null) { base.DiscardChanges(); return; }
             Undo.ClearUndo(_document);
-            _document.Replace(_savedMap ?? MapData.Create());
+            _document.Replace(_savedMap);
             _newUnsaved = false;
             SyncDimensions();
             ValidateDocument(true);
@@ -135,6 +186,16 @@ namespace FreshGuard.Editor
 
         private void OnGUI()
         {
+            if (_recoveryError != null)
+            {
+                EditorGUILayout.HelpBox(_recoveryError, MessageType.Error);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("重新载入 .bytes")) LoadDocument();
+                    if (GUILayout.Button("明确放弃并新建")) NewDocument();
+                }
+                return;
+            }
             if (_document == null || _document.Data == null) return;
             if (_assetsInvalidated) ValidateDocument(true);
             HandleShortcuts();
@@ -142,10 +203,15 @@ namespace FreshGuard.Editor
             DrawSettings();
             DrawPalette();
             EditorGUILayout.LabelField(_ballGeometryDescription ?? "球体净空基准尚未读取。", EditorStyles.miniLabel);
-            EditorGUILayout.LabelField("左键绘制 / 右键擦为空位；矩形拖放填充；原点(0,0)在左下角。", EditorStyles.miniLabel);
+            if (_sourceVersion == 1)
+                EditorGUILayout.HelpBox("源文件 V1：仅在内存中迁移为两层，加载不标记未保存，也未写回原文件；保存/导出统一写 V2。", MessageType.Info);
+            else if (_memoryMigrationNotice)
+                EditorGUILayout.HelpBox("已恢复旧窗口内存并迁移两层；原有未保存内容和保存基线分别保留，保存统一写 V2。", MessageType.Info);
+            EditorGUILayout.LabelField("左键修改当前层 / 右键仅移除障碍；矩形拖放填充；原点(0,0)在左下角。", EditorStyles.miniLabel);
             DrawGrid();
             DrawIssues();
-            EditorGUILayout.LabelField(string.IsNullOrEmpty(_filePath) ? "尚未保存到文件" : _filePath, EditorStyles.miniLabel);
+            var source = _sourceVersion == 0 ? "新建/来源版本未知" : "源文件 V" + _sourceVersion;
+            EditorGUILayout.LabelField((string.IsNullOrEmpty(_filePath) ? "尚未保存到文件" : _filePath) + "　" + source + "；保存 V2", EditorStyles.miniLabel);
         }
 
         private void DrawToolbar()
@@ -198,23 +264,25 @@ namespace FreshGuard.Editor
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                foreach (var terrain in PALETTE)
-                {
-                    var previousColor = GUI.backgroundColor;
-                    GUI.backgroundColor = TerrainColor(terrain);
-                    var prefab = _glassAssets.GetPrefab(terrain);
-                    var thumbnail = prefab == null ? null : AssetPreview.GetAssetPreview(prefab) ?? AssetPreview.GetMiniThumbnail(prefab);
-                    if (GUILayout.Toggle(_brush == terrain, new GUIContent(TerrainLabel(terrain), thumbnail),
-                        "Button", GUILayout.Height(38), GUILayout.MinWidth(80))) _brush = terrain;
-                    GUI.backgroundColor = previousColor;
-                }
+                GUILayout.Label("基础", GUILayout.Width(30));
+                foreach (var brush in BASE_PALETTE) DrawBrushButton(brush);
+                GUILayout.Label("障碍", GUILayout.Width(30));
+                foreach (var brush in OBSTACLE_PALETTE) DrawBrushButton(brush);
+                DrawBrushButton(MapEditorBrush.ResetCell);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("当前：" + BrushLabel(_brush), GUILayout.Width(160));
                 GUILayout.FlexibleSpace();
                 _rectangleTool = GUILayout.Toggle(_rectangleTool, "矩形", "Button", GUILayout.Width(48));
                 if (GUILayout.Button("全图填充", GUILayout.Width(72)))
-                    ChangeDocument("全图填充", () => _document.Fill(_brush));
-                if (GUILayout.Button("清空", GUILayout.Width(44)) &&
-                    EditorUtility.DisplayDialog("清空地图", "全部地形将变成Empty，可撤销。", "清空", "取消"))
-                    ChangeDocument("清空地图", () => _document.Fill(TerrainType.Empty));
+                {
+                    var brush = _brush;
+                    ChangeDocument("全图填充：" + BrushLabel(brush), () => _document.Fill(brush));
+                }
+                if (GUILayout.Button("重置全图", GUILayout.Width(72)) &&
+                    EditorUtility.DisplayDialog("重置地图", "全部格子将同时重置为Empty + None，可撤销。", "重置", "取消"))
+                    ChangeDocument("重置地图", () => _document.Fill(MapEditorBrush.ResetCell));
             }
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -222,8 +290,21 @@ namespace FreshGuard.Editor
                 GUILayout.Label("缩放", GUILayout.Width(30));
                 _cellPixels = GUILayout.HorizontalSlider(_cellPixels, 18f, 64f, GUILayout.Width(130));
                 GUILayout.FlexibleSpace();
-                GUILayout.Label("轨道：仅球通行　空位：可部署　玻璃：阻挡", EditorStyles.miniLabel);
+                GUILayout.Label("底色：基础地形；玻璃：覆盖并阻挡；部署须Empty + None", EditorStyles.miniLabel);
             }
+        }
+
+        private void DrawBrushButton(MapEditorBrush brush)
+        {
+            var previousColor = GUI.backgroundColor;
+            GUI.backgroundColor = BrushColor(brush);
+            var obstacle = brush == MapEditorBrush.GlassNormal ? ObstacleType.GlassNormal :
+                brush == MapEditorBrush.GlassColored ? ObstacleType.GlassColored : ObstacleType.None;
+            var prefab = _glassAssets.GetPrefab(obstacle);
+            var thumbnail = prefab == null ? null : AssetPreview.GetAssetPreview(prefab) ?? AssetPreview.GetMiniThumbnail(prefab);
+            if (GUILayout.Toggle(_brush == brush, new GUIContent(BrushLabel(brush), thumbnail),
+                "Button", GUILayout.Height(36), GUILayout.MinWidth(72))) _brush = brush;
+            GUI.backgroundColor = previousColor;
         }
 
         private void DrawGrid()
@@ -248,11 +329,29 @@ namespace FreshGuard.Editor
                 {
                     var coordinate = new BoardCoordinate(column, row);
                     var rect = CellRect(grid, coordinate);
-                    var terrain = map.GetTerrain(coordinate);
+                    var terrain = map.GetBaseTerrain(coordinate);
+                    var obstacle = map.GetObstacle(coordinate);
                     EditorGUI.DrawRect(rect, new Color(0.12f, 0.13f, 0.15f));
                     var inner = new Rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
-                    EditorGUI.DrawRect(inner, TerrainColor(terrain));
-                    GUI.Label(inner, TerrainGlyph(terrain), _coordinateStyle);
+                    EditorGUI.DrawRect(inner, BaseTerrainColor(terrain));
+                    var glyph = terrain == BaseTerrainType.Track ? "T" : "·";
+                    if (obstacle != ObstacleType.None)
+                    {
+                        // 图标始终居中收进格子，四周保留可辨认的基础底色。
+                        var inset = Mathf.Max(4f, _cellPixels * 0.18f);
+                        var icon = new Rect(rect.x + inset, rect.y + inset, rect.width - inset * 2f, rect.height - inset * 2f);
+                        var prefab = _glassAssets.GetPrefab(obstacle);
+                        var thumbnail = prefab == null ? null : AssetPreview.GetAssetPreview(prefab) ?? AssetPreview.GetMiniThumbnail(prefab);
+                        if (thumbnail != null) GUI.DrawTexture(icon, thumbnail, ScaleMode.ScaleToFit);
+                        else
+                        {
+                            EditorGUI.DrawRect(icon, ObstacleColor(obstacle));
+                            GUI.Label(icon, obstacle == ObstacleType.GlassNormal ? "G" : "C", _coordinateStyle);
+                        }
+                        glyph = "";
+                    }
+                    GUI.Label(inner, new GUIContent(glyph,
+                        $"({column},{row}) 基础：{terrain}；障碍：{obstacle}"), _coordinateStyle);
                     if (_highlight.HasValue && _highlight.Value.Equals(coordinate)) DrawOutline(rect, Color.yellow, 3f);
                 }
             }
@@ -262,7 +361,7 @@ namespace FreshGuard.Editor
                 var end = CellRect(grid, _gestureLast);
                 var preview = Rect.MinMaxRect(Math.Min(start.xMin, end.xMin), Math.Min(start.yMin, end.yMin),
                     Math.Max(start.xMax, end.xMax), Math.Max(start.yMax, end.yMax));
-                var tint = TerrainColor(_gestureTerrain);
+                var tint = BrushColor(_gestureBrush);
                 tint.a = 0.35f;
                 EditorGUI.DrawRect(preview, tint);
                 DrawOutline(preview, Color.white, 2f);
@@ -287,10 +386,12 @@ namespace FreshGuard.Editor
         private void HandleGridInput(Rect grid)
         {
             var current = Event.current;
-            if (current.type == EventType.MouseDown && (current.button == 0 || current.button == 1) && grid.Contains(current.mousePosition))
+            if (!_drawing && current.type == EventType.MouseDown && (current.button == 0 || current.button == 1) && grid.Contains(current.mousePosition))
             {
                 GUI.FocusControl(null);
-                _gestureTerrain = current.button == 1 ? TerrainType.Empty : _brush;
+                // 整笔固定按钮、画笔和矩形模式；切换调色板不能改变已开始的手势。
+                _gestureButton = current.button;
+                _gestureBrush = current.button == 1 ? MapEditorBrush.RemoveObstacle : _brush;
                 _gestureRectangle = _rectangleTool;
                 _gestureStart = _gestureLast = CoordinateAt(grid, current.mousePosition);
                 BeginEdit(_gestureRectangle ? "地图矩形填充" : "地图连续绘制");
@@ -298,29 +399,29 @@ namespace FreshGuard.Editor
                 GUIUtility.hotControl = _gridControl;
                 if (!_gestureRectangle)
                 {
-                    _document.Paint(_gestureStart, _gestureTerrain);
+                    _document.Paint(_gestureStart, _gestureBrush);
                     ValidateDocument(false);
                 }
                 current.Use();
                 Repaint();
             }
-            else if (_drawing && current.type == EventType.MouseDrag)
+            else if (_drawing && current.type == EventType.MouseDrag && current.button == _gestureButton)
             {
                 var coordinate = CoordinateAt(grid, current.mousePosition);
                 if (!_gestureRectangle)
                 {
-                    _document.PaintLine(_gestureLast, coordinate, _gestureTerrain);
+                    _document.PaintLine(_gestureLast, coordinate, _gestureBrush);
                     ValidateDocument(false);
                 }
                 _gestureLast = coordinate;
                 current.Use();
                 Repaint();
             }
-            else if (_drawing && current.rawType == EventType.MouseUp)
+            else if (_drawing && current.rawType == EventType.MouseUp && current.button == _gestureButton)
             {
                 var coordinate = CoordinateAt(grid, current.mousePosition);
-                if (_gestureRectangle) _document.FillRectangle(_gestureStart, coordinate, _gestureTerrain);
-                else _document.PaintLine(_gestureLast, coordinate, _gestureTerrain);
+                if (_gestureRectangle) _document.FillRectangle(_gestureStart, coordinate, _gestureBrush);
+                else _document.PaintLine(_gestureLast, coordinate, _gestureBrush);
                 FinishGesture();
                 current.Use();
             }
@@ -376,7 +477,7 @@ namespace FreshGuard.Editor
             var removedCells = map.Columns * map.Rows - retainedColumns * retainedRows;
             if ((_requestedColumns < map.Columns || _requestedRows < map.Rows) &&
                 !EditorUtility.DisplayDialog("确认裁剪地图",
-                    $"保留左下角{retainedColumns}列×{retainedRows}行区域，移除右侧/上方共{removedCells}个格子；扩展格子填Empty。可撤销。", "调整", "取消"))
+                    $"保留左下角{retainedColumns}列×{retainedRows}行的完整两层，移除右侧/上方共{removedCells}个格子；扩展格子填Empty + None。可撤销。", "调整", "取消"))
             {
                 SyncDimensions();
                 return;
@@ -568,6 +669,9 @@ namespace FreshGuard.Editor
         private bool ConfirmReplace()
         {
             FinishGesture();
+            if (_recoveryError != null)
+                return EditorUtility.DisplayDialog("确认放弃无法恢复的内存文档",
+                    _recoveryError + "\n重新载入或新建会放弃当前保留的内存快照，未保存内容可能丢失。", "放弃并继续", "取消");
             if (!hasUnsavedChanges) return true;
             var choice = EditorUtility.DisplayDialogComplex("地图尚未保存", "是否先保存当前地图？", "保存", "取消", "不保存");
             return choice == 2 || (choice == 0 && TrySave(false));
@@ -586,11 +690,12 @@ namespace FreshGuard.Editor
             var path = EditorUtility.OpenFilePanel("加载地图二进制", initialDirectory, "bytes");
             if (string.IsNullOrEmpty(path)) return;
             MapData candidate;
+            ushort sourceVersion;
             try
             {
                 if (!string.Equals(Path.GetExtension(path), ".bytes", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("仅支持.bytes地图二进制。");
-                candidate = MapBinarySerializer.Deserialize(File.ReadAllBytes(path));
+                candidate = MapBinarySerializer.Deserialize(File.ReadAllBytes(path), out sourceVersion);
             }
             catch (Exception exception)
             {
@@ -598,15 +703,25 @@ namespace FreshGuard.Editor
                 return;
             }
             if (!ConfirmReplace()) return;
-            SetDocument(candidate, Path.GetFullPath(path), false);
+            SetDocument(candidate, Path.GetFullPath(path), false, sourceVersion);
         }
 
-        private void SetDocument(MapData data, string path, bool isNew)
+        private void SetDocument(MapData data, string path, bool isNew, ushort sourceVersion = 0)
         {
             FinishGesture();
+            if (_document == null)
+            {
+                _document = CreateInstance<MapEditorDocument>();
+                _document.name = "Map Editor Document";
+                _document.hideFlags = HideFlags.HideAndDontSave;
+            }
             Undo.ClearUndo(_document);
             _document.Replace(data);
             _savedMap = data.Clone();
+            _savedState = MapEditorMapSnapshot.Capture(_savedMap);
+            _sourceVersion = sourceVersion;
+            _memoryMigrationNotice = false;
+            _recoveryError = null;
             _filePath = path;
             _newUnsaved = isNew;
             _highlight = null;
@@ -619,6 +734,11 @@ namespace FreshGuard.Editor
         private bool TrySave(bool saveAs)
         {
             FinishGesture();
+            if (_recoveryError != null)
+            {
+                EditorUtility.DisplayDialog("无法保存地图", _recoveryError, "确定");
+                return false;
+            }
             ValidateDocument(true);
             foreach (var issue in _issues)
                 if (issue.IsError)
@@ -628,7 +748,11 @@ namespace FreshGuard.Editor
                 }
             try
             {
+                if (_document.Data.Version != 2)
+                    throw new InvalidDataException("编辑器仅允许保存V2地图，请重新载入并迁移。");
                 var bytes = MapBinarySerializer.Serialize(_document.Data);
+                if (bytes.Length < MapBinarySerializer.HEADER_SIZE || bytes[4] != 2 || bytes[5] != 0)
+                    throw new InvalidDataException("序列化器未输出FGMP V2，已阻止写入。");
                 var path = _filePath;
                 if (saveAs || string.IsNullOrEmpty(path) || !ValidSaveName(path))
                 {
@@ -648,9 +772,12 @@ namespace FreshGuard.Editor
                     AssetDatabase.ImportAsset("Assets/" + path.Substring(assetsRoot.Length).Replace('\\', '/'));
                 _filePath = path;
                 _savedMap = _document.Data.Clone();
+                _savedState = MapEditorMapSnapshot.Capture(_savedMap);
+                _sourceVersion = 2;
+                _memoryMigrationNotice = false;
                 _newUnsaved = false;
                 hasUnsavedChanges = false;
-                ShowNotification(new GUIContent("已保存：" + Path.GetFileName(path)));
+                ShowNotification(new GUIContent("已保存 V2：" + Path.GetFileName(path)));
                 return true;
             }
             catch (Exception exception)
@@ -707,38 +834,51 @@ namespace FreshGuard.Editor
             EditorUtility.DisplayDialog(title, exception.Message, "确定");
         }
 
-        private static Color TerrainColor(TerrainType terrain)
+        private static Color BaseTerrainColor(BaseTerrainType terrain)
         {
             switch (terrain)
             {
-                case TerrainType.Track: return new Color(0.49f, 0.46f, 0.38f);
-                case TerrainType.Empty: return new Color(0.25f, 0.40f, 0.30f);
-                case TerrainType.GlassNormal: return new Color(0.35f, 0.77f, 0.89f);
-                case TerrainType.GlassColored: return new Color(0.82f, 0.44f, 0.78f);
+                case BaseTerrainType.Track: return new Color(0.49f, 0.46f, 0.38f);
+                case BaseTerrainType.Empty: return new Color(0.25f, 0.40f, 0.30f);
                 default: return Color.red;
             }
         }
 
-        private static string TerrainLabel(TerrainType terrain)
+        private static Color ObstacleColor(ObstacleType obstacle)
         {
-            switch (terrain)
+            switch (obstacle)
             {
-                case TerrainType.Track: return "轨道 Track";
-                case TerrainType.Empty: return "空位 Empty";
-                case TerrainType.GlassNormal: return "普通玻璃";
-                case TerrainType.GlassColored: return "彩色玻璃";
-                default: return "非法地形";
+                case ObstacleType.None: return new Color(0.55f, 0.55f, 0.55f);
+                case ObstacleType.GlassNormal: return new Color(0.35f, 0.77f, 0.89f);
+                case ObstacleType.GlassColored: return new Color(0.82f, 0.44f, 0.78f);
+                default: return Color.red;
             }
         }
 
-        private static string TerrainGlyph(TerrainType terrain)
+        private static Color BrushColor(MapEditorBrush brush)
         {
-            switch (terrain)
+            switch (brush)
             {
-                case TerrainType.Track: return "T";
-                case TerrainType.Empty: return "·";
-                case TerrainType.GlassNormal: return "G";
-                case TerrainType.GlassColored: return "C";
+                case MapEditorBrush.Track: return BaseTerrainColor(BaseTerrainType.Track);
+                case MapEditorBrush.Empty: return BaseTerrainColor(BaseTerrainType.Empty);
+                case MapEditorBrush.GlassNormal: return ObstacleColor(ObstacleType.GlassNormal);
+                case MapEditorBrush.GlassColored: return ObstacleColor(ObstacleType.GlassColored);
+                case MapEditorBrush.RemoveObstacle: return ObstacleColor(ObstacleType.None);
+                case MapEditorBrush.ResetCell: return new Color(0.7f, 0.65f, 0.5f);
+                default: return Color.red;
+            }
+        }
+
+        private static string BrushLabel(MapEditorBrush brush)
+        {
+            switch (brush)
+            {
+                case MapEditorBrush.Track: return "轨道 Track";
+                case MapEditorBrush.Empty: return "空位 Empty";
+                case MapEditorBrush.RemoveObstacle: return "无障碍 None";
+                case MapEditorBrush.GlassNormal: return "普通玻璃";
+                case MapEditorBrush.GlassColored: return "彩色玻璃";
+                case MapEditorBrush.ResetCell: return "重置格子";
                 default: return "?";
             }
         }

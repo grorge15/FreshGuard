@@ -1,39 +1,31 @@
 ---
 slug: freshguard-map-editor
-版本: 3
-状态: completed
+版本: 4
+状态: executing
 创建: 2026-10-21
 ---
 
-# FreshGuard 地图编辑器计划V3
+# FreshGuard 地图编辑器计划V4
 
 ## 代码逻辑设计
 
-实现 FreshGuard/Map Editor 的 Unity EditorWindow：默认9行11列，格距0.35，行列各1至64。支持新建、画笔、连续绘制、矩形/全图填充、擦除为空位、撤销重做、尺寸调整、二进制加载保存导出及错误定位。缩小确认，扩大保留左下区域并填Empty；未保存修改提示。仅.bytes，不实现JSON或网页旧格式。
+本版本为用户确认的V4分层改造。每格由基础地形与障碍共同描述；玻璃破碎只移除障碍，保留底层。复用现有坐标、多格部署、占用、实体、物理碰撞、耐久和奖励。保留默认9行11列、格距0.35、1～64尺寸、固定相机及11列×9行基准等比缩放。
 
-复用BoardCoordinate、BoardModel、PlacementBoardView、BoardLayoutRules、GlassBoardController/GlassView、BattleShopSceneController/PlacementBoardsBootstrap。TerrainType:byte固定Track=1、Empty=2、GlassNormal=3、GlassColored=4，0无效。Track不可部署但球可通行；Empty可部署且球可通行；玻璃两项均不可。外圈遵从地形，无隐藏禁部署区。玻璃破碎变Empty，先提交地形与碰撞事实再奖励。
+新增BaseTerrainType:byte（Track=1、Empty=2），ObstacleType:byte（None=0、GlassNormal=1、GlassColored=2），[Serializable]值类型MapCellData，包含BaseTerrain与Obstacle。MapData使用MapCellData[] Cells替代Terrains，其他元数据保留，索引Row*Columns+Column；Clone深复制，Resize保留左下完整两层，新建/重置/扩展均Empty+None。
 
-MapData保存Version、Rows、Columns、CellSize、NormalGlassId、ColoredGlassId、Terrains。仅数据不含Prefab引用，玻璃ID映射Luban既有配置；支持任意数量彩玻。双方初始图相同、运行副本独立，破碎不保存回文件。复用现有占用和多格部署逻辑；新地图部署许可由地形推导。
+MapData提供GetBaseTerrain、GetObstacle、SetBaseTerrain、SetObstacle。写入只改指定层。CanPlaceUnit仅Empty+None为true、不混入机器人占用；CanEnergyBallPass要求有效基础地形且无障碍。越界布尔false、读取及无效写入抛明确异常。删除业务旧GetTerrain/SetTerrain，四种旧编号只用于V1解码。
 
-坐标原点左下，列右增、行上增，索引row*columns+column。局部格心=(column+0.5,row+0.5)*cellSize-(width,height)/2；共享坐标数学。提供GetTerrain/CanPlaceUnit/CanEnergyBallPass及边界邻格查询。CanPlaceUnit是地形许可，最终部署仍检查占用。越界布尔false，地形读取报错。球依旧物理反弹而非寻路。
+BoardModel继续独立复制地图，IsOpen使用综合许可，Evaluate复用完整形状/边界/占用。新增地图模式分层读取与internal TryRemoveObstacle；移除轨道上的障碍也算成功。地图模式SetOpen只判断请求与许可一致，不再修改两层。无地图地址的旧Luban模式保留原SetOpen与保留边框规则；无完整分层数据时读取新层接口明确报错。
 
-编辑器代码在Assets/Editor/MapEditor，运行时代码在GameLogic/Gameplay/Maps，不能反向依赖UnityEditor。文档SO承载Undo及窗口恢复，颜色/缩略图预览，不生成战斗资源。
+BoardLayoutRules提供初始基础地形和障碍，HasInitialGlass/GetGlassConfigId依障碍查询。GlassBoardController在原实体确认Broken后：BeginBreak立即禁碰撞、仅清除本方障碍、更新索引/底图、原奖励事件、原淡出销毁。旧布局仍SetOpen(true)。保留实体去重/奖励去重，不新增破碎事件。双方副本独立，新局从模板恢复，破碎不写文件。PlacementBoardView底色按基础地形显示，玻璃覆盖其上，部署预览复用综合许可。
 
-二进制V1小端：FGMP(4 bytes)、UInt16版本、Int32列、Int32行、Float32格距、Int32普通玻璃ID、Int32彩玻ID、Int32格数、每格1字节地形。严格拒绝截断/尾随/未知版本/无效地形/尺寸。以后按版本解码转换，编号不改。MapLoader支持Deserialize(byte[])、LoadAssetAsync(location,token)、LoadFileAsync(path,token)，用框架TextAsset异步读取后释放，本地IO异步。默认Configs/Maps，资源Map_前缀。
+编辑器复用MapEditorWindow/Document/GlassAssets、Bresenham、矩形与Undo。基础画笔Track/Empty、障碍画笔None/普通/彩色、重置格子工具。左键只改当前层，右键统一只擦障碍；矩形/全图填充遵循当前工具。重置全图及重置格子同时Empty+None；手势开始锁定画笔和操作，整笔一步Undo。预览基础底色+居中玻璃图标，保留底色边框；坐标信息同时显示两层。ContentEquals、裁剪、Undo/Redo、窗口恢复完整保存两层；任一层修改均正确标记未保存。
 
-BattleShopSceneController增加地图资源地址。空地址保留旧配置与旧布局；指定但失败停止开局。流程：读/校验、双方独立副本、格子外墙、布局、玻璃、塔/敌人路线/商店、中心出生检查、发射。球固定几何中心（偶数图中心不是格心）。本期不支持战斗中人为改格或改尺寸。
+FGMP文件升级V2，保留30字节小端头：标识、UInt16版本、Int32列/行、Float32格距、Int32普通/彩玻ID、Int32格数。V2行优先每格2字节（基础、障碍），总长30+2*Rows*Columns，不直接序列化结构体内存。V1四编号迁移为Track+None、Empty+None、Empty+普通、Empty+彩色；读取统一返回Version=2，保存仅V2。严格拒绝未知版本/无效编号/尺寸/截断/尾随。Deserialize(byte[])保留，新增out源版本重载；编辑器显示V1内存迁移提示，不因加载标脏、不自动写回。MapLoader异步接口不变，调整文件长度上限支持最大V2。禁止批量覆盖用户地图，不生成JSON。
 
-以当前场景11列×9行、原始格距0.35为视觉基准，只等比缩放PlacementBoardView网格内容。相机Position、Rotation、Orthographic Size、Viewport Rect全部保持场景配置。双方世界根、棋盘中心、背景、边带、塔、路线、商店保持原布局。参考宽高为11×referenceCellSize、9×referenceCellSize；fitScale=Min(referenceWidth/(Columns×CellSize),referenceHeight/(Rows×CellSize))。棋盘实际XY缩放=各方场景原始XY缩放×fitScale，Z不变。非同比例图居中留白；参考图倍率1，22×18倍率0.5，13×13倍率9/13。原场景层级如已非等比变形则报告节点，不横纵拉伸补偿。
+MapValidator分别校验两层编号，可部署统计用综合查询，连通/净空/窄通道继续现有规则。修改MapData/Serializer/Loader/Validator、BoardModel/LayoutRules/GlassController/PlacementBoardView、EditorWindow/Document/GlassAssets及现有验证；不新建部署、碰撞、奖励服务，不改缩放公式。
 
-BattleMapLayoutController改为网格适配，基准每个实例捕获一次，不能从上一局的尺寸或已缩放结果重采样。停用双方间距平移、背景/边带缩放、塔/路线重定位、FitCamera、LateUpdate动态取景、商店到布局的绑定及相机写入/恢复。清理只恢复自身改动的棋盘和能源球状态，旧地图倍率1。
-
-格子、玻璃和外墙继续按地图逻辑CellSize生成，再由父棋盘统一缩放。机器人Prefab制作格距为0.35；部署、移动、合并刷新共用落位入口，局部缩放=Prefab原始缩放×CellSize/制作格距，使形状偏移、图片、碰撞与占格一致。外墙厚度按参考格距换算。继续使用MapGridMath与TransformPoint/InverseTransformPoint，不另建坐标系统或重复乘缩放。
-
-能源球保持独立Rigidbody2D，不重新挂到棋盘下；尺寸与速度共同跟随cellScale=fitScale×CellSize/referenceCellSize。实际球缩放=球原始缩放×cellScale，基础世界速度=配置基础速度×cellScale；新增运行倍率进入EffectiveSpeed，配置值保持原值，拖拽减速/暴走/反弹继续复用。停止状态应用倍率，中心发射；每局清理恢复基准。运行时按真实半径/缩放和真实碰撞体检查净空。地图窗口使用当前战场基准预检，缺少场景基准时提示运行复检，不再用固定1.1强制判定。文件不增加显示缩放字段。
-
-新图流程：读取校验、捕获原始基准、双方网格/外墙重建、网格与球体倍率、玻璃、固定塔/路线/商店、中心净空、发射。初始化失败、退出、新旧图切换恢复基准。
-
-数据非法/资源缺失禁止导出或开局；绑定战场后出生球与玻璃/外墙重叠禁止开局。通路不连通/无部署格/通道窄于球体警告但可导出。连通性是4邻域提示，不保证真实物理可遍历也不强制闭环。
+验收覆盖两种玻璃分别在Track/Empty四组合：破碎前禁部署并阻挡；Track破碎后仍禁部署但球通行，Empty破碎后可部署且仍受占用/形状约束。验证原耐久/奖励/去重/双方隔离/新局恢复；两层独立画笔、擦除、重置、填充、裁剪、Undo；V1四类型无写回迁移、V2六组合/最大尺寸往返及损坏拒绝。使用TEngine Launcher真实验证四组合及旧布局、固定相机与缩放；独立临时测试资源不覆盖用户图。
 
 ## 文件边界
 - 可写：BoardModel、PlacementBoardView、BoardLayoutRules、GlassBoardController、BattleShopSceneController、必要UI布局接口及相应测试。
@@ -50,6 +42,11 @@ BattleMapLayoutController改为网格适配，基准每个实例捕获一次，�
 - [x] 6. V3固定相机/布局、等比网格缩放及无累计基准恢复。
 - [x] 7. V3机器人格距、外墙厚度、球体尺寸/速度与预检同步。
 - [x] 8. V3专项测试、Play验证、使用说明、编译/Console与门禁。
+
+- [ ] 9. V4两层数据、V2格式及V1兼容。
+- [ ] 10. V4部署/破碎/底图接入。
+- [ ] 11. V4编辑器两层工具、预览、撤销与源版本提示。
+- [ ] 12. V4自动测试、Launcher验证、文档与门禁。
 
 ## 校验点
 - [x] 默认99格、四地形许可、多格部署、外圈Empty可部署。
@@ -81,4 +78,4 @@ V3已完成568项EditMode测试及编辑文档检查。实际场景的塔/路线
 从未完成Todo继续，先检查实际磁盘与Git；不覆盖用户已有改动。Unity资源装配串行且检查现有对象，不能重复生成。测试失败先读日志；MCP不可用则保留脚本并停止资源写入，报告真实验证限制。
 
 ## 计划改动
-相较V2取消战场重排、背景适配和相机动态取景，改为以原11列×9行显示区域等比缩放网格内容。能源球尺寸与速度同步缩放，并补齐机器人格距换算及出生净空校验。
+相较V3，将互斥的四类地形改为“基础地形＋障碍物”，玻璃破碎只清除障碍；文件升级为V2，并兼容读取V1。保留固定相机、11列×9行基准缩放及现有部署、碰撞和奖励流程。

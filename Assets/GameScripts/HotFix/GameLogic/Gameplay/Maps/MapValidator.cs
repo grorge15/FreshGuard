@@ -36,13 +36,17 @@ namespace GameLogic
                 issues.Add(new MapValidationIssue(MapValidationSeverity.Error, "格距和地图物理尺寸必须为有限正数。"));
             if (map.NormalGlassId <= 0 || map.ColoredGlassId <= 0 || map.NormalGlassId == map.ColoredGlassId)
                 issues.Add(new MapValidationIssue(MapValidationSeverity.Error, "两种玻璃配置ID必须为不同的正整数。"));
-            if (map.Terrains == null || map.Terrains.Length != (long)map.Rows * map.Columns)
-                issues.Add(new MapValidationIssue(MapValidationSeverity.Error, "地形数量与行列数不一致。"));
+            if (map.Cells == null || map.Cells.Length != (long)map.Rows * map.Columns)
+                issues.Add(new MapValidationIssue(MapValidationSeverity.Error, "格子数量与行列数不一致。"));
             if (issues.Count != 0) return issues;
-            for (var i = 0; i < map.Terrains.Length; i++)
-                if (!MapData.IsValidTerrain(map.Terrains[i]))
-                    issues.Add(new MapValidationIssue(MapValidationSeverity.Error, "未知地形编号：" + (byte)map.Terrains[i],
-                        new BoardCoordinate(i % map.Columns, i / map.Columns)));
+            for (var i = 0; i < map.Cells.Length; i++)
+            {
+                var cell = new BoardCoordinate(i % map.Columns, i / map.Columns);
+                if (!MapData.IsValidBaseTerrain(map.Cells[i].BaseTerrain))
+                    issues.Add(new MapValidationIssue(MapValidationSeverity.Error, "未知基础地形编号：" + (byte)map.Cells[i].BaseTerrain, cell));
+                if (!MapData.IsValidObstacle(map.Cells[i].Obstacle))
+                    issues.Add(new MapValidationIssue(MapValidationSeverity.Error, "未知障碍编号：" + (byte)map.Cells[i].Obstacle, cell));
+            }
             return issues;
         }
 
@@ -51,13 +55,13 @@ namespace GameLogic
             var issues = ValidateStructure(map);
             if (issues.Count != 0) return issues;
             var empty = 0;
-            var visited = new bool[map.Terrains.Length];
+            var visited = new bool[map.Cells.Length];
             var queue = new Queue<BoardCoordinate>();
             var components = 0;
-            for (var i = 0; i < map.Terrains.Length; i++)
+            for (var i = 0; i < map.Cells.Length; i++)
             {
-                if (map.Terrains[i] == TerrainType.Empty) empty++;
                 var cell = new BoardCoordinate(i % map.Columns, i / map.Columns);
+                if (map.CanPlaceUnit(cell)) empty++;
                 if (visited[i] || !map.CanEnergyBallPass(cell)) continue;
                 components++;
                 if (components > 1) issues.Add(new MapValidationIssue(MapValidationSeverity.Warning, "此通行区域与其他区域不连通。", cell));

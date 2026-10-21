@@ -1,17 +1,17 @@
 # FreshGuard 地图编辑器使用与验证
 
-实施版本：地图编辑器计划V3。地图只使用 `.bytes` 二进制，没有 JSON 地图加载、保存或调试导出。
+实施版本：地图编辑器计划V4。地图只使用 `.bytes` 二进制，没有 JSON 地图加载、保存或调试导出。
 
 ## 编辑地图
 
 1. 在 Unity 2021.3.50f1 中打开本工程，选择 `FreshGuard > Map Editor`。
-2. 默认新图为11列、9行、格距0.35，全部为空位。行列各支持1～64；在顶部修改后点“调整尺寸”。扩大保留左下重叠区域并填空，缩小提示裁剪范围和格子数量，可取消或撤销。
-3. 选择轨道、空位、普通玻璃、彩色玻璃画笔。左键点击或拖拽绘制；右键擦除为空位；“矩形”支持拖放填充；“全图填充”使用当前画笔；“清空”恢复全部空位。
+2. 默认新图为11列、9行、格距0.35，全部为 Empty + None。行列各支持1～64；在顶部修改后点“调整尺寸”。扩大保留左下重叠区域并填空，缩小提示裁剪范围和格子数量，可取消或撤销。
+3. 基础地形画笔选择轨道或空位，只修改底层；障碍画笔选择无障碍、普通玻璃或彩色玻璃，只修改障碍。左键点击或拖拽绘制，右键统一只擦除障碍，保留底层。矩形及全图填充使用当前画笔；重置格子工具或“重置全图”同时恢复 Empty + None。
 4. 每次连续拖拽作为一步撤销。尺寸、参数、填充同样支持撤销/重做。新建、切换文件、关闭窗口会检查未保存修改。
 5. 点“校验”检查数据、玻璃配置及资源、中心球体净空和通行区域。点击带坐标的问题可定位。错误禁止保存；警告允许保存。
 6. “保存”或 `Ctrl+S` 写回当前文件；“另存 / 导出”或 `Ctrl+Shift+S` 选择新文件。默认目录是 `Assets/AssetRaw/Configs/Maps`，文件名必须为 `Map_名称.bytes`。通过“加载 .bytes”重新编辑。
 
-左下角为(0,0)，列向右、行向上；窗口上方显示最大行号。轨道用T、空位用点、普通玻璃用G、彩色玻璃用C区分，画笔带现有玻璃Prefab缩略图。
+左下角为(0,0)，列向右、行向上；窗口上方显示最大行号。底色区分Track/Empty；居中的玻璃图标保留底色边框，悬停显示坐标、基础地形与障碍。玻璃画笔带现有Prefab缩略图。
 
 球体净空预检读取当前场景双方绑定的棋盘、参考格距和能源球，分别计算缩放后的局部半径。缺少场景基准或存在非等比/剪切时提示运行时复检，不再按固定1.1缩放阻止导出；必要资源缺失仍报错。游戏开局还会按真实球体半径及碰撞体复检。单格窄通道仅为警告，不代表整张地图无法通行。
 
@@ -25,7 +25,7 @@
 
 地图地址留空使用原 `_layoutConfigId` 布局。指定地址读取失败会停止开局并报错。本轮开始时业务场景配置为用户的`Map_Demo2`（13列×13行）；代码适配不改写此配置，可按上述Inspector方式更换地图或清空回到旧布局。
 
-双方加载独立副本；外圈空位可以部署，轨道只允许球通过。最终机器人部署仍检查完整形状和占用。玻璃破碎先关闭碰撞，再把当前方地形改成Empty并刷新格子，随后走原奖励和淡出逻辑。破碎不写回地图文件，新局恢复原图。球从棋盘几何中心发射；中心与玻璃、外墙或准备期机器人重叠时停止开局。
+双方加载独立副本；外圈空位可以部署，轨道只允许球通过。最终机器人部署仍检查完整形状和占用。玻璃破碎先关闭碰撞，再只移除当前方障碍并刷新格子，随后走原奖励和淡出逻辑。Track底层保留不可部署规则，Empty底层恢复可部署；两者均允许能源球通行。破碎不写回地图文件，新局恢复原图。球从棋盘几何中心发射；中心与玻璃、外墙或准备期机器人重叠时停止开局。
 
 以原11列×9行、参考格距0.35区域容纳地图。`fitScale = Min(11 / Columns, 9 / Rows) × referenceCellSize / CellSize`，棋盘XY缩放始终取原始缩放乘fitScale，保持正方形和居中留白。11×9原格距倍率1；22×18倍率0.5；13×13倍率9/13。棋盘原有世界XY非等比或剪切会报告错误，不通过拉伸补偿。
 
@@ -39,14 +39,18 @@
 
 运行时代码位于 [Maps](C:/Users/Admin/FreshGuard/Assets/GameScripts/HotFix/GameLogic/Gameplay/Maps)，不依赖UnityEditor。
 
-- `MapData` 保存版本、行列、格距、两种玻璃Luban配置ID及一维地形数组；`Clone`隔离双方和编辑文档。
-- `MapLoader.Deserialize`、`LoadAssetAsync`、`LoadFileAsync` 负责解析、YooAsset资源读取和本地异步IO；资源读取后释放引用。
-- `BoardModel.GetTerrain`、`CanPlaceUnit`、`CanEnergyBallPass` 查询地形，`Evaluate`继续检查完整机器人占用形状。布尔查询越界返回false，地形读取越界抛出异常。
-- `MapData.IsInside`、`GetNeighbors` 提供边界和四邻格；`MapGridMath`与`PlacementBoardView`共享格心/世界坐标转换。索引为 `Row * Columns + Column`。
+- `MapData` 保存版本、行列、格距、两种玻璃Luban配置ID及一维 `MapCellData[] Cells`；每格含 `BaseTerrain` 和 `Obstacle`。`Clone`隔离双方和编辑文档。
+- `GetBaseTerrain` / `GetObstacle` 分层读取；`SetBaseTerrain` / `SetObstacle`仅修改对应层。地图模式`BoardModel`提供两层读取；旧布局没有完整分层数据，调用新读取接口会明确报错。
+- `CanPlaceUnit`仅允许Empty+None，不含机器人占用；`Evaluate`继续检查完整占格形状。`CanEnergyBallPass`要求有效基础地形且无障碍。布尔越界返回false，读取越界抛异常。
+- `BoardModel.TryRemoveObstacle`是内部破碎入口；地图模式的旧`SetOpen`不再修改两层。无地图地址时仍使用原Luban开放格/保留边框行为。
+- `MapLoader.Deserialize`、`LoadAssetAsync`、`LoadFileAsync`负责兼容解析、YooAsset读取与本地异步IO；资源读取后释放引用。
+- `MapData.IsInside`、`GetNeighbors`保留边界及四邻格；`MapGridMath`和`PlacementBoardView`坐标映射不变，索引为 `Row * Columns + Column`。
 
-V1格式固定小端，头部共30字节：依次为ASCII `FGMP`、UInt16版本、Int32列数、Int32行数、Float32格距、Int32普通玻璃ID、Int32彩色玻璃ID、Int32格数；随后每格1字节地形。总长度为 `30 + Rows * Columns`。
+当前写入 **FGMP V2**，固定小端30字节头：ASCII `FGMP`、UInt16版本、Int32列数、Int32行数、Float32格距、Int32普通玻璃ID、Int32彩色玻璃ID、Int32格数。随后每格2字节，依次基础地形和障碍，总长度 `30 + 2 * Rows * Columns`。
 
-地形编号固定：Track=1、Empty=2、GlassNormal=3、GlassColored=4，0无效。读取拒绝未知版本、非法尺寸/格距/编号、格数不符、截断及尾随数据。以后增加文件版本时在序列化器中增加对应解码分支，再转换为当前模型；不能重排现有地形编号。地图文件不保存GameObject或Prefab引用。
+基础编号：Track=1、Empty=2；障碍编号：None=0、GlassNormal=1、GlassColored=2。读取严格拒绝无效编号、尺寸/格距、数量不符、截断、尾随和未知版本。
+
+兼容FGMP V1每格1字节：旧Track/Empty分别迁移到Track+None/Empty+None；旧两类玻璃迁移到Empty+对应玻璃。读取只在内存迁移为V2，不写回文件；编辑器提示源版本，主动保存才升级。已有Map_Demo/Map_Demo2不批量转换。地图不保存GameObject/Prefab或场景显示缩放，不提供JSON。
 
 ## 改动文件
 
@@ -60,7 +64,11 @@ V1格式固定小端，头部共30字节：依次为ASCII `FGMP`、UInt16版本�
 - 恢复脚本：[unity-mcp-client.mjs](C:/Users/Admin/FreshGuard/scripts/unity-mcp-client.mjs)、[verify-unity-mcp-gate.mjs](C:/Users/Admin/FreshGuard/scripts/verify-unity-mcp-gate.mjs)，根目录从脚本位置推导，使用MCP 10.1.2本地stdio服务。
 - 计划与报告：[实施计划](C:/Users/Admin/FreshGuard/plans/freshguard-map-editor.md)及本文件。用户原有规则、代理、Codex配置和图集修改保留。
 
-## V3验证进度
+## V4验证进度
+
+实施中，实际验证结果将在测试完成后填写；下方V3/V2内容均为历史结果，不能作为V4已通过的证据。
+
+## V3历史验证
 
 - V3运行时代码及新增专项用例已在当前Unity通过七个EditMode程序集：568通过、0失败、0跳过。包含固定相机、极端宽高、不同格距、原缩放恢复、机器人碰撞尺寸、球体速度/拖拽/冻结/暴走以及真实塔/路线子层级保留测试。
 - `MapEditorDocumentChecks.Run()`通过。该阶段Unity编译成功，Console错误0。

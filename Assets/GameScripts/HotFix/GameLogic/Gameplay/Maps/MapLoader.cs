@@ -32,7 +32,7 @@ namespace GameLogic
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("地图路径不能为空。", nameof(path));
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true))
             {
-                if (stream.Length < MapBinarySerializer.HEADER_SIZE || stream.Length > MapBinarySerializer.HEADER_SIZE + MapData.MAX_DIMENSION * MapData.MAX_DIMENSION)
+                if (stream.Length < MapBinarySerializer.HEADER_SIZE || stream.Length > MapBinarySerializer.HEADER_SIZE + 2 * MapData.MAX_DIMENSION * MapData.MAX_DIMENSION)
                     throw new InvalidDataException("地图文件大小无效。");
                 var bytes = new byte[(int)stream.Length];
                 var offset = 0;

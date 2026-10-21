@@ -111,10 +111,16 @@ namespace GameLogic
         }
 
         public MapData CaptureMap() => _map?.Clone();
-        public TerrainType GetTerrain(BoardCoordinate coordinate)
+        public BaseTerrainType GetBaseTerrain(BoardCoordinate coordinate) => RequireMap().GetBaseTerrain(coordinate);
+        public ObstacleType GetObstacle(BoardCoordinate coordinate) => RequireMap().GetObstacle(coordinate);
+        private MapData RequireMap() => _map ?? throw new InvalidOperationException("旧布局模式没有分层地图数据。");
+
+        /// <summary>仅玻璃控制器在破碎确认后调用。成功移除不代表该格允许部署。</summary>
+        internal bool TryRemoveObstacle(BoardCoordinate coordinate)
         {
-            if (!IsInside(coordinate)) throw new ArgumentOutOfRangeException(nameof(coordinate));
-            return _map != null ? _map.GetTerrain(coordinate) : IsOpen(coordinate) ? TerrainType.Empty : TerrainType.GlassNormal;
+            if (_map == null || !IsInside(coordinate) || _map.GetObstacle(coordinate) == ObstacleType.None) return false;
+            _map.SetObstacle(coordinate, ObstacleType.None);
+            return true;
         }
         public bool CanPlaceUnit(BoardCoordinate coordinate) => IsOpen(coordinate);
         public bool CanEnergyBallPass(BoardCoordinate coordinate) => _map != null ? _map.CanEnergyBallPass(coordinate) : IsOpen(coordinate);
@@ -167,14 +173,8 @@ namespace GameLogic
         public bool SetOpen(BoardCoordinate coordinate, bool open)
         {
             if (!IsInside(coordinate) || (open && !IsInsidePlacementArea(coordinate)) || (!open && IsOccupied(coordinate))) return false;
-            if (_map != null)
-            {
-                var terrain = _map.GetTerrain(coordinate);
-                if (open && (terrain == TerrainType.GlassNormal || terrain == TerrainType.GlassColored))
-                { _map.SetTerrain(coordinate, TerrainType.Empty); return true; }
-                // 轨道不可通过旧开放接口变成可部署格，也不允许制造无对应实体的玻璃。
-                return open == (terrain == TerrainType.Empty);
-            }
+            // 地图模式的许可由两层数据决定，旧接口不能重写基础地形或清除障碍。
+            if (_map != null) return open == _map.CanPlaceUnit(coordinate);
             _open[coordinate.Column, coordinate.Row] = open;
             return true;
         }

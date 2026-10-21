@@ -13,14 +13,14 @@ namespace FreshGuard.Editor
     internal sealed class MapEditorGlassAssets
     {
         private const string GLASS_ROOT = "Assets/AssetRaw/Actor/Glass/";
-        private readonly Dictionary<TerrainType, GameObject> _prefabs = new Dictionary<TerrainType, GameObject>();
+        private readonly Dictionary<ObstacleType, GameObject> _prefabs = new Dictionary<ObstacleType, GameObject>();
         private readonly List<string> _errors = new List<string>();
 
         public IReadOnlyList<string> Errors => _errors;
 
-        public GameObject GetPrefab(TerrainType terrain)
+        public GameObject GetPrefab(ObstacleType obstacle)
         {
-            return _prefabs.TryGetValue(terrain, out var prefab) ? prefab : null;
+            return _prefabs.TryGetValue(obstacle, out var prefab) ? prefab : null;
         }
 
         public void Reload(MapData map)
@@ -32,8 +32,8 @@ namespace FreshGuard.Editor
                 ValidatePlacementSlot();
                 var tables = new Tables(name => new Luban.ByteBuf(File.ReadAllBytes(
                     Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes/" + name + ".bytes"))));
-                ValidateGlass(tables.TbGlass.GetOrDefault(map.NormalGlassId), map.NormalGlassId, 0, TerrainType.GlassNormal);
-                ValidateGlass(tables.TbGlass.GetOrDefault(map.ColoredGlassId), map.ColoredGlassId, 1, TerrainType.GlassColored);
+                ValidateGlass(tables.TbGlass.GetOrDefault(map.NormalGlassId), map.NormalGlassId, 0, ObstacleType.GlassNormal);
+                ValidateGlass(tables.TbGlass.GetOrDefault(map.ColoredGlassId), map.ColoredGlassId, 1, ObstacleType.GlassColored);
             }
             catch (Exception exception)
             {
@@ -51,11 +51,9 @@ namespace FreshGuard.Editor
             if (prefab == null) return;
             if (prefab.GetComponentInChildren<Collider2D>(true) != null || prefab.GetComponentInChildren<Rigidbody2D>(true) != null)
                 _errors.Add("PlacementSlot底图不能包含碰撞体或刚体：" + path);
-            _prefabs[TerrainType.Track] = prefab;
-            _prefabs[TerrainType.Empty] = prefab;
         }
 
-        private void ValidateGlass(Glass config, int id, int kind, TerrainType terrain)
+        private void ValidateGlass(Glass config, int id, int kind, ObstacleType obstacle)
         {
             var label = (kind == 0 ? "普通" : "彩色") + "玻璃 ID=" + id + "：";
             if (config == null) { _errors.Add(label + "TbGlass中不存在此ID。"); return; }
@@ -66,7 +64,7 @@ namespace FreshGuard.Editor
             var prefabPath = GLASS_ROOT + "Prefabs/" + config.PrefabLocation + ".prefab";
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             if (prefab == null) _errors.Add(label + "缺少Prefab：" + prefabPath);
-            else _prefabs[terrain] = prefab;
+            else _prefabs[obstacle] = prefab;
 
             var stages = config.StageSprites;
             var ratios = config.StageUpperRatios;

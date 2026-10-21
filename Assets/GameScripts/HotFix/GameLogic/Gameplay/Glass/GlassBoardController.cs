@@ -87,7 +87,8 @@ namespace GameLogic
                 // 先提交通行和部署事实，奖励通知可能同步结束整局。
                 view.BeginBreak();
                 _byCell.Remove(view.Coordinate);
-                _board.Model.SetOpen(view.Coordinate, true);
+                if (_board.Model.IsTerrainMap) _board.Model.TryRemoveObstacle(view.Coordinate);
+                else _board.Model.SetOpen(view.Coordinate, true);
                 _board.RefreshAllCells();
                 var source = snapshot.GlassKind == GlassKind.Normal ? ShopRewardSource.NormalGlass : ShopRewardSource.ColoredGlass;
                 GameEvent.Send<BattleRewardEvent>(BattleRewardAdapter.REWARD_EVENT,
