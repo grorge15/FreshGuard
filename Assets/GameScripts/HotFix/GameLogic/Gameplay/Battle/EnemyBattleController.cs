@@ -229,7 +229,7 @@ namespace GameLogic
                     position = entry.Group.Points[i];
                 }
                 if (remaining <= 0.00001d) return 0d;
-                if (enemy.BaseSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.BaseSpeed);
+                if (enemy.EffectiveSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.EffectiveSpeed);
             }
             return earliest;
         }
@@ -283,7 +283,7 @@ namespace GameLogic
                     _context.Registry.Remove(id, EntityRemovalReason.Manual, out _);
                     continue;
                 }
-                var distance = enemy.BaseSpeed * deltaTime;
+                var distance = enemy.EffectiveSpeed * deltaTime;
                 var position = entry.View.transform.position;
                 var points = entry.Group.Points;
                 while (entry.NextPoint < points.Length)

@@ -75,12 +75,10 @@ namespace FreshGuard.Editor
         internal static void UpgradeGhost(Transform ghost)
         {
             if (ghost == null) throw new InvalidOperationException("缺少拖拽图标节点。");
-            var background = EnsureRect(ghost, "m_img_LevelBackground");
-            background.SetAsFirstSibling();
-            background.sizeDelta = new Vector2(110, 110);
-            var image = background.GetComponent<Image>() ?? background.gameObject.AddComponent<Image>();
-            image.color = Color.white;
-            image.raycastTarget = false;
+            var background = ghost.Find("m_img_LevelBackground");
+            if (background != null) UnityEngine.Object.DestroyImmediate(background.gameObject);
+            var level = ghost.Find("m_text_Level");
+            if (level != null) UnityEngine.Object.DestroyImmediate(level.gameObject);
             var icon = EnsureRect(ghost, "m_img_RobotIcon");
             icon.sizeDelta = new Vector2(100, 100);
             var iconImage = icon.GetComponent<Image>() ?? icon.gameObject.AddComponent<Image>();
@@ -88,17 +86,7 @@ namespace FreshGuard.Editor
             iconImage.preserveAspect = true;
             iconImage.raycastTarget = false;
             var rootImage = ghost.GetComponent<Image>();
-            if (rootImage != null) { rootImage.color = Color.clear; rootImage.raycastTarget = false; }
-            var level = EnsureRect(ghost, "m_text_Level");
-            level.sizeDelta = new Vector2(60, 24);
-            level.anchoredPosition = new Vector2(0, -43);
-            var text = level.GetComponent<Text>() ?? level.gameObject.AddComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            text.fontSize = 16;
-            text.alignment = TextAnchor.MiddleCenter;
-            text.color = new Color(0.16f, 0.14f, 0.10f);
-            text.text = "Lv1";
-            text.raycastTarget = false;
+            if (rootImage != null) UnityEngine.Object.DestroyImmediate(rootImage);
         }
 
         private static RectTransform EnsureRect(Transform parent, string name)

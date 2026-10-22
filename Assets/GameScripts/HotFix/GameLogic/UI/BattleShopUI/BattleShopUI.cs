@@ -88,7 +88,6 @@ namespace GameLogic
                 ? new Color(0.8f, 0.12f, 0.1f) : new Color(0.23f, 0.13f, 0.08f);
             for (var i = 0; i < _items.Length; i++) _items[i].Render(this, i, state.Slots[i], state.EnergyCoins);
             _storage.Render(this);
-            LayoutRebuilder.MarkLayoutForRebuild(_offers);
         }
         public void PressSlot(int slotId, int pointerId, Vector2 position, float now)
         {
@@ -114,7 +113,7 @@ namespace GameLogic
             if (Context == null || Context.IsBusy || Drag.Phase != RobotDragPhase.Idle) return;
             var result = Context.TryRefresh(BattleSide.Player);
             if (result != ShopOperationResult.Success) ShowFailure(result);
-            else { _offers.localScale = Vector3.one * 0.94f; }
+            
         }
         public bool IsOverStorage(Vector2 position)
         {
@@ -150,7 +149,6 @@ namespace GameLogic
             var flashing = Time.unscaledTime < _flashUntil && Mathf.Repeat(Time.unscaledTime * 10f, 1f) < 0.5f;
             _coins.color = flashing ? new Color(1f, 0.25f, 0.15f) : Color.white;
             if (Time.unscaledTime > _messageUntil) _message.text = "";
-            _offers.localScale = Vector3.MoveTowards(_offers.localScale, Vector3.one, Time.unscaledDeltaTime * 0.8f);
         }
         protected override void OnSetVisible(bool visible) { if (!visible) Drag?.Cancel(); }
         protected override void OnDestroy()

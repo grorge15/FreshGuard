@@ -29,7 +29,6 @@ namespace GameLogic
         public void Render(BattleShopUI owner)
         {
             _owner = owner;
-            _icon.color = RobotLevelStyle.IconColor;
             var id = owner.Context.GetState(BattleSide.Player).StorageInstanceId;
             Entity entity;
             var robot = id.HasValue && owner.Context.Registry.TryGet(id.Value, out entity) ? entity as RobotEntity : null;

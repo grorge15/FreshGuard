@@ -10,7 +10,6 @@ namespace GameLogic
         private Image _icon;
         private Image _quality;
         private Image _background;
-        private LayoutElement _layout;
         private Text _level;
         private Text _price;
         private ShopPointerInput _input;
@@ -26,7 +25,6 @@ namespace GameLogic
             _price = FindChildComponent<Text>("m_text_Price");
             _input = gameObject.GetComponent<ShopPointerInput>();
             _background = gameObject.GetComponent<Image>();
-            _layout = gameObject.GetComponent<LayoutElement>();
         }
         protected override void OnCreate()
         {
@@ -61,10 +59,8 @@ namespace GameLogic
                 _price.text = content.Offer.Price.ToString();
                 _price.color = balance >= content.Offer.Price ? new Color(0.22f, 0.13f, 0.09f) : new Color(0.8f, 0.12f, 0.1f);
             }
-            // 空槽退出布局，剩余商品居中；节点与逻辑槽ID保持关联。
+            // Slot 的位置由 BattleShopUI Prefab 保存；运行时只更新内容和可见状态。
             Visible = true;
-            _icon.color = RobotLevelStyle.IconColor;
-            if (_layout != null) _layout.ignoreLayout = config == null;
             if (_background != null)
             {
                 _background.enabled = config != null;

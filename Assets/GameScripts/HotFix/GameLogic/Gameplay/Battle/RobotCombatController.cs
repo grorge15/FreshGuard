@@ -17,6 +17,7 @@ namespace GameLogic
         private readonly IDictionary<int, GameObject> _views;
         private readonly SharedEnemyTargetSelector _targets;
         private readonly ICombatResolutionPort _resolution;
+        private readonly ICombatStatusPort _status;
         private readonly Dictionary<int, Reserve> _reserves = new Dictionary<int, Reserve>();
         private readonly List<RobotBulletView> _bullets = new List<RobotBulletView>();
         private readonly Func<string, Transform, CancellationToken, UniTask<GameObject>> _load;
@@ -56,6 +57,7 @@ namespace GameLogic
             _load = load ?? throw new ArgumentNullException(nameof(load));
             _targets = new SharedEnemyTargetSelector(context, enemies);
             _resolution = new EnemyCombatResolutionPort(context, enemies);
+            _status = new EnemyCombatStatusPort(context.Battle);
             _preparedRoot = new GameObject("PreparedRobotBullets").transform;
             _preparedRoot.SetParent(host.transform, false);
             _preparedRoot.gameObject.SetActive(false);
@@ -176,12 +178,20 @@ namespace GameLogic
             if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out var aimPoint)) return false;
             var bullet = reserve.Ready.GetComponent<RobotBulletView>();
             var config = robot.Configuration;
-            var action = _context.Combat.CaptureAttack(new CombatActionSnapshot(_context.BattleId,
-                robot.InstanceId, robot.Side, robot.SkillId, new[] { target.Value }, CombatOutcomeTag.SingleDamage,
-                robot.GetAttackDamage(), reserve.View.GetAttackOrigin(), aimPoint, sequence: 1));
-            bullet.Initialize(_host, _context, _enemies, action, _resolution,
-                config.BulletFlightTime, config.BulletArcHeight);
-            if (!robot.TryConsumeAttackTrigger(config.MinTriggerInterval)) return false;
+            var skillContext = new SkillRuntimeContext(_context.Battle, _resolution, _status,
+                (request, id) => _enemies.TryGetTargetPosition(request.SourceSide, id, out _));
+            var request = new SkillCastRequest(_context.BattleId, robot.InstanceId, robot.Side,
+                CombatSourceKind.Robot, robot.SkillId, SkillTriggerSource.RobotContact,
+                target.Value, aimPoint, reserve.View.GetAttackOrigin(), aimPoint,
+                robot.GetAttackDamage(), config.BulletFlightTime, config.BulletArcHeight);
+            var castResult = _context.Skills.TryCast(request, skillContext);
+            if (!castResult.Succeeded) return false;
+            bullet.InitializeSkillCast(_host, _context, _enemies, _context.Skills, skillContext, castResult.Cast);
+            if (!robot.TryConsumeAttackTrigger(config.MinTriggerInterval))
+            {
+                _context.Skills.Cancel(castResult.Cast);
+                return false;
+            }
             var instance = reserve.Ready;
             reserve.Ready = null;
             instance.transform.SetParent(_flightRoot, true);

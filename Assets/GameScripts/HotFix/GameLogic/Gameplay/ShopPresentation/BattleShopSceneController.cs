@@ -100,7 +100,8 @@ namespace GameLogic
                 preparation.transform.SetParent(transform, false);
                 preparation.SetActive(false);
                 _preparedRoot = preparation.transform;
-                Context = new BattleShopContext(_rules, _playerCandidates, _opponentCandidates, tables.TbRobot.Get);
+                Context = new BattleShopContext(_rules, _playerCandidates, _opponentCandidates, tables.TbRobot.Get,
+                    skillDefinitions: SkillDefinitionRegistry.FromTables(tables));
                 BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
                 _rewards = new BattleRewardAdapter(Context);
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
@@ -407,8 +408,7 @@ namespace GameLogic
                 var frameContext = Context;
                 try
                 {
-                    frameContext.Registry.AdvanceTime(Time.deltaTime);
-                    frameContext.Combat.AdvanceTime(Time.deltaTime);
+                    frameContext.Battle.AdvanceTime(Time.deltaTime);
                 }
                 catch (Exception e)
                 {
