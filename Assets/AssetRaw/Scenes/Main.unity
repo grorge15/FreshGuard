@@ -225,11 +225,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6e9787293c6a5294986df056a94b40e1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-<<<<<<< HEAD
   _mapLocation: Map_New
-=======
-  _mapLocation: 
->>>>>>> 993d3b147cc4676f06854f75e6883cbda79b47df
   _placement: {fileID: 1784076935}
   _playerBoard: {fileID: 383203861}
   _opponentBoard: {fileID: 1973142975}
