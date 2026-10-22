@@ -282,6 +282,27 @@ public partial class Tables
             m_TbWavePlan.ResolveRef(this);
         }
     }
+    /// <summary>
+    /// 技能配置
+    /// </summary>
+    private skill.TbSkill m_TbSkill;
+    public skill.TbSkill TbSkill
+    {
+        get
+        {
+            if (m_TbSkill == null)
+            {
+                m_TbSkill = new skill.TbSkill(defaultLoader("skill_tbskill"));
+                m_TbSkill.ResolveRef(this);
+            }
+            return m_TbSkill;
+        }
+        set
+        {
+            m_TbSkill = value;
+            m_TbSkill.ResolveRef(this);
+        }
+    }
 
     #endregion
 
