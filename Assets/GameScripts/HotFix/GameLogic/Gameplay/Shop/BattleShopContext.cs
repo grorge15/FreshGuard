@@ -37,12 +37,16 @@ namespace GameLogic
         public bool IsBusy => ActiveInteraction != null;
         public ShopRules Rules { get; }
         public int RefreshPrice => Rules.RefreshPrice;
-        public BattleEntityRegistry Registry { get; } = new BattleEntityRegistry();
-        public CombatRuntime Combat { get; }
+        public BattleRuntime Battle { get; }
+        // 兼容现有商店和战斗调用方；技能系统只依赖 BattleRuntime。
+        public BattleEntityRegistry Registry => Battle.Registry;
+        public CombatRuntime Combat => Battle.Combat;
+        public SkillRuntime Skills => Battle.Skills;
         public ShopRewardService Rewards { get; }
 
         public BattleShopContext(ShopRules rules, IReadOnlyList<int> playerCandidates,
-            IReadOnlyList<int> opponentCandidates, Func<int, Robot> robotResolver, IShopRandom random = null)
+            IReadOnlyList<int> opponentCandidates, Func<int, Robot> robotResolver, IShopRandom random = null,
+            SkillDefinitionRegistry skillDefinitions = null)
         {
             Rules = rules ?? throw new ArgumentNullException(nameof(rules));
             if (robotResolver == null) throw new ArgumentNullException(nameof(robotResolver));
@@ -64,7 +68,7 @@ namespace GameLogic
             };
             Rewards = new ShopRewardService(this);
             foreach (var state in _states) ApplyBatch(state, GenerateBatch(state, true));
-            Combat = new CombatRuntime(BattleId);
+            Battle = new BattleRuntime(BattleId, skillDefinitions);
         }
 
         public BattleShopState GetState(BattleSide side)
@@ -246,7 +250,7 @@ namespace GameLogic
             IsEnded = true;
             try
             {
-                Combat.Dispose();
+                Battle.Dispose();
                 RestoreInteraction();
                 CompleteInteraction();
                 foreach (var pair in _boards)
@@ -258,7 +262,6 @@ namespace GameLogic
                     state.StorageInstanceId = null;
                     foreach (var slot in state.Slots) { slot.InstanceId = null; slot.Offer = null; }
                 }
-                Registry.Dispose();
                 _owned.Clear();
                 _rewardKeys.Clear();
                 _offerDefinitions.Clear();

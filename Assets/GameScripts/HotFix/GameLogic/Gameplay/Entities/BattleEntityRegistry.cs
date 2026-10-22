@@ -97,6 +97,7 @@ namespace GameLogic
             foreach (var entity in _entities.Values)
             {
                 (entity as RobotEntity)?.AdvanceTime(deltaTime);
+                (entity as EnemyEntity)?.AdvanceCombatStatus(deltaTime);
                 (entity as GlassEntity)?.AdvanceTime(deltaTime);
             }
         }
