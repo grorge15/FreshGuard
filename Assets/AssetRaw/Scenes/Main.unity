@@ -134,20 +134,12 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: m_LocalScale.x
-      value: 0.3
-      objectReference: {fileID: 0}
-    - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: m_LocalScale.y
-      value: 0.3
-      objectReference: {fileID: 0}
-    - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0.15
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 5.13
+      value: 5.43
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.z
@@ -184,10 +176,6 @@ PrefabInstance:
     - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_Name
       value: OpponentPhysicalCollisionBall
-      objectReference: {fileID: 0}
-    - target: {fileID: 3887487116044811259, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: launchOnEnable
-      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
@@ -237,7 +225,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6e9787293c6a5294986df056a94b40e1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _mapLocation: Map_Demo
+  _mapLocation: 
   _placement: {fileID: 1784076935}
   _playerBoard: {fileID: 383203861}
   _opponentBoard: {fileID: 1973142975}
@@ -298,7 +286,7 @@ MonoBehaviour:
   - {fileID: 1832132060}
   - {fileID: 1096092600}
   - {fileID: 1519177347}
-  _damageNumberPrefab: {fileID: 5355598917011885402, guid: 70cd3a17ed1327345acef9e62e0e1f71, type: 3}
+  _damageNumberPrefab: {fileID: 0}
 --- !u!1 &207628316
 GameObject:
   m_ObjectHideFlags: 0
@@ -2210,25 +2198,9 @@ PrefabInstance:
   m_Modification:
     m_TransformParent: {fileID: 1940465433}
     m_Modifications:
-    - target: {fileID: 398556859444487599, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: m_Radius
-      value: 0.5134406
-      objectReference: {fileID: 0}
-    - target: {fileID: 398556859444487599, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: m_Offset.x
-      value: -0.010110885
-      objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_RootOrder
       value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: m_LocalScale.x
-      value: 0.3
-      objectReference: {fileID: 0}
-    - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: m_LocalScale.y
-      value: 0.3
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2273,18 +2245,6 @@ PrefabInstance:
     - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_Name
       value: PhysicalCollisionBall
-      objectReference: {fileID: 0}
-    - target: {fileID: 3887487116044811259, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: launchOnEnable
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3887487116044811259, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: spawnPosition.x
-      value: 0.11
-      objectReference: {fileID: 0}
-    - target: {fileID: 3887487116044811259, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
-      propertyPath: spawnPosition.y
-      value: -2.43
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
