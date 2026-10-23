@@ -85,11 +85,9 @@ namespace FreshGuard.Editor
                         "真实商店部署失败。");
                     var view = UnityEngine.Object.FindObjectsOfType<RobotView>().Single(item => item.InstanceId == robot.InstanceId);
                     var position = view.transform.position;
-                    var colliders = view.GetComponentsInChildren<BoxCollider2D>();
-                    Require(colliders.Length == robot.Configuration.ShapeId_Ref.CellOffsets.Length &&
-                        colliders.All(item => item.enabled && item.isTrigger), "部署格子触发器未启用。");
                     var outline = view.GetComponent<PolygonCollider2D>();
                     Require(outline != null && outline.enabled && !outline.isTrigger, "整体实体碰撞体未启用。");
+                    Require(view.GetComponentsInChildren<Collider2D>(true).Length == 1, "机器人只能保留整体碰撞体。");
                     Physics2D.SyncTransforms();
                     var emptyClear = true;
                     var cells = robot.Configuration.ShapeId_Ref.CellOffsets;
@@ -98,7 +96,7 @@ namespace FreshGuard.Editor
                         {
                             if (cells.Any(cell => cell[0] == x && cell[1] == y)) continue;
                             var point = view.transform.TransformPoint(new Vector3(x * 0.35f, y * 0.35f, 0));
-                            emptyClear &= !outline.OverlapPoint(point) && colliders.All(item => !item.OverlapPoint(point));
+                            emptyClear &= !outline.OverlapPoint(point);
                         }
                     ballSettings.Update();
                     ballSettings.FindProperty("spawnPosition").vector2Value = board.GetCellWorldPosition(new BoardCoordinate(3, 3));

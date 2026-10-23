@@ -63,10 +63,48 @@ namespace GameLogic.Tests
                     view.SetBerserkTrigger(false);
                     view.Render(robot);
                     Assert.IsFalse(instance.GetComponent<PolygonCollider2D>().isTrigger);
-                    foreach (var cell in instance.GetComponentsInChildren<BoxCollider2D>(true)) Assert.IsTrue(cell.isTrigger);
+                    CollectionAssert.AreEqual(new Collider2D[] { instance.GetComponent<PolygonCollider2D>() },
+                        instance.GetComponentsInChildren<Collider2D>(true));
                     foreach (Transform child in instance.transform)
                         if (child.name.StartsWith("Cell_"))
                             Assert.AreEqual(RobotLevelStyle.ColorForLevel(2), child.GetComponent<SpriteRenderer>().color);
+                }
+                finally { Object.DestroyImmediate(instance); }
+            }
+        }
+
+        [Test]
+        public void PolygonHitSelectsNearestRealCellWithoutChildColliders()
+        {
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
+                Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            using (var registry = new BattleEntityRegistry())
+            {
+                var robot = registry.CreateRobotFromConfig(tables.TbRobot.Get(502), BattleSide.Player);
+                robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(4, 3));
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotScatter.prefab");
+                var instance = Object.Instantiate(prefab, new Vector3(12, 7, 0), Quaternion.Euler(0, 0, 30));
+                instance.transform.localScale *= 1.5f;
+                try
+                {
+                    var view = instance.GetComponent<RobotView>();
+                    var method = typeof(RobotView).GetMethod("TryGetNearestOccupiedCell");
+                    Assert.IsNotNull(method, "整体轮廓命中后仍需返回真实占格，不能丢失拖拽选格方法。");
+                    object[] arguments = { instance.transform.position, default(BoardCoordinate) };
+                    Assert.IsFalse((bool)method.Invoke(view, arguments), "未绑定实体时不能选择占格。");
+                    view.Bind(registry, robot.InstanceId);
+                    foreach (var offset in robot.Definition.Cells)
+                    {
+                        var cell = instance.transform.Find("Cell_" + offset.Column + "_" + offset.Row);
+                        arguments[0] = cell.GetComponent<SpriteRenderer>().bounds.center;
+                        Assert.IsTrue((bool)method.Invoke(view, arguments));
+                        Assert.AreEqual(offset, arguments[1]);
+                    }
+                    arguments[0] = instance.transform.TransformPoint(new Vector3(0.175f, 0, 0));
+                    Assert.IsTrue((bool)method.Invoke(view, arguments));
+                    Assert.AreEqual(new BoardCoordinate(0, 0), arguments[1], "接缝等距时按坐标稳定选择。");
+                    arguments[0] = new Vector3(float.NaN, 0, 0);
+                    Assert.IsFalse((bool)method.Invoke(view, arguments));
                 }
                 finally { Object.DestroyImmediate(instance); }
             }

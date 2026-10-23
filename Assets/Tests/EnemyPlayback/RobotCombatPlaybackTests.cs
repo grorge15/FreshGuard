@@ -69,17 +69,17 @@ namespace GameLogic.Tests
                 yield return host.DeployDragAsync(session, new BoardPlacementTarget(board, anchor.Value), CancellationToken.None)
                     .ToCoroutine(result => Assert.AreEqual(ShopOperationResult.Success, result));
                 var view = Object.FindObjectsOfType<RobotView>().Single();
-                var colliders = view.GetPhysicalColliders();
-                Assert.IsTrue(colliders.All(c => c.enabled && c.isTrigger), "新部署机器人启用时必须已是 Trigger。");
+                var collider = view.GetPhysicalCollider();
+                Assert.IsTrue(collider.enabled && collider.isTrigger, "新部署机器人启用时必须已是 Trigger。");
                 Assert.AreEqual(ShopOperationResult.Success, host.Context.TryBeginDrag(BattleSide.Player,
                     RobotDragSource.Owned(view.InstanceId), out session));
-                Assert.IsTrue(colliders.All(c => !c.enabled));
+                Assert.IsFalse(collider.enabled);
                 host.Context.CancelInteraction(session.InteractionId);
-                Assert.IsTrue(colliders.All(c => c.enabled && c.isTrigger), "取消拖拽恢复时不能重新变为实体障碍。");
+                Assert.IsTrue(collider.enabled && collider.isTrigger, "取消拖拽恢复时不能重新变为实体障碍。");
                 host.Bootstrap.StopBalls();
-                Assert.IsTrue(colliders.All(c => c.enabled));
-                Assert.IsFalse(view.GetComponent<PolygonCollider2D>().isTrigger);
-                Assert.IsTrue(view.GetComponentsInChildren<BoxCollider2D>().All(c => c.isTrigger));
+                Assert.IsTrue(collider.enabled);
+                Assert.IsFalse(collider.isTrigger);
+                CollectionAssert.AreEqual(new Collider2D[] { collider }, view.GetComponentsInChildren<Collider2D>(true));
             }
             finally { host.EndBattle(); }
         }

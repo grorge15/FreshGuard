@@ -62,8 +62,8 @@ namespace GameLogic.Tests
                 Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), extra.GetComponent<Collider2D>()));
             }
             Assert.AreNotEqual(extras[0].CurrentDirection, extras[1].CurrentDirection);
-            var cell = robot.GetComponentsInChildren<BoxCollider2D>().First();
-            main.GetComponent<Rigidbody2D>().position = cell.bounds.center;
+            var body = robot.GetPhysicalCollider();
+            main.GetComponent<Rigidbody2D>().position = robot.transform.Find("Cell_0_0").position;
             Physics2D.SyncTransforms();
             _bootstrap.AdvanceBerserk(5.9f); Assert.IsTrue(main.IsBerserk);
             _bootstrap.AdvanceBerserk(0.11f);
@@ -72,13 +72,13 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, _balls.Count(b => b.Side == BattleSide.Player && b.IsLaunched));
             Assert.IsTrue(extras.All(b => !b.gameObject.activeSelf));
             AssertRobotCollisionMode(robot, false);
-            Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), cell));
+            Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), body));
             var contactCount = _contacts;
             main.SendMessage("FixedUpdate"); _scene.GetPhysicsScene2D().Simulate(0.02f);
             Assert.AreEqual(contactCount, _contacts); Assert.AreEqual(0, main.ComboCount);
             main.GetComponent<Rigidbody2D>().position = new Vector2(50f, 50f);
             Physics2D.SyncTransforms(); main.SendMessage("FixedUpdate");
-            Assert.IsFalse(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), cell));
+            Assert.IsFalse(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), body));
             Approach(main, robot); TickUntil(() => main.ComboCount == 1);
             Assert.AreEqual(1, main.ComboCount); Assert.Greater(_contacts, contactCount);
             yield return null;
@@ -90,12 +90,12 @@ namespace GameLogic.Tests
             var robot = Robot("I"); var ball = _balls[2];
             robot.SetBerserkTrigger(true); ball.gameObject.SetActive(true); ball.SetBerserk(true);
             Physics2D.SyncTransforms();
-            var boxes = robot.GetComponentsInChildren<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
-            var y = boxes[0].bounds.center.y;
-            var start = new Vector2(boxes[0].bounds.min.x - 0.6f, y);
+            var body = robot.GetPhysicalCollider();
+            var y = robot.transform.Find("Cell_0_0").position.y;
+            var start = new Vector2(body.bounds.min.x - 0.6f, y);
             ball.LaunchAt(start, 0f);
-            var end = boxes.Last().bounds.max.x + 0.6f;
-            for (var i = 0; i < 100 && ball.GetComponent<Rigidbody2D>().position.x < end; i++) Tick();
+            var end = body.bounds.max.x + 0.6f;
+            for (var i = 0; i < 100 && ball.GetComponent<Rigidbody2D>().position.x <= end; i++) Tick();
             Assert.Greater(ball.GetComponent<Rigidbody2D>().position.x, end);
             Assert.AreEqual(1, _contacts);
             Assert.AreEqual(0, ball.ComboCount); Assert.AreEqual(0, ball.BounceCount);
@@ -156,8 +156,9 @@ namespace GameLogic.Tests
         private void Approach(PhysicalCollisionBall ball, RobotView robot)
         {
             Physics2D.SyncTransforms();
-            var top = robot.GetComponentsInChildren<BoxCollider2D>().OrderByDescending(c => c.bounds.max.y).First();
-            ball.LaunchAt(new Vector2(top.bounds.center.x, top.bounds.max.y + 0.8f), 270f);
+            var top = robot.transform.Cast<Transform>().Where(c => c.name.StartsWith("Cell_", StringComparison.Ordinal))
+                .OrderByDescending(c => c.position.y).First();
+            ball.LaunchAt(new Vector2(top.position.x, top.position.y + 0.8f), 270f);
         }
         private void TickUntil(Func<bool> done)
         {
@@ -180,8 +181,7 @@ namespace GameLogic.Tests
             var body = robot.GetComponent<PolygonCollider2D>();
             Assert.IsNotNull(body);
             Assert.AreEqual(bodyTrigger, body.isTrigger);
-            foreach (var cell in robot.GetComponentsInChildren<BoxCollider2D>())
-                Assert.IsTrue(cell.isTrigger, "格子碰撞体必须始终是触发器。");
+            CollectionAssert.AreEqual(new Collider2D[] { body }, robot.GetComponentsInChildren<Collider2D>(true));
         }
         private PhysicalCollisionBall Ball(string name)
         {

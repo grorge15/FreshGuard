@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace FreshGuard.Editor
 {
-    /// <summary>按完整占格拼接整体实体轮廓，每格只保留接触触发器。</summary>
+    /// <summary>按完整占格拼接唯一的整体碰撞轮廓。</summary>
     public static class RobotCollisionPrefabBuilder
     {
         [MenuItem("FreshGuard/Robots/Add Physical Colliders")]
@@ -29,17 +29,11 @@ namespace FreshGuard.Editor
                         .Where(cell => cell.transform.parent == root.transform && cell.name.StartsWith("Cell_", StringComparison.Ordinal)).ToArray();
                     if (cells.Length != config.ShapeId_Ref.CellOffsets.Length || root.GetComponent<GameLogic.RobotView>() == null)
                         throw new InvalidOperationException("机器人实体格或视图组件不完整：" + path);
-                    foreach (var cell in cells)
-                    {
-                        if (!cell.name.StartsWith("Cell_", StringComparison.Ordinal) || cell.sprite == null)
-                            throw new InvalidOperationException("机器人格子缺少图形：" + path);
-                        var collider = cell.GetComponent<BoxCollider2D>();
-                        if (collider == null) collider = cell.gameObject.AddComponent<BoxCollider2D>();
-                        collider.size = cell.sprite.bounds.size;
-                        collider.offset = cell.sprite.bounds.center;
-                        collider.isTrigger = true;
-                        collider.enabled = true;
-                    }
+                    var dragArea = root.transform.Find("DragHitArea");
+                    if (dragArea != null) UnityEngine.Object.DestroyImmediate(dragArea.gameObject);
+                    foreach (var collider in root.GetComponentsInChildren<Collider2D>(true))
+                        if (collider.transform != root.transform || !(collider is PolygonCollider2D))
+                            UnityEngine.Object.DestroyImmediate(collider);
                     var body = root.GetComponent<PolygonCollider2D>();
                     if (body == null) body = root.AddComponent<PolygonCollider2D>();
                     var paths = BuildOutline(config.ShapeId_Ref.CellOffsets);
@@ -51,7 +45,7 @@ namespace FreshGuard.Editor
                     var label = root.transform.Find("LevelLabel");
                     if (label != null) UnityEngine.Object.DestroyImmediate(label.gameObject);
                     // Static robots need no Rigidbody2D; the moving ball owns the dynamic body.
-                    if (root.GetComponentsInChildren<Collider2D>(true).Length != cells.Length + 1 ||
+                    if (root.GetComponentsInChildren<Collider2D>(true).Length != 1 ||
                         root.GetComponentsInChildren<Rigidbody2D>(true).Length != 0)
                         throw new InvalidOperationException("机器人存在额外碰撞体或刚体，请检查：" + path);
                     PrefabUtility.SaveAsPrefabAsset(root, path);
@@ -59,7 +53,7 @@ namespace FreshGuard.Editor
                 finally { PrefabUtility.UnloadPrefabContents(root); }
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("[Robot Collision] 机器人整体实体轮廓、格子触发器装配完成，等级文字已移除。");
+            Debug.Log("[Robot Collision] 机器人已统一为根节点整体轮廓，内部碰撞体和等级文字已移除。");
         }
 
         private static List<Vector2[]> BuildOutline(int[][] offsets)

@@ -67,8 +67,9 @@ namespace GameLogic.Tests
                 // Keep actual table34, use deterministic bounce angles for a repeatable trajectory.
                 var provider = ball.GlobalValueProvider;
                 ball.GlobalValueProvider = key => key == 4 || key == 6 ? 0f : provider(key);
-                var cell = robots[index].GetPhysicalColliders().OrderByDescending(c => c.bounds.max.y).First();
-                var start = (Vector2)cell.bounds.center + Vector2.up * 0.6f;
+                var top = robots[index].transform.Cast<Transform>().Where(c => c.name.StartsWith("Cell_"))
+                    .OrderByDescending(c => c.position.y).First();
+                var start = (Vector2)top.position + Vector2.up * 0.6f;
                 ball.LaunchAt(start, 270f);
                 for (var expected = 1; expected <= (index == 0 ? 10 : 1); expected++)
                 {

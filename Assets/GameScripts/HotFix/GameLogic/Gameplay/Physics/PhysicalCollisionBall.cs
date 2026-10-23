@@ -42,8 +42,7 @@ namespace GameLogic
         private sealed class RobotContact
         {
             public RobotView View;
-            public Collider2D[] AllColliders;
-            public readonly HashSet<Collider2D> Touching = new HashSet<Collider2D>();
+            public Collider2D Collider;
             public bool Counted;
             public bool AttackHandled;
         }
@@ -210,9 +209,9 @@ namespace GameLogic
             foreach (var view in views)
             {
                 if (view == null || !view.TryGetComboRobot(_comboRegistry, Side, out var robot)) continue;
-                var colliders = view.GetPhysicalColliders();
-                if (!TouchesAny(colliders)) continue;
-                var contact = new RobotContact { View = view, AllColliders = colliders, Counted = true, AttackHandled = true };
+                var collider = view.GetPhysicalCollider();
+                if (!TouchesRobot(collider)) continue;
+                var contact = new RobotContact { View = view, Collider = collider, Counted = true, AttackHandled = true };
                 _protectedContacts[robot.InstanceId] = contact;
                 _robotContacts[robot.InstanceId] = contact;
                 IgnoreRobot(contact, true);
@@ -224,22 +223,17 @@ namespace GameLogic
             if (view != null && _protectedContacts.TryGetValue(view.InstanceId, out var contact)) IgnoreRobot(contact, true);
         }
 
-        private bool TouchesAny(Collider2D[] colliders)
+        private bool TouchesRobot(Collider2D collider)
         {
-            foreach (var collider in colliders)
-            {
-                if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) continue;
-                var distance = _collider.Distance(collider);
-                if (distance.isValid && distance.distance <= Physics2D.defaultContactOffset) return true;
-            }
-            return false;
+            if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) return false;
+            var distance = _collider.Distance(collider);
+            return distance.isValid && distance.distance <= Physics2D.defaultContactOffset;
         }
 
         private void IgnoreRobot(RobotContact contact, bool ignore)
         {
             if (_collider == null) return;
-            foreach (var collider in contact.AllColliders)
-                if (collider != null) Physics2D.IgnoreCollision(_collider, collider, ignore);
+            if (contact.Collider != null) Physics2D.IgnoreCollision(_collider, contact.Collider, ignore);
         }
 
         private void ReconcileProtectedContacts()
@@ -248,7 +242,7 @@ namespace GameLogic
             foreach (var pair in _protectedContacts)
             {
                 var contact = pair.Value;
-                if (contact.View == null || !contact.View.TryGetComboRobot(_comboRegistry, Side, out _) || !TouchesAny(contact.AllColliders))
+                if (contact.View == null || !contact.View.TryGetComboRobot(_comboRegistry, Side, out _) || !TouchesRobot(contact.Collider))
                     _endedRobotContacts.Add(pair.Key);
                 else IgnoreRobot(contact, true);
             }
@@ -328,22 +322,8 @@ namespace GameLogic
 
         private void OnCollisionEnter2D(Collision2D collision) { Bounce(collision); }
         private void OnCollisionStay2D(Collision2D collision) { Bounce(collision); }
-        private void OnCollisionExit2D(Collision2D collision)
-        {
-            if (_frozen || _comboRegistry == null) return;
-            var view = collision.collider.GetComponentInParent<RobotView>();
-            if (view != null && _robotContacts.TryGetValue(view.InstanceId, out var contact))
-                contact.Touching.Remove(collision.collider);
-        }
-
         private void OnTriggerEnter2D(Collider2D collider) { ProcessRobotTrigger(collider); }
         private void OnTriggerStay2D(Collider2D collider) { ProcessRobotTrigger(collider); }
-        private void OnTriggerExit2D(Collider2D collider)
-        {
-            if (_frozen || _comboRegistry == null) return;
-            var view = collider.GetComponentInParent<RobotView>();
-            if (view != null && _robotContacts.TryGetValue(view.InstanceId, out var contact)) contact.Touching.Remove(collider);
-        }
         private void ProcessRobotTrigger(Collider2D collider)
         {
             try { ProcessRobotCombo(collider.GetComponentInParent<RobotView>(), collider, false); }
@@ -392,14 +372,13 @@ namespace GameLogic
         private void ProcessRobotCombo(RobotView view, Collider2D collider, bool bounced)
         {
             if (!IsContactRunning || collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy ||
-                collider.GetComponent<RobotDragHitCollider>() != null ||
-                view == null || !view.TryGetComboRobot(_comboRegistry, Side, out var robot)) return;
+                view == null || collider != view.GetPhysicalCollider() ||
+                !view.TryGetComboRobot(_comboRegistry, Side, out var robot)) return;
             if (!_robotContacts.TryGetValue(robot.InstanceId, out var contact))
             {
-                contact = new RobotContact { View = view, AllColliders = view.GetPhysicalColliders() };
+                contact = new RobotContact { View = view, Collider = collider };
                 _robotContacts.Add(robot.InstanceId, contact);
             }
-            contact.Touching.Add(collider);
             if (_protectedContacts.ContainsKey(robot.InstanceId)) return;
             if (!contact.AttackHandled)
             {
@@ -435,21 +414,20 @@ namespace GameLogic
                 if (_protectedContacts.ContainsKey(pair.Key)) continue;
                 if (contact.View == null || !contact.View.TryGetComboRobot(_comboRegistry, Side, out _))
                 { _endedRobotContacts.Add(pair.Key); continue; }
-                contact.Touching.Clear();
-                foreach (var collider in contact.AllColliders)
+                var collider = contact.Collider;
+                var touching = false;
+                if (collider != null && collider.enabled && collider.gameObject.activeInHierarchy)
                 {
-                    if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) continue;
                     // Restoring simulated clears Unity's contact cache; retain the old episode
                     // while the shapes are still touching until the first resumed simulation.
-                    bool touching = _collider.IsTouching(collider);
+                    touching = _collider.IsTouching(collider);
                     if (!touching && (_reconcileAfterFreeze || IsBerserk))
                     {
                         var distance = _collider.Distance(collider);
                         touching = distance.isValid && distance.distance <= Physics2D.defaultContactOffset;
                     }
-                    if (touching) contact.Touching.Add(collider);
                 }
-                if (contact.Touching.Count == 0) _endedRobotContacts.Add(pair.Key);
+                if (!touching) _endedRobotContacts.Add(pair.Key);
             }
             foreach (var id in _endedRobotContacts) _robotContacts.Remove(id);
             _reconcileAfterFreeze = false;
