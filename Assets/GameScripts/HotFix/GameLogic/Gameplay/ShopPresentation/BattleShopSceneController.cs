@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using GameConfig;
 using TEngine;
 using UnityEngine;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace GameLogic
 {
@@ -33,6 +34,10 @@ namespace GameLogic
         private bool _ready;
         private bool _running;
         private bool _frozen;
+        private IProgress<BattleLoadingProgress> _loadingProgress;
+        private readonly Stopwatch _loadingStopwatch = new Stopwatch();
+        public Exception InitializationError { get; private set; }
+        public bool IsInitializing => _initializing;
         private float _preparationRemaining;
         private GlassBoardController _playerGlass;
         private GlassBoardController _opponentGlass;
@@ -44,6 +49,25 @@ namespace GameLogic
         public int RefreshPrice => _rules.RefreshPrice;
         public bool IsReady => _ready && Context != null && !Context.IsEnded && !Context.IsEndRequested;
         public bool IsCombatRunning => IsReady && _running && !_frozen;
+        /// <summary>
+        /// 真正进入可见战斗态：双方能源球已发射、首批敌人已生成，并且物理系统已经完成至少一次反弹。
+        /// 加载遮罩只有在此条件满足后才允许关闭。
+        /// </summary>
+        public bool IsCombatOperational
+        {
+            get
+            {
+                if (!IsCombatRunning || _bootstrap == null || _enemies == null ||
+                    _bootstrap.PlayerBall == null || _bootstrap.OpponentBall == null)
+                    return false;
+                if (!_bootstrap.PlayerBall.IsLaunched || !_bootstrap.OpponentBall.IsLaunched)
+                    return false;
+                if (_enemies.GetSpawnedCount(BattleSide.Player) <= 0 ||
+                    _enemies.GetSpawnedCount(BattleSide.Opponent) <= 0)
+                    return false;
+                return _bootstrap.PlayerBall.BounceCount > 0 && _bootstrap.OpponentBall.BounceCount > 0;
+            }
+        }
         public bool IsFrozen => _frozen;
         public float PreparationRemaining => _preparationRemaining;
         public PlacementBoardsBootstrap Bootstrap => _bootstrap;
@@ -52,18 +76,35 @@ namespace GameLogic
         public EnemyBattleController Enemies => _enemies;
         public RobotCombatController Combat => _combat;
 
-        private void Start() { InitializeAsync().Forget(); }
+        // 资源包和 Luban 配置由 Launcher/Procedure 异步完成；由 GameApp 在点击开始战斗后显式启动，
+        // 避免 Main 场景作为 Launcher 入口时在资源包就绪前抢跑初始化。
+        private void Start() { }
 
-        public async UniTask InitializeAsync()
+        public UniTask InitializeAsync()
+        {
+            return InitializeAsync(null);
+        }
+
+        /// <summary>初始化战斗并向主界面加载条报告阶段进度。</summary>
+        public async UniTask InitializeAsync(IProgress<BattleLoadingProgress> progress)
         {
             if (this != null && Context != null && Context.IsEnded) EndBattle();
-            if (this == null || Context != null || _initializing) return;
+            if (this == null || Context != null) return;
+            if (_initializing)
+            {
+                _loadingProgress = progress;
+                return;
+            }
             _initializing = true;
+            _loadingProgress = progress ?? _loadingProgress;
+            _loadingStopwatch.Restart();
+            InitializationError = null;
             var generation = ++_initializationGeneration;
             _initializationCancellation = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
             var cancellationToken = _initializationCancellation.Token;
             try
             {
+                ReportLoading(BattleLoadingStage.Config, 0.35f, "读取战斗配置");
                 // 任何事务通知内都可能结束并重启；跨帧等事件延迟解绑与窗口Pop完成。
                 // 先持有初始化代次和令牌，等待期间的再次终局仍可取消本次初始化。
                 await UniTask.Yield(cancellationToken);
@@ -72,6 +113,7 @@ namespace GameLogic
                     throw new InvalidOperationException("商店缺少双方盘面或统一启动器引用。");
                 _bootstrap.StopBalls();
                 var layout = await ReadBoardLayoutAsync(tables, cancellationToken);
+                ReportLoading(BattleLoadingStage.Config, 0.45f, "初始化战场规则");
                 if (!_playerBoard.ResetForBattle(layout) || !_opponentBoard.ResetForBattle(layout) || !_bootstrap.Initialize())
                     throw new InvalidOperationException("双方棋盘初始化失败。");
                 ApplyMapLayout();
@@ -117,15 +159,21 @@ namespace GameLogic
                 _bootstrap.BerserkChanged += OnBerserkChanged;
                 _playerGlass = GetGlassController(_playerBoard);
                 _opponentGlass = GetGlassController(_opponentBoard);
+                ReportLoading(BattleLoadingStage.Glass, 0.55f, "加载玻璃布局");
                 await _playerGlass.PrepareAsync(this, context, _playerBoard, BattleSide.Player, layout, tables, cancellationToken);
                 await _opponentGlass.PrepareAsync(this, context, _opponentBoard, BattleSide.Opponent, layout, tables, cancellationToken);
+                ReportLoading(BattleLoadingStage.Glass, 0.65f, "玻璃布局完成");
                 ValidateMapSpawn();
                 PrepareTowers(context, tables, cancellationToken);
                 if (_enemies == null) throw new InvalidOperationException("缺少 EnemyBattleController 场景引用。");
+                ReportLoading(BattleLoadingStage.Enemy, 0.72f, "预加载敌人");
                 await _enemies.PrepareAsync(this, context, tables, cancellationToken);
+                ReportLoading(BattleLoadingStage.Enemy, 0.82f, "敌人资源完成");
                 _combat = new RobotCombatController(this, context, _enemies, _views);
+                ReportLoading(BattleLoadingStage.CombatPresentation, 0.86f, "准备战斗表现");
                 await _combat.PrepareAsync(tables, cancellationToken);
                 // 完整等待加载，取消后也要收回本局迟到的窗口，避免遗留 UI。
+                ReportLoading(BattleLoadingStage.CombatUi, 0.90f, "加载战斗界面");
                 var window = await GameModule.UI.ShowUIAsyncAwait<MainCombatUI>(context, this, Progress);
                 if (cancellationToken.IsCancellationRequested || this == null || Context != context ||
                     context.IsEnded || context.IsEndRequested)
@@ -144,9 +192,11 @@ namespace GameLogic
                 _preparationRemaining = 3f;
                 _running = _frozen = false;
                 _ready = true;
+                ReportLoading(BattleLoadingStage.Ai, 0.97f, "初始化对手 AI");
                 InitializeOpponentAi();
                 _playerTowerView.gameObject.SetActive(true);
                 _opponentTowerView.gameObject.SetActive(true);
+                ReportLoading(BattleLoadingStage.Ready, 1f, "战斗准备完成");
             }
             catch (OperationCanceledException)
             {
@@ -159,9 +209,11 @@ namespace GameLogic
             catch (Exception e)
             {
                 if (generation != _initializationGeneration) return;
+                InitializationError = e;
+                ReportLoading(BattleLoadingStage.Failed, 1f, "战斗加载失败：" + e.Message);
                 CloseOwnedWindow();
                 Cleanup();
-                Debug.LogError("商店初始化失败；修复配置或资源后调用 InitializeAsync 重试：" + e.Message, this);
+                UnityEngine.Debug.LogError("商店初始化失败；修复配置或资源后调用 InitializeAsync 重试：" + e.Message, this);
             }
             finally
             {
@@ -170,8 +222,19 @@ namespace GameLogic
                     _initializing = false;
                     _initializationCancellation?.Dispose();
                     _initializationCancellation = null;
+                    _loadingProgress = null;
+                    _loadingStopwatch.Stop();
                 }
             }
+        }
+
+        private void ReportLoading(BattleLoadingStage stage, float progress, string message)
+        {
+            var snapshot = new BattleLoadingProgress(stage, progress, message,
+                _loadingStopwatch.IsRunning ? _loadingStopwatch.Elapsed.TotalSeconds : 0d);
+            _loadingProgress?.Report(snapshot);
+            if (stage == BattleLoadingStage.Ready || stage == BattleLoadingStage.Failed)
+                UnityEngine.Debug.Log($"[BattleLoading] {stage} {snapshot.Progress:P0} {snapshot.ElapsedSeconds:F2}s - {message}", this);
         }
 
         private static GlassBoardController GetGlassController(PlacementBoardView board)
@@ -311,7 +374,7 @@ namespace GameLogic
                 return ShopOperationResult.Success;
             }
             catch (OperationCanceledException) { return ShopOperationResult.ResourceFailed; }
-            catch (Exception e) { Debug.LogException(e, this); return ShopOperationResult.ResourceFailed; }
+            catch (Exception e) { UnityEngine.Debug.LogException(e, this); return ShopOperationResult.ResourceFailed; }
             finally { if (prepared != null) Destroy(prepared); }
         }
 
@@ -380,7 +443,7 @@ namespace GameLogic
                 return ShopOperationResult.Success;
             }
             catch (OperationCanceledException) { return ShopOperationResult.ResourceFailed; }
-            catch (Exception e) { Debug.LogException(e, this); return ShopOperationResult.ResourceFailed; }
+            catch (Exception e) { UnityEngine.Debug.LogException(e, this); return ShopOperationResult.ResourceFailed; }
             finally { if (prepared != null) Destroy(prepared); }
         }
 
@@ -403,11 +466,11 @@ namespace GameLogic
                     if (!_bootstrap.LaunchBoth(_playerBoard, _opponentBoard))
                     {
                         Cleanup();
-                        Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
+                        UnityEngine.Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
                         return;
                     }
                     try { _enemies?.StartBattle(); }
-                    catch (Exception e) { Debug.LogException(e, this); return; }
+                    catch (Exception e) { UnityEngine.Debug.LogException(e, this); return; }
                     startedThisFrame = true;
                 }
                 var frameContext = Context;
@@ -417,7 +480,7 @@ namespace GameLogic
                 }
                 catch (Exception e)
                 {
-                    Debug.LogException(e, this);
+                    UnityEngine.Debug.LogException(e, this);
                     if (Context == frameContext) EndBattle();
                     return;
                 }
@@ -429,7 +492,7 @@ namespace GameLogic
                 if (!startedThisFrame && IsCombatRunning)
                 {
                     try { _enemies?.Advance(Time.deltaTime); }
-                    catch (Exception e) { Debug.LogException(e, this); }
+                    catch (Exception e) { UnityEngine.Debug.LogException(e, this); }
                 }
                 if (IsCombatRunning)
                 {
@@ -438,7 +501,7 @@ namespace GameLogic
                         _combat?.AdvanceExistingBullets(Time.deltaTime);
                         if (IsCombatRunning) _combat?.AdvanceAttacks(Time.deltaTime);
                     }
-                    catch (Exception e) { Debug.LogException(e, this); EndBattle(); }
+                    catch (Exception e) { UnityEngine.Debug.LogException(e, this); EndBattle(); }
                 }
             }
         }
