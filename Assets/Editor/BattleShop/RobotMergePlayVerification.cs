@@ -223,7 +223,8 @@ namespace FreshGuard.Editor
                 Require(target.Anchor.Equals(anchor), "最终预览与实际部署锚点不一致。");
                 Require(state.EnergyCoins == beforeBuy - price && state.Slots[0].Offer == null && !state.Slots[0].InstanceId.HasValue,
                     "部署购买未原子清槽扣费。");
-                Require(View(targetId).GetComponentInChildren<TextMesh>().text == "Lv1", "盘面等级标签未显示。");
+                Require(View(targetId).GetComponentInChildren<TextMesh>() == null &&
+                    View(targetId).GetComponentInChildren<SpriteRenderer>().color == Color.white, "盘面应只用等级颜色标识。");
                 checks.Add("形状中心部署、无Move的PointerUp最终预览/落地一致与盘面等级显示");
 
                 // 命中目标的非锚点格，以验证合成目标按指针而非拖拽锚点判定。

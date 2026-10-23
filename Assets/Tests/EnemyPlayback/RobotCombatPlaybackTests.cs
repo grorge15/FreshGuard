@@ -77,7 +77,9 @@ namespace GameLogic.Tests
                 host.Context.CancelInteraction(session.InteractionId);
                 Assert.IsTrue(colliders.All(c => c.enabled && c.isTrigger), "取消拖拽恢复时不能重新变为实体障碍。");
                 host.Bootstrap.StopBalls();
-                Assert.IsTrue(colliders.All(c => c.enabled && !c.isTrigger));
+                Assert.IsTrue(colliders.All(c => c.enabled));
+                Assert.IsFalse(view.GetComponent<PolygonCollider2D>().isTrigger);
+                Assert.IsTrue(view.GetComponentsInChildren<BoxCollider2D>().All(c => c.isTrigger));
             }
             finally { host.EndBattle(); }
         }

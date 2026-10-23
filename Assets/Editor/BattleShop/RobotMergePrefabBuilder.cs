@@ -28,22 +28,7 @@ namespace FreshGuard.Editor
                 {
                     if (root.GetComponent<RobotBoardPointerInput>() == null) root.AddComponent<RobotBoardPointerInput>();
                     var label = root.transform.Find("LevelLabel");
-                    if (label == null)
-                    {
-                        label = new GameObject("LevelLabel", typeof(TextMesh)).transform;
-                        label.SetParent(root.transform, false);
-                    }
-                    label.localPosition = new Vector3(0f, -0.20f, -0.01f);
-                    var text = label.GetComponent<TextMesh>();
-                    if (text == null) text = label.gameObject.AddComponent<TextMesh>();
-                    text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                    text.GetComponent<MeshRenderer>().sharedMaterial = text.font.material;
-                    text.GetComponent<MeshRenderer>().sortingOrder = 15;
-                    text.text = "Lv1";
-                    text.fontSize = 32;
-                    text.characterSize = 0.035f;
-                    text.anchor = TextAnchor.MiddleCenter;
-                    text.color = Color.white;
+                    if (label != null) UnityEngine.Object.DestroyImmediate(label.gameObject);
                     PrefabUtility.SaveAsPrefabAsset(root, path);
                 }
                 finally { PrefabUtility.UnloadPrefabContents(root); }
@@ -69,7 +54,7 @@ namespace FreshGuard.Editor
                 EditorSceneManager.SaveScene(controller.gameObject.scene);
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("[Robot Merge] 机器人输入、等级标签与拖拽等级背景装配完成；重复执行不增加对象。");
+            Debug.Log("[Robot Merge] 机器人输入装配完成，等级文字已移除；重复执行不增加对象。");
         }
 
         internal static void UpgradeGhost(Transform ghost)

@@ -41,6 +41,39 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
+        public IEnumerator TinyBallCannotEnterSeamsOfAllEightRobots()
+        {
+            typeof(PhysicalCollisionBall).GetField("radius", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(_ball, 0.003f);
+            _ball.GetComponent<CircleCollider2D>().radius = 0.003f; // 直径小于原来的 0.021 格间隙。
+            var contacts = 0;
+            _ball.RobotContactDetected += (ball, id) => contacts++;
+            foreach (var name in new[] { "Cannon", "Scatter", "Piercing", "RapidFire", "Impact", "Frost", "Tractor", "Poison" })
+            {
+                var view = Robot(name);
+                Physics2D.SyncTransforms();
+                var boxes = view.GetComponentsInChildren<BoxCollider2D>();
+                var body = view.GetComponent<PolygonCollider2D>();
+                var first = boxes[0];
+                var second = boxes.Skip(1).First(c => Vector2.Distance(c.bounds.center, first.bounds.center) < 0.36f);
+                var seam = (Vector2)((first.bounds.center + second.bounds.center) * 0.5f);
+                var horizontal = Mathf.Abs(first.bounds.center.x - second.bounds.center.x) > 0.1f;
+                var start = horizontal ? new Vector2(seam.x, body.bounds.max.y + 0.6f) :
+                    new Vector2(body.bounds.max.x + 0.6f, seam.y);
+                var previousContacts = contacts;
+                _ball.LaunchAt(start, horizontal ? 270f : 180f);
+                for (var step = 0; step < 30 && _ball.BounceCount == 0; step++) Tick();
+                Assert.Greater(_ball.BounceCount, 0, name + " 的格间接缝必须阻挡小球");
+                Assert.AreEqual(1, _ball.ComboCount);
+                Assert.AreEqual(previousContacts + 1, contacts, "整体轮廓和格子不能重复发起攻击。");
+                Assert.IsFalse(body.OverlapPoint(_ball.GetComponent<Rigidbody2D>().position));
+                Assert.Greater(horizontal ? _ball.CurrentDirection.y : _ball.CurrentDirection.x, 0f);
+                _ball.Stop();
+                UnityEngine.Object.DestroyImmediate(view.gameObject);
+            }
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator ActualRobotCellsCountOneEpisodeAndSeparationAllowsAnother()
         {
             foreach (var shape in new[] { "I", "L", "T" })
@@ -102,13 +135,15 @@ namespace GameLogic.Tests
             for (var step = 0; step < 30 && _ball.ComboCount == 0; step++) Tick();
             Assert.AreEqual(1, _ball.ComboCount);
             var sphere = _ball.GetComponent<CircleCollider2D>();
-            var initial = new HashSet<Collider2D>(boxes.Where(c => sphere.IsTouching(c)));
+            var body = view.GetComponent<PolygonCollider2D>();
+            var initial = new HashSet<Collider2D>(boxes.Where(c => sphere.Distance(c).distance <= 0.03f));
             Assert.IsNotEmpty(initial, "必须从真实接触开始横向滑动");
             var changedCell = false;
             for (var step = 0; step < 50; step++)
             {
                 Direction(new Vector2(0.5f, -1f).normalized); Tick();
-                var touching = boxes.Where(c => sphere.IsTouching(c)).ToArray();
+                Assert.IsTrue(sphere.IsTouching(body), "滑动必须保持与整体轮廓真实接触。");
+                var touching = boxes.Where(c => sphere.Distance(c).distance <= 0.03f).ToArray();
                 Assert.IsNotEmpty(touching, "横向移动过程不能完全离开机器人");
                 Assert.AreEqual(1, _ball.ComboCount, "持续跨格接触只能计一次");
                 if (touching.All(c => !initial.Contains(c))) { changedCell = true; break; }
@@ -150,6 +185,7 @@ namespace GameLogic.Tests
 
         private RobotView Robot(string shape, BattleSide side = BattleSide.Player)
         {
+            shape = shape == "I" ? "Cannon" : shape == "L" ? "Scatter" : shape == "T" ? "Impact" : shape;
             var view = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/Robot" + shape + ".prefab")).GetComponent<RobotView>();
             SceneManager.MoveGameObjectToScene(view.gameObject, _scene);
             var robot = _registry.CreateRobot(view.ConfigId, side, 1, 1);

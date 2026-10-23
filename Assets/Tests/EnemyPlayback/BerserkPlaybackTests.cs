@@ -193,6 +193,7 @@ namespace GameLogic.Tests
         }
         private RobotView Robot(string shape, BattleSide side = BattleSide.Player)
         {
+            shape = shape == "I" ? "Cannon" : shape == "L" ? "Scatter" : "Impact";
             var go = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/Robot" + shape + ".prefab"));
             SceneManager.MoveGameObjectToScene(go, _scene);
             var view = go.GetComponent<RobotView>(); var robot = _registry.CreateRobot(view.ConfigId, side, 1, 1);

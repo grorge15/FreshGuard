@@ -16,7 +16,6 @@ namespace GameLogic
         private SpriteRenderer[] _cells;
         private SpriteRenderer[] _outline;
         private Collider2D[] _colliders;
-        private TextMesh _levelLabel;
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
         private Vector3? _authoredScale;
@@ -68,14 +67,12 @@ namespace GameLogic
                 var outlineRoot = transform.Find("ShapeOutline");
                 _outline = outlineRoot != null ? outlineRoot.GetComponentsInChildren<SpriteRenderer>(true) : Array.Empty<SpriteRenderer>();
                 _colliders = GetComponentsInChildren<Collider2D>(true);
-                var label = transform.Find("LevelLabel");
-                if (label != null) _levelLabel = label.GetComponent<TextMesh>();
             }
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
             foreach (var edge in _outline) edge.enabled = visible;
             foreach (var collider in _colliders)
             {
-                collider.isTrigger = _berserkTrigger;
+                collider.isTrigger = collider.transform != transform || _berserkTrigger;
                 collider.enabled = visible;
             }
             foreach (var cell in _cells)
@@ -85,18 +82,15 @@ namespace GameLogic
                     Time.unscaledTime < _feedbackUntil ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.white, 0.65f) :
                     RobotLevelStyle.ColorForLevel(robot.Level);
             }
-            if (_levelLabel != null)
-            {
-                _levelLabel.text = "Lv" + robot.Level;
-                _levelLabel.gameObject.SetActive(visible);
-            }
         }
 
         public void SetBerserkTrigger(bool enabled)
         {
             _berserkTrigger = enabled;
             if (_colliders == null) _colliders = GetComponentsInChildren<Collider2D>(true);
-            foreach (var collider in _colliders) if (collider != null) collider.isTrigger = enabled;
+            // 格子始终只检测接触；只有根节点的整体轮廓在普通/暴走间切换阻挡。
+            foreach (var collider in _colliders)
+                if (collider != null) collider.isTrigger = collider.transform != transform || enabled;
         }
 
         public void SetMergeCandidate(bool candidate) { _mergeCandidate = candidate; if (_robot != null) Render(_robot); }

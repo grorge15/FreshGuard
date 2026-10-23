@@ -56,6 +56,17 @@ namespace GameLogic.Tests
                     foreach (var collider in instance.GetComponentsInChildren<Collider2D>(true)) Assert.IsTrue(collider.enabled);
                     Assert.AreEqual(robot.InstanceId, view.InstanceId);
                     Assert.AreEqual(new BoardCoordinate(4, 3), robot.Anchor);
+                    Assert.IsTrue(robot.TryUpgrade());
+                    view.SetBerserkTrigger(true);
+                    view.Render(robot);
+                    foreach (var collider in instance.GetComponentsInChildren<Collider2D>(true)) Assert.IsTrue(collider.isTrigger);
+                    view.SetBerserkTrigger(false);
+                    view.Render(robot);
+                    Assert.IsFalse(instance.GetComponent<PolygonCollider2D>().isTrigger);
+                    foreach (var cell in instance.GetComponentsInChildren<BoxCollider2D>(true)) Assert.IsTrue(cell.isTrigger);
+                    foreach (Transform child in instance.transform)
+                        if (child.name.StartsWith("Cell_"))
+                            Assert.AreEqual(RobotLevelStyle.ColorForLevel(2), child.GetComponent<SpriteRenderer>().color);
                 }
                 finally { Object.DestroyImmediate(instance); }
             }

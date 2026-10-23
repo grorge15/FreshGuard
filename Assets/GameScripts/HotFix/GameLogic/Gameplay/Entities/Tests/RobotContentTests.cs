@@ -128,7 +128,8 @@ namespace GameLogic.Tests
             var view = prefab.GetComponent("RobotView");
             Assert.IsNotNull(view);
             Assert.AreEqual(configId, new SerializedObject(view).FindProperty("_configId").intValue);
-            var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true);
+            var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true)
+                .Where(r => r.transform.parent == prefab.transform && r.name.StartsWith("Cell_", StringComparison.Ordinal)).ToArray();
             Assert.AreEqual(cells.Length, renderers.Length);
             var unique = new System.Collections.Generic.HashSet<BoardCoordinate>();
             for (var i = 0; i < cells.Length; i++)
@@ -163,6 +164,28 @@ namespace GameLogic.Tests
             Assert.IsNull(prefab.transform.Find("LevelLabel"), "机器人等级只使用颜色表示，不再显示等级文字。");
             Assert.IsEmpty(prefab.GetComponentsInChildren<TextMesh>(true));
             Assert.IsEmpty(prefab.GetComponentsInChildren<Rigidbody2D>(true));
+            var instance = UnityEngine.Object.Instantiate(prefab, new Vector3(100, 100, 0), Quaternion.identity);
+            try
+            {
+                Physics2D.SyncTransforms();
+                var polygon = instance.GetComponent<PolygonCollider2D>();
+                // 格子中心、相邻格接缝均属于实体；形状内的空白格必须保持畅通。
+                for (var x = 0; x <= cells.Max(c => c[0]); x++)
+                    for (var y = 0; y <= cells.Max(c => c[1]); y++)
+                    {
+                        var occupied = cells.Any(c => c[0] == x && c[1] == y);
+                        var point = instance.transform.TransformPoint(new Vector3(x * 0.35f, y * 0.35f, 0));
+                        Assert.AreEqual(occupied, polygon.OverlapPoint(point), "整体轮廓必须保留配置凹口。");
+                        if (!occupied) continue;
+                        foreach (var direction in new[] { Vector2Int.right, Vector2Int.up })
+                        {
+                            if (!cells.Any(c => c[0] == x + direction.x && c[1] == y + direction.y)) continue;
+                            var seam = new Vector3((x + direction.x * 0.5f) * 0.35f, (y + direction.y * 0.5f) * 0.35f, 0);
+                            Assert.IsTrue(polygon.OverlapPoint(instance.transform.TransformPoint(seam)), "相邻格接缝不能有洞。");
+                        }
+                    }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(instance); }
         }
     }
 }
