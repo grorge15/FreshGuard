@@ -71,7 +71,7 @@ namespace GameLogic.Tests
             Assert.IsTrue(main.IsLaunched);
             Assert.AreEqual(1, _balls.Count(b => b.Side == BattleSide.Player && b.IsLaunched));
             Assert.IsTrue(extras.All(b => !b.gameObject.activeSelf));
-            Assert.IsTrue(robot.GetComponentsInChildren<Collider2D>().All(c => !c.isTrigger));
+            AssertRobotCollisionMode(robot, false);
             Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), cell));
             var contactCount = _contacts;
             main.SendMessage("FixedUpdate"); _scene.GetPhysicsScene2D().Simulate(0.02f);
@@ -118,14 +118,14 @@ namespace GameLogic.Tests
             Tick(); Tick();
             Assert.AreEqual(1, mainContacts, "切换后的真实Trigger回调也必须保留主球接触去重。");
             Assert.IsTrue(player.GetComponentsInChildren<Collider2D>().All(c => c.isTrigger));
-            Assert.IsTrue(opponent.GetComponentsInChildren<Collider2D>().All(c => !c.isTrigger));
+            AssertRobotCollisionMode(opponent, false);
             EnterThroughCollision(_bootstrap.OpponentBall, opponent);
             Assert.IsTrue(_bootstrap.IsBerserk(BattleSide.Opponent));
             _bootstrap.StopBalls();
             Assert.IsTrue(_balls.All(b => !b.IsLaunched && !b.IsBerserk));
             Assert.IsFalse(_bootstrap.IsBerserk(BattleSide.Player));
             Assert.IsFalse(_bootstrap.IsBerserk(BattleSide.Opponent));
-            Assert.IsTrue(_robots.SelectMany(r => r.GetComponentsInChildren<Collider2D>()).All(c => !c.isTrigger));
+            foreach (var view in _robots) AssertRobotCollisionMode(view, false);
             yield return null;
         }
 
@@ -143,7 +143,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(0f, _bootstrap.BerserkRemaining(BattleSide.Player));
             Assert.IsTrue(main.IsLaunched && !main.IsBerserk);
             Assert.IsTrue(_balls.Skip(2).All(b => !b.IsLaunched && !b.gameObject.activeSelf && !b.IsBerserk));
-            Assert.IsTrue(robot.GetComponentsInChildren<Collider2D>().All(c => !c.isTrigger));
+            AssertRobotCollisionMode(robot, false);
             yield return null;
         }
 
@@ -174,6 +174,14 @@ namespace GameLogic.Tests
             var views = _robots.Where(r => r.TryGetComboRobot(_registry, side, out _)).ToArray();
             if (!active) (side == BattleSide.Player ? _bootstrap.PlayerBall : _bootstrap.OpponentBall).ProtectOverlappingRobots(views);
             foreach (var view in views) view.SetBerserkTrigger(active);
+        }
+        private static void AssertRobotCollisionMode(RobotView robot, bool bodyTrigger)
+        {
+            var body = robot.GetComponent<PolygonCollider2D>();
+            Assert.IsNotNull(body);
+            Assert.AreEqual(bodyTrigger, body.isTrigger);
+            foreach (var cell in robot.GetComponentsInChildren<BoxCollider2D>())
+                Assert.IsTrue(cell.isTrigger, "格子碰撞体必须始终是触发器。");
         }
         private PhysicalCollisionBall Ball(string name)
         {

@@ -146,16 +146,22 @@ namespace GameLogic.Tests
                 var collider = cell.GetComponent<BoxCollider2D>();
                 Assert.IsNotNull(collider, "每个机器人实体格都需要静态碰撞体。");
                 Assert.IsTrue(collider.enabled);
-                Assert.IsFalse(collider.isTrigger);
+                Assert.IsTrue(collider.isTrigger, "格子碰撞体只负责命中触发，实体碰撞由整体轮廓负责。");
                 Assert.That(Vector2.Distance(collider.size, sprite.sprite.bounds.size), Is.LessThan(0.0001f));
                 Assert.That(Vector2.Distance(collider.offset, sprite.sprite.bounds.center), Is.LessThan(0.0001f));
             }
             Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Sprite>(
                 "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"));
-            Assert.AreEqual(cells.Length, prefab.GetComponentsInChildren<Collider2D>(true).Length,
-                "仅实际占格参与碰撞，不能用根节点包围盒填满L/T空白区。");
+            var body = prefab.GetComponent<PolygonCollider2D>();
+            Assert.IsNotNull(body, "机器人需要根据占格生成整体实体碰撞轮廓。");
+            Assert.IsTrue(body.enabled);
+            Assert.IsFalse(body.isTrigger);
+            Assert.GreaterOrEqual(body.pathCount, 1);
+            Assert.AreEqual(cells.Length + 1, prefab.GetComponentsInChildren<Collider2D>(true).Length,
+                "整体实体碰撞体与格子触发器必须同时存在。");
             Assert.IsNotNull(prefab.GetComponent<RobotBoardPointerInput>());
-            Assert.IsNotNull(prefab.transform.Find("LevelLabel"));
+            Assert.IsNull(prefab.transform.Find("LevelLabel"), "机器人等级只使用颜色表示，不再显示等级文字。");
+            Assert.IsEmpty(prefab.GetComponentsInChildren<TextMesh>(true));
             Assert.IsEmpty(prefab.GetComponentsInChildren<Rigidbody2D>(true));
         }
     }

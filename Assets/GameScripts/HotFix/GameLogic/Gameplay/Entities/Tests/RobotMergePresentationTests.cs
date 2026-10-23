@@ -11,6 +11,27 @@ namespace GameLogic.Tests
     public class RobotMergePresentationTests
     {
         [Test]
+        public void RobotLevelUsesColorWithoutWorldOrShopLevelText()
+        {
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
+                Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            foreach (var configId in new[] { 501, 502, 503, 504, 505, 601, 602, 603 })
+            {
+                var config = tables.TbRobot.Get(configId);
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                    "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab");
+                Assert.IsNull(prefab.transform.Find("LevelLabel"));
+                Assert.IsEmpty(prefab.GetComponentsInChildren<TextMesh>(true));
+            }
+            var item = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/ShopRobotItem.prefab");
+            var storage = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/StorageRobotSlot.prefab");
+            Assert.IsNotNull(item);
+            Assert.IsNotNull(storage);
+            Assert.IsNull(item.transform.Find("m_text_Level"));
+            Assert.IsNull(storage.transform.Find("m_text_Level"));
+        }
+
+        [Test]
         public void BoardViewStopsCollisionDuringDragAndRestoresSameInstance()
         {
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
