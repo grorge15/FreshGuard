@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using GameConfig;
 using UnityEngine;
 
@@ -13,6 +14,7 @@ namespace GameLogic
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
         private SpriteRenderer[] _cells;
+        private SpriteRenderer[] _outline;
         private Collider2D[] _colliders;
         private TextMesh _levelLabel;
         private RobotEntity _robot;
@@ -58,12 +60,19 @@ namespace GameLogic
             _robot = robot;
             if (_cells == null)
             {
-                _cells = GetComponentsInChildren<SpriteRenderer>(true);
+                var cells = new List<SpriteRenderer>();
+                foreach (Transform child in transform)
+                    if (child.name.StartsWith("Cell_", StringComparison.Ordinal) && child.TryGetComponent<SpriteRenderer>(out var cell))
+                        cells.Add(cell);
+                _cells = cells.ToArray();
+                var outlineRoot = transform.Find("ShapeOutline");
+                _outline = outlineRoot != null ? outlineRoot.GetComponentsInChildren<SpriteRenderer>(true) : Array.Empty<SpriteRenderer>();
                 _colliders = GetComponentsInChildren<Collider2D>(true);
                 var label = transform.Find("LevelLabel");
                 if (label != null) _levelLabel = label.GetComponent<TextMesh>();
             }
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
+            foreach (var edge in _outline) edge.enabled = visible;
             foreach (var collider in _colliders)
             {
                 collider.isTrigger = _berserkTrigger;
