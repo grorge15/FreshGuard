@@ -21,5 +21,12 @@ namespace GameLogic
         public static BoardCoordinate GetCoordinate(Vector3 localPoint, int columns, int rows, float cellSize) =>
             new BoardCoordinate(Mathf.FloorToInt(localPoint.x / cellSize + columns * 0.5f),
                 Mathf.FloorToInt(localPoint.y / cellSize + rows * 0.5f));
+
+        // Snap the footprint's bounding-box center, including half-cell centers.
+        // Floor(value + .5) consistently resolves exact ties toward the larger coordinate.
+        public static BoardCoordinate GetCenteredAnchor(Vector3 localPoint, int columns, int rows,
+            float cellSize, Vector2 footprintCenter) =>
+            new BoardCoordinate(Mathf.FloorToInt(localPoint.x / cellSize + columns * 0.5f - footprintCenter.x),
+                Mathf.FloorToInt(localPoint.y / cellSize + rows * 0.5f - footprintCenter.y));
     }
 }
