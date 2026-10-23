@@ -115,15 +115,30 @@ namespace GameLogic
         {
             board = null;
             coordinate = default(BoardCoordinate);
+            Vector3 point;
+            if (!TryGetPointerWorldPosition(position, out point)) return false;
+            if (_playerBoard.TryGetCoordinate(point, out coordinate)) board = _playerBoard;
+            else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) board = _enemyBoard;
+            return board != null;
+        }
+
+        public bool TryGetPointerWorldPosition(Vector2 position, out Vector3 worldPosition)
+        {
+            worldPosition = default(Vector3);
             if (!IsReady || _sceneCamera == null || float.IsNaN(position.x) || float.IsNaN(position.y) ||
                 float.IsInfinity(position.x) || float.IsInfinity(position.y)) return false;
             var ray = _sceneCamera.ScreenPointToRay(position);
             float distance;
             if (!new Plane(Vector3.forward, Vector3.zero).Raycast(ray, out distance)) return false;
-            var point = ray.GetPoint(distance);
-            if (_playerBoard.TryGetCoordinate(point, out coordinate)) board = _playerBoard;
-            else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) board = _enemyBoard;
-            return board != null;
+            worldPosition = ray.GetPoint(distance);
+            return IsFinite(worldPosition);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                !float.IsNaN(value.z) && !float.IsInfinity(value.z);
         }
 
         public bool TryGetDragOccupant(out int instanceId)

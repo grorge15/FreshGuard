@@ -207,7 +207,12 @@ namespace GameLogic
             PlacementBoardView board;
             BoardCoordinate cell;
             if (!_placement.TryGetPointerCell(position, out board, out cell) || board != _playerBoard) return;
-            var grabbed = new BoardCoordinate(cell.Column - robot.Anchor.Value.Column, cell.Row - robot.Anchor.Value.Row);
+            if (!_views.TryGetValue(instanceId, out var instance) || instance == null) return;
+            var view = instance.GetComponent<RobotView>();
+            if (view == null) return;
+            Vector3 worldPosition;
+            if (!_placement.TryGetPointerWorldPosition(position, out worldPosition) ||
+                !view.TryGetNearestOccupiedCell(worldPosition, out var grabbed)) return;
             ShopWindow.Drag.Press(RobotDragSource.Owned(instanceId), pointerId, position, now, grabbed);
         }
 

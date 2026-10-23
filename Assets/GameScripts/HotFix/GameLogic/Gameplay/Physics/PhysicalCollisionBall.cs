@@ -210,7 +210,7 @@ namespace GameLogic
             foreach (var view in views)
             {
                 if (view == null || !view.TryGetComboRobot(_comboRegistry, Side, out var robot)) continue;
-                var colliders = view.GetComponentsInChildren<Collider2D>(true);
+                var colliders = view.GetPhysicalColliders();
                 if (!TouchesAny(colliders)) continue;
                 var contact = new RobotContact { View = view, AllColliders = colliders, Counted = true, AttackHandled = true };
                 _protectedContacts[robot.InstanceId] = contact;
@@ -392,10 +392,11 @@ namespace GameLogic
         private void ProcessRobotCombo(RobotView view, Collider2D collider, bool bounced)
         {
             if (!IsContactRunning || collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy ||
+                collider.GetComponent<RobotDragHitCollider>() != null ||
                 view == null || !view.TryGetComboRobot(_comboRegistry, Side, out var robot)) return;
             if (!_robotContacts.TryGetValue(robot.InstanceId, out var contact))
             {
-                contact = new RobotContact { View = view, AllColliders = view.GetComponentsInChildren<Collider2D>() };
+                contact = new RobotContact { View = view, AllColliders = view.GetPhysicalColliders() };
                 _robotContacts.Add(robot.InstanceId, contact);
             }
             contact.Touching.Add(collider);

@@ -85,7 +85,7 @@ namespace FreshGuard.Editor
                         "真实商店部署失败。");
                     var view = UnityEngine.Object.FindObjectsOfType<RobotView>().Single(item => item.InstanceId == robot.InstanceId);
                     var position = view.transform.position;
-                    var colliders = view.GetComponentsInChildren<BoxCollider2D>();
+                    var colliders = view.GetPhysicalColliders().OfType<BoxCollider2D>().ToArray();
                     Require(colliders.Length == 4 && colliders.All(item => item.enabled && !item.isTrigger), "部署碰撞体未启用。");
                     Physics2D.SyncTransforms();
                     var emptyClear = true;

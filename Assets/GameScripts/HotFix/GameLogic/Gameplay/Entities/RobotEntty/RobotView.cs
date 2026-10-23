@@ -16,6 +16,9 @@ namespace GameLogic
         private SpriteRenderer[] _cells;
         private SpriteRenderer[] _outline;
         private Collider2D[] _colliders;
+        private Collider2D[] _dragHitColliders = Array.Empty<Collider2D>();
+        private Transform _dragHitArea;
+        private bool _dragHitAreaChecked;
         private TextMesh _levelLabel;
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
@@ -67,10 +70,11 @@ namespace GameLogic
                 _cells = cells.ToArray();
                 var outlineRoot = transform.Find("ShapeOutline");
                 _outline = outlineRoot != null ? outlineRoot.GetComponentsInChildren<SpriteRenderer>(true) : Array.Empty<SpriteRenderer>();
-                _colliders = GetComponentsInChildren<Collider2D>(true);
                 var label = transform.Find("LevelLabel");
                 if (label != null) _levelLabel = label.GetComponent<TextMesh>();
             }
+            CacheDragHitColliders(robot);
+            CachePhysicalColliders();
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
             foreach (var edge in _outline) edge.enabled = visible;
             foreach (var collider in _colliders)
@@ -78,6 +82,8 @@ namespace GameLogic
                 collider.isTrigger = _berserkTrigger;
                 collider.enabled = visible;
             }
+            foreach (var collider in _dragHitColliders)
+                if (collider != null) collider.enabled = visible;
             foreach (var cell in _cells)
             {
                 cell.enabled = visible;
@@ -95,8 +101,96 @@ namespace GameLogic
         public void SetBerserkTrigger(bool enabled)
         {
             _berserkTrigger = enabled;
-            if (_colliders == null) _colliders = GetComponentsInChildren<Collider2D>(true);
+            CachePhysicalColliders();
             foreach (var collider in _colliders) if (collider != null) collider.isTrigger = enabled;
+        }
+
+        /// <summary>返回 Cell_* 的实体碰撞体，不包含 Prefab 中的拖拽辅助 Collider。</summary>
+        public Collider2D[] GetPhysicalColliders()
+        {
+            CachePhysicalColliders();
+            return _colliders;
+        }
+
+        /// <summary>按触点选择最近的真实占格，返回配置中的相对坐标。</summary>
+        public bool TryGetNearestOccupiedCell(Vector3 worldPosition, out BoardCoordinate cell)
+        {
+            cell = default(BoardCoordinate);
+            if (_robot == null || _robot.Definition == null || !IsFinite(worldPosition)) return false;
+            var found = false;
+            var bestDistance = float.PositiveInfinity;
+            foreach (var candidate in _robot.Definition.Cells)
+            {
+                var child = transform.Find("Cell_" + candidate.Column + "_" + candidate.Row);
+                if (child == null) continue;
+                var distance = (GetCellWorldCenter(child) - worldPosition).sqrMagnitude;
+                if (!found || distance < bestDistance - 0.000001f ||
+                    (Mathf.Abs(distance - bestDistance) <= 0.000001f && IsEarlier(candidate, cell)))
+                {
+                    found = true;
+                    bestDistance = distance;
+                    cell = candidate;
+                }
+            }
+            return found;
+        }
+
+        private void CachePhysicalColliders()
+        {
+            if (_colliders != null) return;
+            var all = GetComponentsInChildren<Collider2D>(true);
+            var physical = new List<Collider2D>(all.Length);
+            var drag = new List<Collider2D>();
+            foreach (var collider in all)
+            {
+                if (collider == null) continue;
+                if (collider.GetComponent<RobotDragHitCollider>() != null) drag.Add(collider);
+                else physical.Add(collider);
+            }
+            _colliders = physical.ToArray();
+            if (_dragHitColliders.Length == 0) _dragHitColliders = drag.ToArray();
+        }
+
+        private void CacheDragHitColliders(RobotEntity robot)
+        {
+            if (!_dragHitAreaChecked)
+            {
+                _dragHitAreaChecked = true;
+                _dragHitArea = transform.Find("DragHitArea");
+                if (_dragHitArea == null)
+                {
+                    Debug.LogError("机器人 Prefab 缺少 DragHitArea，无法支持格子缝隙拖拽命中。", this);
+                    return;
+                }
+                var all = _dragHitArea.GetComponentsInChildren<Collider2D>(true);
+                var drag = new List<Collider2D>(all.Length);
+                foreach (var collider in all)
+                    if (collider != null && collider.GetComponent<RobotDragHitCollider>() != null) drag.Add(collider);
+                _dragHitColliders = drag.ToArray();
+            }
+            if (robot.Definition != null && _dragHitColliders.Length != robot.Definition.Cells.Count)
+                Debug.LogError("机器人 DragHitArea 的命中格数量与占格配置不一致。", this);
+        }
+
+        private Vector3 GetCellWorldCenter(Transform cell)
+        {
+            var collider = cell.GetComponent<BoxCollider2D>();
+            if (collider != null) return collider.bounds.center;
+            var sprite = cell.GetComponent<SpriteRenderer>();
+            return sprite != null && sprite.sprite != null ? sprite.bounds.center : cell.position;
+        }
+
+        private static bool IsEarlier(BoardCoordinate candidate, BoardCoordinate current)
+        {
+            return candidate.Column < current.Column ||
+                (candidate.Column == current.Column && candidate.Row < current.Row);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                !float.IsNaN(value.z) && !float.IsInfinity(value.z);
         }
 
         public void SetMergeCandidate(bool candidate) { _mergeCandidate = candidate; if (_robot != null) Render(_robot); }

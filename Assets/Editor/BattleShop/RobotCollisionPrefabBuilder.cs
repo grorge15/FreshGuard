@@ -40,9 +40,10 @@ namespace FreshGuard.Editor
                         collider.enabled = true;
                     }
                     // A static collider needs no Rigidbody2D; the moving ball owns the dynamic body.
-                    if (root.GetComponentsInChildren<Collider2D>(true).Length != cells.Length ||
+                    if (root.GetComponentsInChildren<Collider2D>(true)
+                            .Count(collider => collider.GetComponent<GameLogic.RobotDragHitCollider>() == null) != cells.Length ||
                         root.GetComponentsInChildren<Rigidbody2D>(true).Length != 0)
-                        throw new InvalidOperationException("机器人存在额外碰撞体或刚体，请检查：" + path);
+                        throw new InvalidOperationException("机器人实体格碰撞体数量或刚体不符合要求，请检查：" + path);
                     PrefabUtility.SaveAsPrefabAsset(root, path);
                 }
                 finally { PrefabUtility.UnloadPrefabContents(root); }

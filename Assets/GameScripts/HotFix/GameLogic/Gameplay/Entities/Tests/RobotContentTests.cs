@@ -183,8 +183,15 @@ namespace GameLogic.Tests
                 }
             }
             Assert.IsEmpty(outline.GetComponentsInChildren<Collider2D>(true));
-            Assert.AreEqual(cells.Length, prefab.GetComponentsInChildren<Collider2D>(true).Length,
-                "仅实际占格参与碰撞，不能用根节点包围盒填满L/T空白区。");
+            var allColliders = prefab.GetComponentsInChildren<Collider2D>(true);
+            var dragColliders = allColliders.Where(collider => collider.GetComponent<RobotDragHitCollider>() != null).ToArray();
+            var physicalColliders = allColliders.Where(collider => collider.GetComponent<RobotDragHitCollider>() == null).ToArray();
+            var dragHitArea = prefab.transform.Find("DragHitArea");
+            Assert.IsNotNull(dragHitArea, "机器人必须保存独立的拖拽命中区域。");
+            Assert.AreEqual(cells.Length, dragColliders.Length, "每个真实占格必须有一个拖拽命中 Collider。");
+            Assert.IsTrue(dragColliders.All(collider => collider.isTrigger && collider.enabled));
+            Assert.AreEqual(cells.Length, physicalColliders.Length,
+                "仅实际占格参与实体碰撞，不能用根节点包围盒填满L/T空白区。");
             Assert.IsNotNull(prefab.GetComponent<RobotBoardPointerInput>());
             Assert.IsNotNull(prefab.transform.Find("LevelLabel"));
             Assert.IsEmpty(prefab.GetComponentsInChildren<Rigidbody2D>(true));

@@ -62,7 +62,7 @@ namespace GameLogic.Tests
                 Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), extra.GetComponent<Collider2D>()));
             }
             Assert.AreNotEqual(extras[0].CurrentDirection, extras[1].CurrentDirection);
-            var cell = robot.GetComponentsInChildren<BoxCollider2D>().First();
+            var cell = robot.GetPhysicalColliders().OfType<BoxCollider2D>().First();
             main.GetComponent<Rigidbody2D>().position = cell.bounds.center;
             Physics2D.SyncTransforms();
             _bootstrap.AdvanceBerserk(5.9f); Assert.IsTrue(main.IsBerserk);
@@ -71,7 +71,7 @@ namespace GameLogic.Tests
             Assert.IsTrue(main.IsLaunched);
             Assert.AreEqual(1, _balls.Count(b => b.Side == BattleSide.Player && b.IsLaunched));
             Assert.IsTrue(extras.All(b => !b.gameObject.activeSelf));
-            Assert.IsTrue(robot.GetComponentsInChildren<Collider2D>().All(c => !c.isTrigger));
+            Assert.IsTrue(robot.GetPhysicalColliders().All(c => !c.isTrigger));
             Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), cell));
             var contactCount = _contacts;
             main.SendMessage("FixedUpdate"); _scene.GetPhysicsScene2D().Simulate(0.02f);
@@ -90,7 +90,7 @@ namespace GameLogic.Tests
             var robot = Robot("I"); var ball = _balls[2];
             robot.SetBerserkTrigger(true); ball.gameObject.SetActive(true); ball.SetBerserk(true);
             Physics2D.SyncTransforms();
-            var boxes = robot.GetComponentsInChildren<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
+            var boxes = robot.GetPhysicalColliders().OfType<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
             var y = boxes[0].bounds.center.y;
             var start = new Vector2(boxes[0].bounds.min.x - 0.6f, y);
             ball.LaunchAt(start, 0f);
@@ -117,15 +117,15 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, _contacts, "第50次Collision切Trigger不能重复处理主球接触。");
             Tick(); Tick();
             Assert.AreEqual(1, mainContacts, "切换后的真实Trigger回调也必须保留主球接触去重。");
-            Assert.IsTrue(player.GetComponentsInChildren<Collider2D>().All(c => c.isTrigger));
-            Assert.IsTrue(opponent.GetComponentsInChildren<Collider2D>().All(c => !c.isTrigger));
+            Assert.IsTrue(player.GetPhysicalColliders().All(c => c.isTrigger));
+            Assert.IsTrue(opponent.GetPhysicalColliders().All(c => !c.isTrigger));
             EnterThroughCollision(_bootstrap.OpponentBall, opponent);
             Assert.IsTrue(_bootstrap.IsBerserk(BattleSide.Opponent));
             _bootstrap.StopBalls();
             Assert.IsTrue(_balls.All(b => !b.IsLaunched && !b.IsBerserk));
             Assert.IsFalse(_bootstrap.IsBerserk(BattleSide.Player));
             Assert.IsFalse(_bootstrap.IsBerserk(BattleSide.Opponent));
-            Assert.IsTrue(_robots.SelectMany(r => r.GetComponentsInChildren<Collider2D>()).All(c => !c.isTrigger));
+            Assert.IsTrue(_robots.SelectMany(r => r.GetPhysicalColliders()).All(c => !c.isTrigger));
             yield return null;
         }
 
@@ -143,7 +143,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(0f, _bootstrap.BerserkRemaining(BattleSide.Player));
             Assert.IsTrue(main.IsLaunched && !main.IsBerserk);
             Assert.IsTrue(_balls.Skip(2).All(b => !b.IsLaunched && !b.gameObject.activeSelf && !b.IsBerserk));
-            Assert.IsTrue(robot.GetComponentsInChildren<Collider2D>().All(c => !c.isTrigger));
+            Assert.IsTrue(robot.GetPhysicalColliders().All(c => !c.isTrigger));
             yield return null;
         }
 
@@ -156,7 +156,7 @@ namespace GameLogic.Tests
         private void Approach(PhysicalCollisionBall ball, RobotView robot)
         {
             Physics2D.SyncTransforms();
-            var top = robot.GetComponentsInChildren<BoxCollider2D>().OrderByDescending(c => c.bounds.max.y).First();
+            var top = robot.GetPhysicalColliders().OfType<BoxCollider2D>().OrderByDescending(c => c.bounds.max.y).First();
             ball.LaunchAt(new Vector2(top.bounds.center.x, top.bounds.max.y + 0.8f), 270f);
         }
         private void TickUntil(Func<bool> done)
