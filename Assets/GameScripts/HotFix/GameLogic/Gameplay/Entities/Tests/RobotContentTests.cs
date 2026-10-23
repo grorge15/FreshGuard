@@ -128,7 +128,8 @@ namespace GameLogic.Tests
             var view = prefab.GetComponent("RobotView");
             Assert.IsNotNull(view);
             Assert.AreEqual(configId, new SerializedObject(view).FindProperty("_configId").intValue);
-            var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true);
+            var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true)
+                .Where(renderer => renderer.transform.parent == prefab.transform && renderer.name.StartsWith("Cell_", StringComparison.Ordinal)).ToArray();
             Assert.AreEqual(cells.Length, renderers.Length);
             var unique = new System.Collections.Generic.HashSet<BoardCoordinate>();
             for (var i = 0; i < cells.Length; i++)
@@ -152,6 +153,36 @@ namespace GameLogic.Tests
             }
             Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Sprite>(
                 "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"));
+            var outline = prefab.transform.Find("ShapeOutline");
+            Assert.IsNotNull(outline, "机器人需要独立的图片描边节点。");
+            Assert.AreEqual(Vector3.zero, outline.localPosition);
+            Assert.AreEqual(Vector3.one, outline.localScale);
+            var blackStrip = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/Icons/heibian.png");
+            var edges = outline.GetComponentsInChildren<SpriteRenderer>(true);
+            var directions = new[] { new BoardCoordinate(1, 0), new BoardCoordinate(0, 1), new BoardCoordinate(-1, 0), new BoardCoordinate(0, -1) };
+            var exposedEdges = 0;
+            foreach (var cell in unique)
+                foreach (var direction in directions)
+                    if (!unique.Contains(new BoardCoordinate(cell.Column + direction.Column, cell.Row + direction.Row))) exposedEdges++;
+            Assert.AreEqual(exposedEdges, edges.Count(edge => edge.name.StartsWith("Edge_", StringComparison.Ordinal)),
+                "只给实际外边描边，不能沿包围盒或内部相邻边描边。");
+            foreach (var edge in edges)
+            {
+                Assert.AreSame(blackStrip, edge.sprite);
+                Assert.AreEqual(Color.white, edge.color, "使用原黑色图片，不叠加等级色。");
+                Assert.AreEqual(renderers[0].sortingLayerID, edge.sortingLayerID);
+                Assert.Greater(edge.sortingOrder, renderers.Max(renderer => renderer.sortingOrder));
+                Assert.Less(edge.sortingOrder, prefab.transform.Find("LevelLabel").GetComponent<Renderer>().sortingOrder);
+                // 每段中心及四角向内采样，都必须落在真实占格内，不能侵入凹陷。
+                foreach (var point in new[] { Vector2.zero, new Vector2(-0.499f, -0.499f), new Vector2(-0.499f, 0.499f), new Vector2(0.499f, -0.499f), new Vector2(0.499f, 0.499f) })
+                {
+                    var local = prefab.transform.InverseTransformPoint(edge.transform.TransformPoint(
+                        Vector3.Scale(point, edge.sprite.bounds.size)));
+                    var covered = new BoardCoordinate(Mathf.FloorToInt(local.x / 0.35f + 0.5f), Mathf.FloorToInt(local.y / 0.35f + 0.5f));
+                    Assert.IsTrue(unique.Contains(covered), "描边不得填入未占格区域：" + edge.name);
+                }
+            }
+            Assert.IsEmpty(outline.GetComponentsInChildren<Collider2D>(true));
             Assert.AreEqual(cells.Length, prefab.GetComponentsInChildren<Collider2D>(true).Length,
                 "仅实际占格参与碰撞，不能用根节点包围盒填满L/T空白区。");
             Assert.IsNotNull(prefab.GetComponent<RobotBoardPointerInput>());

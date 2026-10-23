@@ -112,6 +112,8 @@ namespace GameLogic
             if (Phase == RobotDragPhase.Pressed) Advance(Time.unscaledTime);
             if (Phase == RobotDragPhase.Idle || Phase == RobotDragPhase.Committing) return;
             if (Phase == RobotDragPhase.Pressed) { Cancel(); return; }
+            // PointerUp may carry a newer position than the last Move. Commit this exact preview.
+            UpdatePreview();
             SubmitAsync(++_generation, _gestureCancellation.Token).Forget();
         }
 
@@ -129,7 +131,6 @@ namespace GameLogic
                 if (_ui.IsOverStorage(_position)) result = context.TryCommitStorage(session.InteractionId, out robot);
                 else
                 {
-                    host.Placement.UpdateDrag(_position);
                     int targetId;
                     BoardPlacementTarget target;
                     if (host.Placement.TryGetDragOccupant(out targetId))
