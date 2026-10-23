@@ -79,7 +79,7 @@ namespace GameLogic.Tests
             foreach (var shape in new[] { "I", "L", "T" })
             {
                 var view = Robot(shape);
-                var boxes = view.GetComponentsInChildren<BoxCollider2D>();
+                var boxes = view.GetPhysicalColliders().OfType<BoxCollider2D>().ToArray();
                 Physics2D.SyncTransforms();
                 var top = boxes.OrderByDescending(c => c.bounds.max.y).First();
                 var start = (Vector2)top.bounds.center + Vector2.up;
@@ -104,7 +104,7 @@ namespace GameLogic.Tests
         public IEnumerator SeamContactFreezeAndBerserkTransitionsDoNotDuplicate()
         {
             var view = Robot("I"); Physics2D.SyncTransforms();
-            var boxes = view.GetComponentsInChildren<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
+                var boxes = view.GetPhysicalColliders().OfType<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
             var seam = (Vector2)((boxes[0].bounds.center + boxes[1].bounds.center) * 0.5f);
             _ball.LaunchAt(seam + Vector2.up, 270f);
             for (var step = 0; step < 30 && _ball.ComboCount == 0; step++) Tick();
@@ -130,7 +130,7 @@ namespace GameLogic.Tests
         public IEnumerator SlidingAcrossRobotCellsKeepsOneContactEpisode()
         {
             var view = Robot("I"); Physics2D.SyncTransforms();
-            var boxes = view.GetComponentsInChildren<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
+                var boxes = view.GetPhysicalColliders().OfType<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
             _ball.LaunchAt((Vector2)boxes[0].bounds.center + Vector2.up, 270f);
             for (var step = 0; step < 30 && _ball.ComboCount == 0; step++) Tick();
             Assert.AreEqual(1, _ball.ComboCount);

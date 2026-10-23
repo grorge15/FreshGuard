@@ -69,7 +69,7 @@ namespace GameLogic.Tests
                 yield return host.DeployDragAsync(session, new BoardPlacementTarget(board, anchor.Value), CancellationToken.None)
                     .ToCoroutine(result => Assert.AreEqual(ShopOperationResult.Success, result));
                 var view = Object.FindObjectsOfType<RobotView>().Single();
-                var colliders = view.GetComponentsInChildren<Collider2D>();
+                var colliders = view.GetPhysicalColliders();
                 Assert.IsTrue(colliders.All(c => c.enabled && c.isTrigger), "新部署机器人启用时必须已是 Trigger。");
                 Assert.AreEqual(ShopOperationResult.Success, host.Context.TryBeginDrag(BattleSide.Player,
                     RobotDragSource.Owned(view.InstanceId), out session));
