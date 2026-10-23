@@ -14,6 +14,7 @@ namespace GameLogic
         public void Show(string icon, int level, Vector2 position, Camera camera)
         {
             Visible = true;
+            _icon.color = RobotLevelStyle.ColorForLevel(level);
             _icon.SetSprite(icon, cancellationToken: gameObject.GetCancellationTokenOnDestroy());
             Move(position, camera);
             transform.SetAsLastSibling();

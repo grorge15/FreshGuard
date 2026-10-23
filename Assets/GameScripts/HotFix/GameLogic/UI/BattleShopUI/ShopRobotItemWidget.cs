@@ -10,7 +10,6 @@ namespace GameLogic
         private Image _icon;
         private Image _quality;
         private Image _background;
-        private Text _level;
         private Text _price;
         private ShopPointerInput _input;
         private BattleShopUI _owner;
@@ -21,7 +20,6 @@ namespace GameLogic
         {
             _icon = FindChildComponent<Image>("m_img_RobotIcon");
             _quality = FindChildComponent<Image>("m_img_Quality");
-            _level = FindChildComponent<Text>("m_text_Level");
             _price = FindChildComponent<Text>("m_text_Price");
             _input = gameObject.GetComponent<ShopPointerInput>();
             _background = gameObject.GetComponent<Image>();
@@ -68,11 +66,9 @@ namespace GameLogic
             }
             _icon.enabled = config != null && !hidden;
             _quality.enabled = config != null;
-            _level.enabled = config != null;
             _price.enabled = config != null;
             if (config == null) return;
             _quality.color = QualityColor(config.QualityId);
-            _level.text = "Lv" + level;
             _icon.enabled = !hidden;
             if (_iconLocation != config.RobotIcon)
             {

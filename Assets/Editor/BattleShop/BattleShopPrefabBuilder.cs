@@ -183,7 +183,6 @@ namespace FreshGuard.Editor
             icon.type = UnityEngine.UI.Image.Type.Simple;
             icon.preserveAspect = true;
             Image(Rect("m_img_Quality", root, new Vector2(100, 4), new Vector2(0, -40)), new Color(0.37f, 0.67f, 0.42f));
-            Label("m_text_Level", root, "Lv1", 16, new Vector2(42, 24), new Vector2(30, 51), Ink);
             Label("m_text_Price", root, "6", 20, new Vector2(104, 24), new Vector2(0, -54), Ink);
             return root.gameObject;
         }

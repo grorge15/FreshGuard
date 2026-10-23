@@ -33,7 +33,7 @@ namespace GameLogic
             Entity entity;
             var robot = id.HasValue && owner.Context.Registry.TryGet(id.Value, out entity) ? entity as RobotEntity : null;
             _icon.enabled = robot != null && owner.Drag.DraggedInstanceId != robot.InstanceId;
-            _label.text = robot != null ? "暂存  Lv" + robot.Level : "暂存位";
+            _label.text = robot != null ? "暂存" : "暂存位";
             _level = robot != null ? robot.Level : 0;
             SetHighlighted(false);
             if (robot != null && _location != robot.Configuration.RobotIcon)
