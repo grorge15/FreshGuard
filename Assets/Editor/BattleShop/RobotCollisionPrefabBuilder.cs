@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using GameConfig;
 using Luban;
 using UnityEditor;
@@ -23,7 +24,8 @@ namespace FreshGuard.Editor
                 var root = PrefabUtility.LoadPrefabContents(path);
                 try
                 {
-                    var cells = root.GetComponentsInChildren<SpriteRenderer>(true);
+                    var cells = root.GetComponentsInChildren<SpriteRenderer>(true)
+                        .Where(cell => cell.transform.parent == root.transform && cell.name.StartsWith("Cell_", StringComparison.Ordinal)).ToArray();
                     if (cells.Length != config.ShapeId_Ref.CellOffsets.Length || root.GetComponent<GameLogic.RobotView>() == null)
                         throw new InvalidOperationException("机器人实体格或视图组件不完整：" + path);
                     foreach (var cell in cells)
