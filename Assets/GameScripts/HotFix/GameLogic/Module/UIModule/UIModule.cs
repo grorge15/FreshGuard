@@ -48,23 +48,11 @@ namespace GameLogic
         /// </summary>
         protected override void OnInit()
         {
-            var uiRoot = GameObject.Find("UIRoot");
-            if (uiRoot != null)
-            {
-                _instanceRoot = uiRoot.GetComponentInChildren<Canvas>()?.transform;
-                _uiCamera = uiRoot.GetComponentInChildren<Camera>();
-            }
-            else
+            if (!EnsureUIRoot())
             {
                 Log.Fatal("UIRoot not found !");
                 return;
             }
-            
-            Resource = new UIResourceLoader();
-
-            UnityEngine.Object.DontDestroyOnLoad(_instanceRoot.parent != null ? _instanceRoot.parent : _instanceRoot);
-
-            _instanceRoot.gameObject.layer = LayerMask.NameToLayer("UI");
 
             if (Debugger.Instance != null)
             {
@@ -91,6 +79,24 @@ namespace GameLogic
                     _errorLogger = new ErrorLogger(this);
                 }   
             }
+        }
+
+        /// <summary>
+        /// 在启动流程切场景前补绑定一次 UI 根节点。某些启动器会在首个场景对象完成 Awake 前创建模块，
+        /// 这时 OnInit 的首次查找可能为空；重新绑定后窗口仍使用同一套 UI 生命周期。
+        /// </summary>
+        public bool EnsureUIRoot()
+        {
+            if (_instanceRoot != null) return true;
+            var uiRoot = GameObject.Find("UIRoot");
+            if (uiRoot == null) return false;
+            _instanceRoot = uiRoot.GetComponentInChildren<Canvas>()?.transform;
+            _uiCamera = uiRoot.GetComponentInChildren<Camera>();
+            if (_instanceRoot == null) return false;
+            if (Resource == null) Resource = new UIResourceLoader();
+            UnityEngine.Object.DontDestroyOnLoad(_instanceRoot.parent != null ? _instanceRoot.parent : _instanceRoot);
+            _instanceRoot.gameObject.layer = LayerMask.NameToLayer("UI");
+            return true;
         }
 
         /// <summary>
