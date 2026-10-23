@@ -12,7 +12,9 @@ namespace GameLogic
         private Side _opponent;
 
         public void Configure(PlacementBoardView player, PlacementBoardView opponent,
-            PhysicalCollisionBall playerBall, PhysicalCollisionBall opponentBall)
+            PhysicalCollisionBall playerBall, PhysicalCollisionBall opponentBall,
+            PhysicalCollisionBall[] playerBerserkBalls = null,
+            PhysicalCollisionBall[] opponentBerserkBalls = null)
         {
             if (player == null || opponent == null || playerBall == null || opponentBall == null ||
                 player == opponent || playerBall == opponentBall)
@@ -28,8 +30,8 @@ namespace GameLogic
             ValidateAxes(player.transform);
             ValidateAxes(opponent.transform);
             Restore();
-            _player = new Side(player, playerBall);
-            _opponent = new Side(opponent, opponentBall);
+            _player = new Side(player, playerBall, playerBerserkBalls);
+            _opponent = new Side(opponent, opponentBall, opponentBerserkBalls);
         }
 
         public bool TryGetReference(PlacementBoardView board, out Vector3 originalLocalScale, out float referenceCellSize)
@@ -75,12 +77,17 @@ namespace GameLogic
             public readonly PlacementBoardView Board;
             public readonly Vector3 OriginalScale;
             public readonly float ReferenceCellSize;
-            private readonly PhysicalCollisionBall _ball;
+            private readonly PhysicalCollisionBall[] _balls;
             private readonly List<FixedChild> _fixedChildren = new List<FixedChild>();
-            public Side(PlacementBoardView board, PhysicalCollisionBall ball)
+            public Side(PlacementBoardView board, PhysicalCollisionBall ball,
+                PhysicalCollisionBall[] additionalBalls)
             {
                 Board = board;
-                _ball = ball;
+                var balls = new List<PhysicalCollisionBall> { ball };
+                if (additionalBalls != null)
+                    foreach (var additionalBall in additionalBalls)
+                        if (additionalBall != null && !balls.Contains(additionalBall)) balls.Add(additionalBall);
+                _balls = balls.ToArray();
                 OriginalScale = board.transform.localScale;
                 ReferenceCellSize = board.ReferenceCellSize;
                 // 当前场景的塔和路线是棋盘子节点；仅网格内容参与缩放。
@@ -89,13 +96,15 @@ namespace GameLogic
                         child.GetComponent<RobotView>() == null)
                         _fixedChildren.Add(new FixedChild(child));
             }
-            public bool Matches(PlacementBoardView board, PhysicalCollisionBall ball) => Board == board && _ball == ball;
+            public bool Matches(PlacementBoardView board, PhysicalCollisionBall ball) =>
+                Board == board && _balls.Length > 0 && _balls[0] == ball;
             public float CalculateFit() => MapGridMath.GetFitScale(Board.Columns, Board.Rows, Board.CellSize, ReferenceCellSize);
             public void Apply(float fit)
             {
                 foreach (var child in _fixedChildren) child.Detach(Board.transform);
                 Board.transform.localScale = new Vector3(OriginalScale.x * fit, OriginalScale.y * fit, OriginalScale.z);
-                _ball.SetMapScale(fit * Board.CellSize / ReferenceCellSize);
+                var ballScale = fit * Board.CellSize / ReferenceCellSize;
+                foreach (var ball in _balls) ball.SetMapScale(ballScale);
                 Board.SetBattleContentVisible(true);
             }
             public void Restore()
@@ -106,7 +115,8 @@ namespace GameLogic
                     Board.transform.localScale = OriginalScale;
                     foreach (var child in _fixedChildren) child.Restore(Board.transform);
                 }
-                if (_ball != null) { _ball.Stop(); _ball.SetMapScale(1f); }
+                foreach (var ball in _balls)
+                    if (ball != null) { ball.Stop(); ball.SetMapScale(1f); }
             }
         }
 
