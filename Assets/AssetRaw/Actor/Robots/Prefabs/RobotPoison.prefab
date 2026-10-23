@@ -116,10 +116,10 @@ Transform:
   m_Children:
   - {fileID: 7056876085984420925}
   - {fileID: 834965656608375581}
-  - {fileID: 8034880623544625244}
   - {fileID: 1448554229632535199}
   - {fileID: 6791088082177893649}
   - {fileID: 2689360089732924730}
+  - {fileID: 8034880623544625244}
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -962,7 +962,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5357857382669223364}
-  m_RootOrder: 3
+  m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &8266295394501189146
 SpriteRenderer:
@@ -1068,12 +1068,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6272703746237420980}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.2, z: -0.01}
+  m_LocalPosition: {x: 0.327, y: 0.178, z: -0.01}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5357857382669223364}
-  m_RootOrder: 2
+  m_RootOrder: 5
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!23 &8957542430408797353
 MeshRenderer:
@@ -1138,7 +1138,7 @@ TextMesh:
   m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4278190335
 --- !u!1 &6276381382744595237
 GameObject:
   m_ObjectHideFlags: 0
@@ -1254,7 +1254,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5357857382669223364}
-  m_RootOrder: 4
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &4540021413919083028
 SpriteRenderer:
@@ -1459,7 +1459,7 @@ Transform:
   - {fileID: 1071092953464690890}
   - {fileID: 4866605671815011137}
   m_Father: {fileID: 5357857382669223364}
-  m_RootOrder: 5
+  m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &8961313738597116270
 GameObject:
