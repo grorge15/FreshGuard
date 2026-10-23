@@ -24,9 +24,7 @@ namespace GameLogic
             if (_mapLayout == null) _mapLayout = GetComponent<BattleMapLayoutController>();
             if (_mapLayout == null) _mapLayout = gameObject.AddComponent<BattleMapLayoutController>();
             // 必须在ResetForBattle改变棋盘尺寸前捕获作者布局。
-            _mapLayout.Configure(_playerBoard, _opponentBoard,
-                _bootstrap.PlayerBall, _bootstrap.OpponentBall,
-                _bootstrap.PlayerBerserkBalls, _bootstrap.OpponentBerserkBalls);
+            _mapLayout.Configure(_playerBoard, _opponentBoard, _bootstrap.PlayerBall, _bootstrap.OpponentBall);
             return new BoardLayoutRules(map);
         }
 

@@ -32,8 +32,6 @@ namespace GameLogic
 
         public PhysicalCollisionBall PlayerBall => _ball;
         public PhysicalCollisionBall OpponentBall => _opponentBall;
-        public PhysicalCollisionBall[] PlayerBerserkBalls => _playerBerserkBalls;
-        public PhysicalCollisionBall[] OpponentBerserkBalls => _opponentBerserkBalls;
         public bool IsBerserk(BattleSide side) => Session(side)?.Berserk == true;
         public float BerserkRemaining(BattleSide side) => Session(side)?.Remaining ?? 0f;
         private BallSession Session(BattleSide side) => side == BattleSide.Player ? _player : _opponent;
