@@ -503,6 +503,7 @@ namespace GameLogic
                     }
                     catch (Exception e) { UnityEngine.Debug.LogException(e, this); EndBattle(); }
                 }
+                TryCompleteWaveClear(frameContext);
             }
         }
 
