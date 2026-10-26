@@ -94,7 +94,8 @@ namespace GameLogic
         }
         public void PressSlot(int slotId, int pointerId, Vector2 position, float now)
         {
-            if (Context == null || Context.IsEnded || Context.IsBusy || Drag.Phase != RobotDragPhase.Idle) return;
+            if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsEnded || Context.IsBusy ||
+                Drag.Phase != RobotDragPhase.Idle) return;
             var slot = Context.GetState(BattleSide.Player).Slots[slotId];
             if (slot.Offer != null)
             {
@@ -105,13 +106,14 @@ namespace GameLogic
         }
         public void PressStorage(int pointerId, Vector2 position, float now)
         {
-            if (Context == null || Context.IsEnded) return;
+            if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsEnded) return;
             var id = Context.GetState(BattleSide.Player).StorageInstanceId;
             if (id.HasValue) Drag.Press(id.Value, pointerId, position, now);
         }
         private void OnRefreshClicked()
         {
-            if (Context == null || Context.IsBusy || Drag.Phase != RobotDragPhase.Idle) return;
+            if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsBusy ||
+                Drag.Phase != RobotDragPhase.Idle) return;
             var result = Context.TryRefresh(BattleSide.Player);
             if (result != ShopOperationResult.Success) ShowFailure(result);
             
