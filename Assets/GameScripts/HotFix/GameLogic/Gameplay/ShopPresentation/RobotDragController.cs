@@ -36,7 +36,7 @@ namespace GameLogic
 
         public bool Press(RobotDragSource source, int pointerId, Vector2 position, float now, BoardCoordinate grabbedCell)
         {
-            if (_host == null || !_host.IsReady || _ui == null || Phase != RobotDragPhase.Idle || _host.Context.IsBusy) return false;
+            if (_host == null || !_host.CanInteractWithRobots || _ui == null || Phase != RobotDragPhase.Idle || _host.Context.IsBusy) return false;
             GameConfig.robot.Robot config;
             int level;
             PlaceableDefinition definition;
@@ -64,7 +64,7 @@ namespace GameLogic
         public void Advance(float now)
         {
             if (Phase == RobotDragPhase.Idle) return;
-            if (_host == null || _context == null || _host.Context != _context || _context.IsEnded)
+            if (_host == null || !_host.CanInteractWithRobots || _context == null || _host.Context != _context || _context.IsEnded)
             { Cancel(); return; }
             if (Phase == RobotDragPhase.Pressed && now - _pressedAt >= LONG_PRESS_SECONDS)
             {
@@ -74,7 +74,7 @@ namespace GameLogic
                 var result = context.TryBeginDrag(BattleSide.Player, _source, out session,
                     allowUnaffordableOffer: _source.Kind == RobotDragSourceKind.ShopOffer);
                 // 通知监听器可能同步关闭窗口、终局或取消本次手势。
-                if (generation != _generation || _host == null || _host.Context != context || context.IsEnded)
+                if (generation != _generation || _host == null || !_host.CanInteractWithRobots || _host.Context != context || context.IsEnded)
                 { if (session != null) context.CancelInteraction(session.InteractionId); return; }
                 if (result != ShopOperationResult.Success) { Cancel(); _ui?.ShowFailure(result); return; }
                 _session = session;
@@ -112,6 +112,7 @@ namespace GameLogic
         public void Release(int pointerId, Vector2 position)
         {
             if (Phase == RobotDragPhase.Idle || Phase == RobotDragPhase.Committing || pointerId != _pointerId) return;
+            if (_host == null || !_host.CanInteractWithRobots) { Cancel(); return; }
             _position = position;
             // PointerUp可能先于本帧Update，按实际按住时长补做拿起判定。
             if (Phase == RobotDragPhase.Pressed) Advance(Time.unscaledTime);
@@ -131,7 +132,7 @@ namespace GameLogic
             var result = ShopOperationResult.InvalidPlacement;
             try
             {
-                if (session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
+                if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
                 RobotEntity robot;
                 int shopSlot;
                 if (_ui.TryGetShopSlot(_position, out shopSlot))
