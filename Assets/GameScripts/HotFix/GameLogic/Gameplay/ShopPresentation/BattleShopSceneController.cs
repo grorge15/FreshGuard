@@ -407,8 +407,7 @@ namespace GameLogic
                 var frameContext = Context;
                 try
                 {
-                    frameContext.Registry.AdvanceTime(Time.deltaTime);
-                    frameContext.Combat.AdvanceTime(Time.deltaTime);
+                    frameContext.Battle.AdvanceBeforeEnemyMovement(Time.deltaTime);
                 }
                 catch (Exception e)
                 {

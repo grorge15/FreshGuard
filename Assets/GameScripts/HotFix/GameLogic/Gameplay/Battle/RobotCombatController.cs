@@ -18,7 +18,7 @@ namespace GameLogic
         private readonly SharedEnemyTargetSelector _targets;
         private readonly ICombatResolutionPort _resolution;
         private readonly Dictionary<int, Reserve> _reserves = new Dictionary<int, Reserve>();
-        private readonly List<RobotBulletView> _bullets = new List<RobotBulletView>();
+        private readonly IBulletWorld _bulletWorld;
         private readonly Func<string, Transform, CancellationToken, UniTask<GameObject>> _load;
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
         private readonly Transform _preparedRoot;
@@ -36,7 +36,7 @@ namespace GameLogic
             internal CancellationTokenSource Cancellation;
         }
 
-        public int LiveBulletCount => _bullets.Count;
+        public int LiveBulletCount => _context.Battle.Bullets.Count;
         private bool OwnsBattle => !_disposed && _host != null && _host.Context == _context &&
             !_context.IsEnded && !_context.IsEndRequested && _enemies != null && _enemies.OwnsContext(_context);
         private bool IsRunning => _prepared && OwnsBattle && _host.IsCombatRunning;
@@ -56,6 +56,8 @@ namespace GameLogic
             _load = load ?? throw new ArgumentNullException(nameof(load));
             _targets = new SharedEnemyTargetSelector(context, enemies);
             _resolution = new EnemyCombatResolutionPort(context, enemies);
+            _bulletWorld = new EnemyBulletWorld(host, context, enemies);
+            _context.Battle.CanCastNow = () => IsRunning;
             _preparedRoot = new GameObject("PreparedRobotBullets").transform;
             _preparedRoot.SetParent(host.transform, false);
             _preparedRoot.gameObject.SetActive(false);
@@ -92,6 +94,10 @@ namespace GameLogic
                     finally { Release(instance); }
                 }
             }
+            _context.Battle.Configure(SkillConfigAdapter.FromTables(tables));
+            _context.Battle.Timelines.RegisterAction("robot.bullet", new RobotBulletAction(this));
+            _context.Battle.Timelines.Register(new TimelineModel("robot.single", 0f,
+                new[] { new TimelineNode(0f, "robot.bullet") }));
             _prepared = true;
         }
 
@@ -125,17 +131,7 @@ namespace GameLogic
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!IsRunning) return;
-            foreach (var bullet in _bullets.ToArray())
-            {
-                if (!IsRunning) return;
-                var completed = bullet == null || bullet.Advance(deltaTime);
-                if (_disposed) return;
-                if (completed)
-                {
-                    _bullets.Remove(bullet);
-                    if (bullet != null) Release(bullet.gameObject);
-                }
-            }
+            _context.Battle.Bullets.Advance(deltaTime);
         }
 
         public void AdvanceAttacks(float deltaTime)
@@ -174,21 +170,73 @@ namespace GameLogic
                 !_context.Registry.TryGet(robot.InstanceId, out var current) || !ReferenceEquals(current, robot)) return false;
             var target = _targets.GetTarget(robot.Side);
             if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out var aimPoint)) return false;
-            var bullet = reserve.Ready.GetComponent<RobotBulletView>();
-            var config = robot.Configuration;
+            return _context.Battle.Skills.TryCast(new SkillCastRequest(robot.OwnerRef, robot.SkillId,
+                SkillTriggerSource.Contact, SkillTarget.Entity(robot.Side, target.Value)),
+                () => robot.TryConsumeAttackTrigger(robot.Configuration.MinTriggerInterval)).Accepted;
+        }
+
+        private sealed class RobotBulletAction : ISingleUseTimelineAction
+        {
+            private readonly RobotCombatController _controller;
+            internal RobotBulletAction(RobotCombatController controller) { _controller = controller; }
+            public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute) =>
+                _controller.TryPrepareBullet(cast, out execute);
+        }
+
+        private bool TryPrepareBullet(SkillCastSnapshot cast, out Action execute)
+        {
+            execute = null;
+            if (!IsRunning || cast.Owner.Kind != SkillOwnerKind.Entity || !cast.Owner.EntityId.HasValue ||
+                cast.Target.Kind != SkillTargetKind.Entity || cast.Target.Side != cast.Owner.Side ||
+                !_context.Registry.TryGet(cast.Owner.EntityId.Value, out var entity) || !(entity is RobotEntity robot) ||
+                !robot.CanParticipate || !_reserves.TryGetValue(robot.InstanceId, out var reserve) ||
+                !ReferenceEquals(reserve.Robot, robot) || reserve.Ready == null || reserve.View == null ||
+                reserve.View.InstanceId != robot.InstanceId || !reserve.View.isActiveAndEnabled ||
+                !_enemies.TryGetTargetPosition(robot.Side, cast.Target.EntityId, out var aimPoint) ||
+                !_context.Battle.Catalog.TryGet(cast.SkillId, out var model)) return false;
+            var sourceId = robot.InstanceId;
+            var damage = model.Type == SkillType.NormalAttack ? robot.GetAttackDamage() : checked((int)cast.Get("damage"));
+            var origin = reserve.View.GetAttackOrigin();
+            var bulletModel = new BulletModel(robot.Configuration.BulletFlightTime, robot.Configuration.BulletArcHeight);
+            var ready = reserve.Ready;
+            // 延迟执行只保存实例ID、不可变施法参数和表现槽的版本，不捕获Robot/Enemy引用。
+            execute = () => FirePrepared(sourceId, cast, damage, origin, aimPoint, bulletModel, ready);
+            return true;
+        }
+
+        private void FirePrepared(int sourceId, SkillCastSnapshot cast, int damage, Vector3 origin,
+            Vector3 aimPoint, BulletModel model, GameObject ready)
+        {
+            if (!IsRunning || !_reserves.TryGetValue(sourceId, out var reserve) || reserve.Ready != ready || ready == null) return;
             var action = _context.Combat.CaptureAttack(new CombatActionSnapshot(_context.BattleId,
-                robot.InstanceId, robot.Side, robot.SkillId, new[] { target.Value }, CombatOutcomeTag.SingleDamage,
-                robot.GetAttackDamage(), reserve.View.GetAttackOrigin(), aimPoint, sequence: 1));
-            bullet.Initialize(_host, _context, _enemies, action, _resolution,
-                config.BulletFlightTime, config.BulletArcHeight);
-            if (!robot.TryConsumeAttackTrigger(config.MinTriggerInterval)) return false;
+                sourceId, cast.Owner.Side, cast.SkillId, new[] { cast.Target.EntityId }, CombatOutcomeTag.SingleDamage,
+                damage, origin, aimPoint, sequence: 1));
+            var state = new BulletState(new BulletLauncher(model, action), _bulletWorld, hit => ResolveHit(hit, cast));
+            Launch(reserve, ready.GetComponent<RobotBulletView>(), state);
+        }
+
+        private void ResolveHit(BulletState hit, SkillCastSnapshot cast)
+        {
+            var result = _context.Combat.Resolve(hit.Action, _resolution);
+            if (_context.Battle.IsDisposed || cast.Get("slow") <= 0f || cast.Get("duration") <= 0f ||
+                !_context.Battle.Catalog.TryGetBuff(2505, out var slow)) return;
+            foreach (var target in result.Targets)
+                if (target.IsHit && target.AppliedDamage > 0 && !target.IsKilled &&
+                    _context.Registry.TryGet(target.TargetInstanceId, out var entity) &&
+                    entity is EnemyEntity enemy && enemy.IsAlive && enemy.Side == cast.Owner.Side)
+                    _context.Battle.AddBuff(enemy, slow, cast.Owner, cast.Get("duration"),
+                        new Dictionary<string, float> { { "slow", cast.Get("slow") } });
+        }
+
+        private void Launch(Reserve reserve, RobotBulletView bullet, BulletState state)
+        {
             var instance = reserve.Ready;
             reserve.Ready = null;
+            bullet.Bind(state);
             instance.transform.SetParent(_flightRoot, true);
-            _bullets.Add(bullet);
+            _context.Battle.Bullets.Add(state, bullet.Present, () => Release(instance));
             instance.SetActive(true);
             PrepareNextAsync(reserve).Forget();
-            return true;
         }
 
         private async UniTaskVoid PrepareNextAsync(Reserve reserve)
@@ -237,8 +285,7 @@ namespace GameLogic
             _lifetime.Cancel();
             _targets.Clear();
             foreach (var id in _reserves.Keys.ToArray()) RemoveReserve(id);
-            foreach (var bullet in _bullets) if (bullet != null) Release(bullet.gameObject);
-            _bullets.Clear();
+            _context.Battle.Bullets.Clear();
             if (_preparedRoot != null) Release(_preparedRoot.gameObject);
             if (_flightRoot != null) Release(_flightRoot.gameObject);
             _lifetime.Dispose();

@@ -349,6 +349,95 @@ namespace GameLogic.Tests
             Assert.AreEqual(0.2f, robot.TriggerCooldownRemaining);
         }
 
+        [Test]
+        public void FrostUsesIndependentLevelOneDamageThenSlowsAndRefreshesOnlyItsOwnSource()
+        {
+            Prepare(); var frost=AddRobot(level:3,configId:601); var second=AddRobot(configId:601);
+            var target=_f.PlayerView.InstanceId;
+            Assert.IsTrue(Contact(frost)); Assert.AreEqual(20,_f.Root.GetComponentInChildren<RobotBulletView>().Damage);
+            Assert.IsTrue(frost.Skills.TryGet(1505,out var skill)); Assert.AreEqual(1,skill.Level);
+            Assert.AreEqual(0f,skill.CooldownRemaining);
+            _combat.AdvanceExistingBullets(0.6f);
+            _f.Context.Registry.TryGet(target,out var entity); var enemy=(EnemyEntity)entity;
+            Assert.AreEqual(80,enemy.CurrentHp); Assert.AreEqual(1,enemy.Buffs.Count);
+            Assert.That(enemy.EffectiveSpeed,Is.EqualTo(enemy.BaseSpeed*0.7f).Within(0.00001f));
+            enemy.Buffs.Advance(1f); _f.Context.Registry.AdvanceTime(0.2f);
+            Assert.IsTrue(Contact(frost)); _combat.AdvanceExistingBullets(0.6f);
+            Assert.AreEqual(1,enemy.Buffs.Count); Assert.AreEqual(3f,enemy.Buffs.Items[0].Remaining);
+            Assert.IsTrue(Contact(second)); _combat.AdvanceExistingBullets(0.6f);
+            Assert.AreEqual(2,enemy.Buffs.Count); Assert.AreEqual(40,enemy.CurrentHp);
+            Assert.That(enemy.EffectiveSpeed,Is.EqualTo(enemy.BaseSpeed*0.7f).Within(0.00001f));
+            enemy.Buffs.Advance(3f); Assert.AreEqual(0,enemy.Buffs.Count); Assert.AreEqual(enemy.BaseSpeed,enemy.EffectiveSpeed);
+        }
+
+        [Test]
+        public void FrostLethalDamageDoesNotAttachBuffToRecycledEnemyOrNextSpawn()
+        {
+            Prepare(); var frost=AddRobot(configId:601); var target=_f.PlayerView.InstanceId;
+            _f.Context.Registry.TryGet(target,out var entity); var oldBuffs=entity.Buffs;
+            _f.Context.Combat.AddModifier(BattleSide.Player,new PercentCombatModifier(
+                CombatOutcomeTag.SingleDamage,CombatModifierGroup.GlobalDamage,9f));
+            Assert.IsTrue(Contact(frost)); _combat.AdvanceExistingBullets(0.6f);
+            Assert.IsFalse(_f.Context.Registry.TryGet(target,out _)); Assert.IsTrue(oldBuffs.IsDisposed); Assert.AreEqual(0,oldBuffs.Count);
+            _f.Advance(0.5f); var living=0;
+            foreach(var view in _f.Views)
+                if(_f.Context.Registry.TryGet(view.InstanceId,out var next)) { living++; Assert.AreEqual(0,next.Buffs.Count); }
+            Assert.Greater(living,0);
+        }
+
+        [Test]
+        public void FrostOldBulletAppliesFrozenSlowAfterItsSourceIsConsumed()
+        {
+            Prepare(); var frost=AddRobot(configId:601); var source=frost.OwnerRef; var target=_f.PlayerView.InstanceId;
+            Assert.IsTrue(Contact(frost)); _f.Context.Registry.Remove(frost.InstanceId,EntityRemovalReason.Consumed,out _);
+            _combat.SyncRobots(); _combat.AdvanceExistingBullets(0.6f);
+            _f.Context.Registry.TryGet(target,out var entity);
+            Assert.AreEqual(80,((EnemyEntity)entity).CurrentHp); Assert.IsNotNull(entity.Buffs.Find(2505,source));
+        }
+
+        [Test]
+        public void CancelledAndInvalidTimelineDoNotConsumeRobotContactInterval()
+        {
+            Prepare(); var frost=AddRobot(configId:601); _combat.SyncRobots();
+            frost.Buffs.Add(new BuffModel(99,"custom"),frost.OwnerRef,10f,behavior:new CancelCastBuff());
+            Assert.IsFalse(Contact(frost)); Assert.AreEqual(0f,frost.TriggerCooldownRemaining); Assert.AreEqual(0,_combat.LiveBulletCount);
+            frost.Buffs.Clear(); Assert.IsTrue(Contact(frost));
+        }
+        private sealed class CancelCastBuff : BuffBehavior
+        { public override void OnCast(BuffContainer container,BuffObj buff,SkillCastContext context)=>context.Cancel(); }
+
+        [Test]
+        public void MultipleBulletNodesAreRejectedBeforeSpendingContactInterval()
+        {
+            Prepare(); var robot=AddRobot(); _combat.SyncRobots();
+            _f.Context.Battle.Timelines.Register(new TimelineModel("two-shots",0.5f,new[]
+            {new TimelineNode(0f,"robot.bullet"),new TimelineNode(0.5f,"robot.bullet")}));
+            robot.Buffs.Add(new BuffModel(99,"custom"),robot.OwnerRef,10f,behavior:new ReplaceCastBuff("two-shots"));
+            Assert.IsFalse(Contact(robot)); Assert.AreEqual(0f,robot.TriggerCooldownRemaining); Assert.AreEqual(0,_combat.LiveBulletCount);
+            robot.Buffs.Clear(); Assert.IsTrue(Contact(robot));
+        }
+        private sealed class ReplaceCastBuff : BuffBehavior
+        {
+            private readonly string _key;
+            internal ReplaceCastBuff(string key){_key=key;}
+            public override void OnCast(BuffContainer container,BuffObj buff,SkillCastContext context)=>context.TimelineKey=_key;
+        }
+
+        [Test]
+        public void EndBattleStillClearsRegistryAndShopWhenABuffRemovalThrows()
+        {
+            Prepare(); var robot=AddRobot(); Assert.IsTrue(Contact(robot));
+            _f.Context.Battle.Player.Buffs.Add(new BuffModel(99,"custom"),_f.Context.Battle.Player.OwnerRef,10f,
+                behavior:new ThrowRemovedBuff());
+            Assert.Throws<InvalidOperationException>(()=>_f.Context.EndBattle());
+            Assert.IsTrue(_f.Context.IsEnded); Assert.IsTrue(_f.Context.Combat.IsDisposed);
+            Assert.AreEqual(0,_f.Context.Registry.CopyIds().Length); Assert.AreEqual(0,_combat.LiveBulletCount);
+            foreach(var side in new[]{BattleSide.Player,BattleSide.Opponent})
+                foreach(var slot in _f.Context.GetState(side).Slots) Assert.IsNull(slot.Offer);
+        }
+        private sealed class ThrowRemovedBuff : BuffBehavior
+        { public override void OnRemoved(BuffContainer container,BuffObj buff)=>throw new InvalidOperationException("expected end cleanup failure"); }
+
         private bool Contact(RobotEntity robot, long? battleId = null, BattleSide? side = null)
         {
             _combat.SyncRobots();

@@ -201,10 +201,12 @@ namespace GameLogic
                     var next = Math.Min(target, _timeline.NextEventTime);
                     // 抵塔也是时间边界，不能由集合遍历顺序决定双方先败顺序。
                     next = Math.Min(next, _elapsed + NextArrivalDelay());
+                    next = Math.Min(next, _elapsed + NextBuffDelay());
                     next = Math.Max(_elapsed, next);
                     var step = (float)Math.Max(0d, next - _elapsed);
                     _elapsed = next;
                     MoveAll(step);
+                    AdvanceEnemyBuffs(step);
                     if (!IsRunning) return;
                     SpawnDue();
                     if (!IsRunning) return;
@@ -229,9 +231,28 @@ namespace GameLogic
                     position = entry.Group.Points[i];
                 }
                 if (remaining <= 0.00001d) return 0d;
-                if (enemy.BaseSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.BaseSpeed);
+                if (enemy.EffectiveSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.EffectiveSpeed);
             }
             return earliest;
+        }
+
+        private double NextBuffDelay()
+        {
+            var earliest = double.PositiveInfinity;
+            foreach (var id in _active.Keys)
+                if (_context.Registry.TryGet(id, out var entity) && entity is EnemyEntity enemy && enemy.IsAlive)
+                    earliest = Math.Min(earliest, enemy.Buffs.NextBoundary);
+            return earliest;
+        }
+
+        private void AdvanceEnemyBuffs(float deltaTime)
+        {
+            foreach (var id in _active.Keys.OrderBy(id => id).ToArray())
+            {
+                if (!OwnsBattle) return;
+                if (_context.Registry.TryGet(id, out var entity) && entity is EnemyEntity enemy && enemy.IsAlive)
+                    enemy.Buffs.Advance(deltaTime);
+            }
         }
 
         private void SpawnDue()
@@ -283,7 +304,7 @@ namespace GameLogic
                     _context.Registry.Remove(id, EntityRemovalReason.Manual, out _);
                     continue;
                 }
-                var distance = enemy.BaseSpeed * deltaTime;
+                var distance = enemy.EffectiveSpeed * deltaTime;
                 var position = entry.View.transform.position;
                 var points = entry.Group.Points;
                 while (entry.NextPoint < points.Length)

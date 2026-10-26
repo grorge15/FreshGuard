@@ -39,6 +39,7 @@ namespace GameLogic
         public int RefreshPrice => Rules.RefreshPrice;
         public BattleEntityRegistry Registry { get; } = new BattleEntityRegistry();
         public CombatRuntime Combat { get; }
+        public BattleRuntime Battle { get; }
         public ShopRewardService Rewards { get; }
 
         public BattleShopContext(ShopRules rules, IReadOnlyList<int> playerCandidates,
@@ -65,6 +66,7 @@ namespace GameLogic
             Rewards = new ShopRewardService(this);
             foreach (var state in _states) ApplyBatch(state, GenerateBatch(state, true));
             Combat = new CombatRuntime(BattleId);
+            Battle = new BattleRuntime(BattleId, Registry, Combat);
         }
 
         public BattleShopState GetState(BattleSide side)
@@ -246,11 +248,17 @@ namespace GameLogic
             IsEnded = true;
             try
             {
-                Combat.Dispose();
-                RestoreInteraction();
-                CompleteInteraction();
+                Exception failure = null;
+                Action<Action> clean = action =>
+                {
+                    try { action(); }
+                    catch (Exception exception) { if (failure == null) failure = exception; }
+                };
+                clean(Battle.Dispose);
+                clean(() => RestoreInteraction());
+                clean(CompleteInteraction);
                 foreach (var pair in _boards)
-                    pair.Value.Release(pair.Key.ToString(CultureInfo.InvariantCulture));
+                    clean(() => pair.Value.Release(pair.Key.ToString(CultureInfo.InvariantCulture)));
                 _boards.Clear();
                 _boardSides.Clear();
                 foreach (var state in _states)
@@ -258,11 +266,12 @@ namespace GameLogic
                     state.StorageInstanceId = null;
                     foreach (var slot in state.Slots) { slot.InstanceId = null; slot.Offer = null; }
                 }
-                Registry.Dispose();
+                clean(Registry.Dispose);
                 _owned.Clear();
                 _rewardKeys.Clear();
                 _offerDefinitions.Clear();
-                foreach (var state in _states) Notify(state.Side);
+                foreach (var state in _states) clean(() => Notify(state.Side));
+                if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
             }
             finally { FinishMutation(); }
         }
