@@ -12,7 +12,7 @@ namespace GameLogic
             ValidateEnemyConfig(config);
             EntityValidation.RequireSide(side);
             if (cycle != 1 && cycle != 2) throw new ArgumentOutOfRangeException(nameof(cycle));
-            var nextId = checked(_nextInstanceId + 1);
+            var instanceId = ReserveInstanceId();
             EnemyEntity enemy;
             switch (config.Id)
             {
@@ -21,18 +21,16 @@ namespace GameLogic
                 case SkeletonBossEnemy.CONFIG_ID: enemy = MemoryPool.Acquire<SkeletonBossEnemy>(); break;
                 default: throw new ArgumentException("未注册对应敌人实体类型：" + config.Id, nameof(config));
             }
-            var instanceId = _nextInstanceId;
             try
             {
                 enemy.InitializeFromConfig(instanceId, config, side, cycle);
-                _entities.Add(instanceId, enemy);
+                AddEntity(instanceId, enemy);
             }
             catch
             {
                 MemoryPool.Release(enemy);
                 throw;
             }
-            _nextInstanceId = nextId;
             return instanceId;
         }
 

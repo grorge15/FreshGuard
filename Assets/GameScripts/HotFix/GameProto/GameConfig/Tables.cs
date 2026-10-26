@@ -283,7 +283,7 @@ public partial class Tables
         }
     }
     /// <summary>
-    /// 技能配置
+    /// Skill
     /// </summary>
     private skill.TbSkill m_TbSkill;
     public skill.TbSkill TbSkill 
@@ -304,7 +304,7 @@ public partial class Tables
         }
     }
     /// <summary>
-    /// 技能等级配置
+    /// SkillLevel
     /// </summary>
     private skill.TbSkillLevel m_TbSkillLevel;
     public skill.TbSkillLevel TbSkillLevel 
@@ -322,6 +322,27 @@ public partial class Tables
         {
             m_TbSkillLevel = value;
             m_TbSkillLevel.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// Buff
+    /// </summary>
+    private buff.TbBuff m_TbBuff;
+    public buff.TbBuff TbBuff 
+    {
+        get
+        {
+            if (m_TbBuff == null)
+            {
+                m_TbBuff = new buff.TbBuff(defaultLoader("buff_tbbuff"));
+                m_TbBuff.ResolveRef(this);
+            }
+            return m_TbBuff;
+        }
+        set
+        {
+            m_TbBuff = value;
+            m_TbBuff.ResolveRef(this);
         }
     }
 

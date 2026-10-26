@@ -18,6 +18,7 @@ public sealed partial class Global : Luban.BeanBase
     {
         Id = _buf.ReadInt();
         Value = _buf.ReadFloat();
+        {int __n0 = _buf.ReadSize(); IntArrVal = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); IntArrVal[__index0] = __e0;}}
     }
 
     public static Global DeserializeGlobal(ByteBuf _buf)
@@ -30,9 +31,13 @@ public sealed partial class Global : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 普通反弹随机修正范围（度）
+    /// 单值（整数或小数）
     /// </summary>
     public readonly float Value;
+    /// <summary>
+    /// 整数数组（逗号分隔）
+    /// </summary>
+    public readonly int[] IntArrVal;
    
     public const int __ID__ = -95440784;
     public override int GetTypeId() => __ID__;
@@ -46,6 +51,7 @@ public sealed partial class Global : Luban.BeanBase
         return "{ "
         + "id:" + Id + ","
         + "value:" + Value + ","
+        + "intArrVal:" + Luban.StringUtil.CollectionToString(IntArrVal) + ","
         + "}";
     }
 }

@@ -20,8 +20,9 @@ public sealed partial class SkillLevel : Luban.BeanBase
         SkillId = _buf.ReadInt();
         SkillId_Ref = null;
         Level = _buf.ReadInt();
-        {int __n0 = _buf.ReadSize(); IntValues = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); IntValues[__index0] = __e0;}}
-        {int __n0 = _buf.ReadSize(); FloatValues = new float[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { float __e0;__e0 = _buf.ReadFloat(); FloatValues[__index0] = __e0;}}
+        Damage = _buf.ReadInt();
+        Slow = _buf.ReadFloat();
+        Duration = _buf.ReadFloat();
     }
 
     public static SkillLevel DeserializeSkillLevel(ByteBuf _buf)
@@ -30,26 +31,30 @@ public sealed partial class SkillLevel : Luban.BeanBase
     }
 
     /// <summary>
-    /// 等级记录唯一ID
+    /// id
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 所属技能ID，引用skill表
+    /// skillId
     /// </summary>
     public readonly int SkillId;
     public skill.Skill SkillId_Ref;
     /// <summary>
-    /// 技能等级，从1开始；同技能不得重复
+    /// level
     /// </summary>
     public readonly int Level;
     /// <summary>
-    /// 1505：第1项=直接伤害；多项用逗号分隔
+    /// damage
     /// </summary>
-    public readonly int[] IntValues;
+    public readonly int Damage;
     /// <summary>
-    /// 1505：第1项=减速比例0~1，第2项=持续秒数；用逗号分隔
+    /// slow
     /// </summary>
-    public readonly float[] FloatValues;
+    public readonly float Slow;
+    /// <summary>
+    /// duration
+    /// </summary>
+    public readonly float Duration;
    
     public const int __ID__ = -65736816;
     public override int GetTypeId() => __ID__;
@@ -65,8 +70,9 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "id:" + Id + ","
         + "skillId:" + SkillId + ","
         + "level:" + Level + ","
-        + "intValues:" + Luban.StringUtil.CollectionToString(IntValues) + ","
-        + "floatValues:" + Luban.StringUtil.CollectionToString(FloatValues) + ","
+        + "damage:" + Damage + ","
+        + "slow:" + Slow + ","
+        + "duration:" + Duration + ","
         + "}";
     }
 }

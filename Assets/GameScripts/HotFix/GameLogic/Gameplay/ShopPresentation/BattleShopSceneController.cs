@@ -32,6 +32,7 @@ namespace GameLogic
         private bool _listening;
         private bool _closingWindow;
         private bool _ready;
+        private bool _interactionOpened;
         private bool _running;
         private bool _frozen;
         private IProgress<BattleLoadingProgress> _loadingProgress;
@@ -48,6 +49,9 @@ namespace GameLogic
         public PlacementController Placement => _placement;
         public int RefreshPrice => _rules.RefreshPrice;
         public bool IsReady => _ready && Context != null && !Context.IsEnded && !Context.IsEndRequested;
+        /// <summary>装配完成不等于玩家可操作；加载遮罩关闭后才统一开放双方机器人交互。</summary>
+        public bool CanInteractWithRobots => IsReady && _interactionOpened && !_frozen &&
+            _placement != null && _placement.IsReady;
         public bool IsCombatRunning => IsReady && _running && !_frozen;
         /// <summary>
         /// 真正进入可见战斗态：双方能源球已发射、首批敌人已生成，并且物理系统已经完成至少一次反弹。
@@ -96,6 +100,7 @@ namespace GameLogic
                 return;
             }
             _initializing = true;
+            _interactionOpened = false;
             _loadingProgress = progress ?? _loadingProgress;
             _loadingStopwatch.Restart();
             InitializationError = null;
@@ -143,7 +148,7 @@ namespace GameLogic
                 preparation.SetActive(false);
                 _preparedRoot = preparation.transform;
                 Context = new BattleShopContext(_rules, _playerCandidates, _opponentCandidates, tables.TbRobot.Get,
-                    skillDefinitions: SkillDefinitionRegistry.FromTables(tables), entry: _matchEntry);
+                    entry: _matchEntry);
                 if (_matchReleased) BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
                 _rewards = new BattleRewardAdapter(Context);
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
@@ -259,11 +264,27 @@ namespace GameLogic
             _frozen = frozen;
             _bootstrap.SetFrozen(frozen);
             _enemies?.SetFrozen(frozen);
+            if (frozen) ShopWindow?.Drag?.Cancel();
+        }
+
+        public bool TryOpenRobotInteraction(long battleId)
+        {
+            if (!IsReady || Context.BattleId != battleId || !IsCombatOperational ||
+                _placement == null || !_placement.IsReady || CombatWindow == null || !CombatWindow.IsPrepare ||
+                CombatWindow.IsDestroyed || CombatWindow.gameObject == null || !CombatWindow.Visible ||
+                !CombatWindow.gameObject.activeInHierarchy || CombatWindow.Context != Context || CombatWindow.Host != this ||
+                ShopWindow == null || !ShopWindow.IsPrepare || ShopWindow.gameObject == null ||
+                !ShopWindow.gameObject.activeInHierarchy) return false;
+            // 不允许绕开仍在拦截玩家输入的主界面或加载遮罩。
+            if (GameModule.UI.GetUI<BattleLoadingUI>()?.Visible == true ||
+                GameModule.UI.GetUI<MainMenuUI>()?.Visible == true) return false;
+            _interactionOpened = true;
+            return true;
         }
 
         public void PressBoardRobot(int instanceId, int pointerId, Vector2 position, float now)
         {
-            if (!IsReady || ShopWindow == null) return;
+            if (!CanInteractWithRobots || ShopWindow == null) return;
             Entity entity;
             if (!Context.Registry.TryGet(instanceId, out entity) || !(entity is RobotEntity robot) ||
                 robot.Side != BattleSide.Player || robot.Location != RobotLocation.Board || !robot.Anchor.HasValue) return;
@@ -337,7 +358,7 @@ namespace GameLogic
             CancellationToken cancellationToken)
         {
             var context = Context;
-            if (!IsReady || session == null || session.BattleId != context.BattleId ||
+            if (!CanInteractWithRobots || session == null || session.BattleId != context.BattleId ||
                 !context.IsCurrentInteraction(session.InteractionId)) return ShopOperationResult.InvalidLocation;
             GameConfig.robot.Robot config;
             int level;
@@ -360,7 +381,7 @@ namespace GameLogic
                     if (checkedView == null || checkedView.ConfigId != config.Id) return ShopOperationResult.ResourceFailed;
                 }
                 cancellationToken.ThrowIfCancellationRequested();
-                if (this == null || Context != context || context.IsEnded || !context.IsCurrentInteraction(session.InteractionId))
+                if (this == null || Context != context || !CanInteractWithRobots || !context.IsCurrentInteraction(session.InteractionId))
                     return ShopOperationResult.InvalidLocation;
                 RobotEntity robot;
                 var result = context.TryCommitDeploy(session.InteractionId, _placement.GetBoardSide(target.Board),
@@ -447,64 +468,68 @@ namespace GameLogic
             finally { if (prepared != null) Destroy(prepared); }
         }
 
-        private void Update()
+        private void Update() => AdvanceBattle(Time.deltaTime);
+
+        internal void AdvanceBattle(float deltaTime)
         {
+            EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (_pendingTowerSettlement.HasValue) { EndBattle(); return; }
             if (Context != null && Context.IsEnded) { EndBattle(); return; }
             if (IsReady && !_frozen && _matchReleased)
             {
-                CheckCombatOperational(Time.deltaTime);
+                CheckCombatOperational(deltaTime);
                 if (_frozen) return;
                 var startedThisFrame = false;
                 _rewards?.Advance();
                 if (!IsReady) return;
-                AdvanceOpponentAi(Time.deltaTime);
+                AdvanceOpponentAi(deltaTime);
                 if (!IsReady) return;
                 if (!_running)
                 {
-                    _preparationRemaining = Mathf.Max(0f, _preparationRemaining - Time.deltaTime);
+                    _preparationRemaining = Mathf.Max(0f, _preparationRemaining - deltaTime);
                     if (_preparationRemaining > 0f) return;
                     _running = true;
                     if (!_bootstrap.LaunchBoth(_playerBoard, _opponentBoard))
                     {
                         Cleanup();
-                        UnityEngine.Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
+                        Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
                         return;
                     }
                     try { _enemies?.StartBattle(); }
-                    catch (Exception e) { UnityEngine.Debug.LogException(e, this); return; }
+                    catch (Exception e) { Debug.LogException(e, this); return; }
                     startedThisFrame = true;
                 }
                 var frameContext = Context;
                 try
                 {
-                    frameContext.Battle.AdvanceTime(Time.deltaTime);
+                    frameContext.Battle.AdvanceBeforeEnemyMovement(deltaTime);
                 }
                 catch (Exception e)
                 {
-                    UnityEngine.Debug.LogException(e, this);
+                    Debug.LogException(e, this);
                     if (Context == frameContext) EndBattle();
                     return;
                 }
                 if (Context != frameContext || !IsCombatRunning) return;
-                _bootstrap.AdvanceBerserk(Time.deltaTime);
+                _bootstrap.AdvanceBerserk(deltaTime);
                 if (!IsCombatRunning) return;
-                _playerGlass?.Advance(Time.deltaTime);
-                _opponentGlass?.Advance(Time.deltaTime);
+                _playerGlass?.Advance(deltaTime);
+                _opponentGlass?.Advance(deltaTime);
                 if (!startedThisFrame && IsCombatRunning)
                 {
-                    try { _enemies?.Advance(Time.deltaTime); }
-                    catch (Exception e) { UnityEngine.Debug.LogException(e, this); }
+                    try { _enemies?.Advance(deltaTime); }
+                    catch (Exception e) { Debug.LogException(e, this); }
                 }
                 if (IsCombatRunning)
                 {
                     try
                     {
-                        _combat?.AdvanceExistingBullets(Time.deltaTime);
-                        if (IsCombatRunning) _combat?.AdvanceAttacks(Time.deltaTime);
+                        _combat?.AdvanceExistingBullets(deltaTime);
+                        if (IsCombatRunning) _combat?.AdvanceAttacks(deltaTime);
                     }
-                    catch (Exception e) { UnityEngine.Debug.LogException(e, this); EndBattle(); }
+                    catch (Exception e) { Debug.LogException(e, this); EndBattle(); }
                 }
+                TryCompleteWaveClear(frameContext);
             }
         }
 
@@ -603,7 +628,7 @@ namespace GameLogic
             _lastProgressBattleId = 0;
             _lastProgressWave = 0;
             _lastProgressSecond = -1;
-            _ready = _running = _frozen = false;
+            _ready = _running = _frozen = _interactionOpened = false;
             _preparationRemaining = 0f;
             if (_bootstrap != null)
             {

@@ -46,9 +46,9 @@ namespace GameLogic
             _opponentBall.BindBattle(battleId, BattleSide.Opponent, runningGate);
             _ball.BindCombo(registry, popupRoot);
             _opponentBall.BindCombo(registry, popupRoot);
-            _berserkDuration = _ball.GlobalValueProvider(41);
+            _berserkDuration = _ball.GlobalValueProvider(15);
             if (float.IsNaN(_berserkDuration) || float.IsInfinity(_berserkDuration) || _berserkDuration <= 0f)
-                throw new InvalidOperationException("Global41 暴走时间必须为有限正数。");
+                throw new InvalidOperationException("Global15 暴走时间必须为有限正数。");
             _player = BindSession(_ball, _playerBerserkBalls, registry);
             _opponent = BindSession(_opponentBall, _opponentBerserkBalls, registry);
         }

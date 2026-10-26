@@ -74,7 +74,12 @@ namespace GameLogic.Tests
             };
             var globalBuffer = new ByteBuf();
             globalBuffer.WriteSize(globals.Count);
-            foreach (var row in globals) { globalBuffer.WriteInt(row.Key); globalBuffer.WriteFloat(row.Value); }
+            foreach (var row in globals)
+            {
+                globalBuffer.WriteInt(row.Key);
+                globalBuffer.WriteFloat(row.Value);
+                globalBuffer.WriteSize(0);
+            }
             var dropBuffer = new ByteBuf();
             dropBuffer.WriteSize(packages.Length);
             for (var slot = 0; slot < packages.Length; slot++)

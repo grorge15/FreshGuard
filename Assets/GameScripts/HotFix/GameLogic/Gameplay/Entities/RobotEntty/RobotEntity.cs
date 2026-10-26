@@ -21,6 +21,7 @@ namespace GameLogic
         public long ActionVersion { get; private set; } = 1;
         public float TriggerCooldownRemaining { get; private set; }
         public bool CanParticipate => !IsRemoved && Location == RobotLocation.Board && !IsDragging;
+        public override bool CanCast => CanParticipate;
 
         protected internal RobotEntity(int instanceId, int configId, BattleSide side, int shapeId, int skillId,
             int level, int maxLevel)
@@ -81,6 +82,7 @@ namespace GameLogic
             if (IsRemoved || Level >= MaxLevel) return false;
             ActionVersion++;
             Level++;
+            if (Skills.TryGet(SkillId, out var skill)) skill.SetLevel(Math.Min(Level, skill.Model.MaxLevel));
             TriggerCooldownRemaining = 0f;
             return true;
         }

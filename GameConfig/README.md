@@ -57,13 +57,13 @@ var name = item.Name;
 
 ## 技能与技能等级
 
-`skill.xlsx` 保存技能基础定义：`id`、`name`、`skillType`（1主动、2被动）、`behaviorType`、`requiresTarget` 和 `maxLevel`。技能行为与执行顺序由代码实现。
+`skill.xlsx` 保存技能基础定义：`id`、`skillType`（0普通攻击、1机器人技能、2战场技能、3敌人技能）、`timelineKey`、`maxLevel`、`cooldown`、`targetRule` 和 `passiveBuffIds`。技能执行顺序由时间轴节点驱动，Buff 行为由代码注册。
 
-`skilllevel.xlsx` 保存每一级数值：`id` 是独立记录ID，`skillId` 引用技能基础表，`level` 从1开始，`intValues` 和 `floatValues` 使用逗号分隔。运行时按 `(skillId, level)` 查询；同技能等级不可重复，必须完整配置1至 `maxLevel` 的所有等级。
+`skill_level.xlsx` 保存每一级数值：`id` 是独立记录ID，`skillId` 引用技能基础表，`level` 从1开始，`damage`、`slow` 和 `duration` 分别表示伤害、减速比例和持续秒数。运行时按 `(skillId, level)` 查询；同技能等级不可重复，必须完整配置1至 `maxLevel` 的所有等级。旧文件 `skilllevel.xlsx` 不再由表索引引用。
 
-1505 当前仅配置1级：`intValues=20` 为直接伤害，`floatValues=0.3,3` 为减速30%、持续3秒。后续新增等级时增加等级行并同步调整基础表的 `maxLevel`，无需修改技能行为代码。
+1505 当前仅配置1级：`damage=20` 为直接伤害，`slow=0.3`、`duration=3` 为减速30%、持续3秒。`buff.xlsx` 中的2505提供减速行为。后续新增等级时增加等级行并同步调整基础表的 `maxLevel`，无需修改技能行为代码。
 
-施放请求的 `SkillLevel` 默认是1，调用方可显式指定；当前不自动绑定机器人等级。等级与数值在施放时锁定，升级或更改等级配置不会改变已经发出的投射物。
+技能实例初始等级为1，由 `SkillObj.SetLevel` 显式升级；当前不自动绑定机器人等级。等级、目标与数值在施放时锁定，升级或更改等级配置不会改变已经发出的投射物。
 
 ## 波次演示配置
 
@@ -73,3 +73,6 @@ var name = item.Name;
 当前是用于联调的 20 波演示数据，每波 20 秒：普通波 11 只普通怪；3、6、13、16 波为 10 只普通怪加 1 只精英；10、20 波为 1 只 Boss。
 双方每侧合计 200 只。`Global[48]=10` 控制每个 Cycle 波数，敌人使用所属波次对应的生命配置，跨波留场不重置。
 调整节奏或敌人组合只需修改这两张表并重新导出；这些数量和时点不是正式平衡数值。
+
+最终波清空胜利依据本局所有已配置生成组完成出兵、双方敌人处理完毕和死亡表现结束，且玩家基地仍存活；不固定第20波，也不等待出兵窗口的结束秒数。
+目前敌人只提供 `HpC1/HpC2` 两套生命，最多支持两个 Cycle。可明确调整 `Global[48]` 扩大每个 Cycle 的波数，例如15对应1～15波使用C1、16～30波使用C2；超过两个 Cycle 的配置会在准备阶段报错，不会截断波次或复用C2。需要第三个及更多 Cycle 时须先扩展敌人属性配置。

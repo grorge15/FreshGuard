@@ -74,14 +74,13 @@ namespace GameLogic
             if (_glassByCell.ContainsKey(cell))
                 throw new InvalidOperationException("该阵营格子已有存活玻璃。");
 
-            var nextId = checked(_nextInstanceId + 1);
-            var instanceId = _nextInstanceId;
+            var instanceId = ReserveInstanceId();
             var glass = MemoryPool.Acquire<GlassEntity>();
             try
             {
                 glass.Initialize(instanceId, configId, side, coordinate, kind,
                     maxDurability, hitDurabilityLoss, hitInterval);
-                _entities.Add(instanceId, glass);
+                AddEntity(instanceId, glass);
                 _glassByCell.Add(cell, instanceId);
             }
             catch
@@ -90,7 +89,6 @@ namespace GameLogic
                 MemoryPool.Release(glass);
                 throw;
             }
-            _nextInstanceId = nextId;
             return glass;
         }
     }

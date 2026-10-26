@@ -37,11 +37,9 @@ namespace GameLogic
         public bool IsBusy => ActiveInteraction != null;
         public ShopRules Rules { get; }
         public int RefreshPrice => Rules.RefreshPrice;
-        public BattleRuntime Battle { get; }
-        // 兼容现有商店和战斗调用方；技能系统只依赖 BattleRuntime。
         public BattleEntityRegistry Registry => Battle.Registry;
         public CombatRuntime Combat => Battle.Combat;
-        public SkillRuntime Skills => Battle.Skills;
+        public BattleRuntime Battle { get; }
         public ShopRewardService Rewards { get; }
         public MatchEntrySnapshot Entry { get; }
 
@@ -56,7 +54,7 @@ namespace GameLogic
 
         public BattleShopContext(ShopRules rules, IReadOnlyList<int> playerCandidates,
             IReadOnlyList<int> opponentCandidates, Func<int, Robot> robotResolver, IShopRandom random = null,
-            SkillDefinitionRegistry skillDefinitions = null, MatchEntrySnapshot entry = null)
+            MatchEntrySnapshot entry = null)
         {
             Rules = rules ?? throw new ArgumentNullException(nameof(rules));
             Entry = entry;
@@ -79,7 +77,8 @@ namespace GameLogic
             };
             Rewards = new ShopRewardService(this);
             foreach (var state in _states) ApplyBatch(state, GenerateBatch(state, true));
-            Battle = new BattleRuntime(BattleId, skillDefinitions);
+            Battle = new BattleRuntime(BattleId);
+            Battle.IsBattleValid = () => !IsEnded && !_endRequested;
         }
 
         public BattleShopState GetState(BattleSide side)
@@ -261,11 +260,16 @@ namespace GameLogic
             IsEnded = true;
             try
             {
-                Battle.Dispose();
-                RestoreInteraction();
-                CompleteInteraction();
+                Exception failure = null;
+                Action<Action> clean = action =>
+                {
+                    try { action(); }
+                    catch (Exception exception) { if (failure == null) failure = exception; }
+                };
+                clean(() => RestoreInteraction());
+                clean(CompleteInteraction);
                 foreach (var pair in _boards)
-                    pair.Value.Release(pair.Key.ToString(CultureInfo.InvariantCulture));
+                    clean(() => pair.Value.Release(pair.Key.ToString(CultureInfo.InvariantCulture)));
                 _boards.Clear();
                 _boardSides.Clear();
                 foreach (var state in _states)
@@ -273,10 +277,12 @@ namespace GameLogic
                     state.StorageInstanceId = null;
                     foreach (var slot in state.Slots) { slot.InstanceId = null; slot.Offer = null; }
                 }
+                clean(Battle.Dispose);
                 _owned.Clear();
                 _rewardKeys.Clear();
                 _offerDefinitions.Clear();
-                foreach (var state in _states) Notify(state.Side);
+                foreach (var state in _states) clean(() => Notify(state.Side));
+                if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
             }
             finally { FinishMutation(); }
         }

@@ -23,12 +23,12 @@ namespace GameLogic
         internal object Owner { get; private set; }
         internal bool Consumed { get; set; }
         internal IReadOnlyDictionary<CombatModifierGroup, double> Percents { get; private set; }
-        internal ICombatModifier[] DynamicModifiers { get; private set; } = Array.Empty<ICombatModifier>();
-        internal ICombatModifier[] Observers { get; private set; } = Array.Empty<ICombatModifier>();
+        public IReadOnlyList<CombatBuffApplication> HitBuffs { get; }
 
         public CombatActionSnapshot(long battleId, int sourceInstanceId, BattleSide sourceSide, int skillId,
             IReadOnlyList<int> targetInstanceIds, CombatOutcomeTag outcomeTags, int baseDamage,
-            Vector3 origin, Vector3 aimPoint, long sequence, CombatSourceKind sourceKind = CombatSourceKind.Robot)
+            Vector3 origin, Vector3 aimPoint, long sequence, CombatSourceKind sourceKind = CombatSourceKind.Robot,
+            IReadOnlyList<CombatBuffApplication> hitBuffs = null)
         {
             if (battleId <= 0 || sequence <= 0) throw new ArgumentOutOfRangeException(nameof(battleId));
             EntityValidation.RequirePositive(sourceInstanceId, nameof(sourceInstanceId));
@@ -47,15 +47,15 @@ namespace GameLogic
             BattleId = battleId; SourceInstanceId = sourceInstanceId; SourceSide = sourceSide;
             SourceKind = sourceKind; SkillId = skillId; TargetInstanceIds = targets.AsReadOnly();
             OutcomeTags = outcomeTags; BaseDamage = baseDamage; Origin = origin; AimPoint = aimPoint; Sequence = sequence;
+            HitBuffs = new List<CombatBuffApplication>(hitBuffs ?? Array.Empty<CombatBuffApplication>()).AsReadOnly();
         }
 
-        internal CombatActionSnapshot Lock(object owner, long sequence, CombatOutcomeDraft draft,
-            ICombatModifier[] dynamicModifiers, ICombatModifier[] observers)
+        internal CombatActionSnapshot Lock(object owner, long sequence, CombatOutcomeDraft draft)
         {
             return new CombatActionSnapshot(BattleId, SourceInstanceId, SourceSide, SkillId, TargetInstanceIds,
-                OutcomeTags, BaseDamage, Origin, AimPoint, sequence, SourceKind)
+                OutcomeTags, BaseDamage, Origin, AimPoint, sequence, SourceKind, HitBuffs)
             {
-                Owner = owner, Percents = draft.CopyPercents(), DynamicModifiers = dynamicModifiers, Observers = observers
+                Owner = owner, Percents = draft.CopyPercents()
             };
         }
 

@@ -33,6 +33,8 @@ namespace GameLogic
         private bool _prepared;
         private bool _preparing;
         private bool _started;
+        private bool _hasAbnormalRemoval;
+        private bool _advancing;
         private int _generation;
         private double _elapsed;
         private BattleWaveTimeline _timeline;
@@ -70,6 +72,9 @@ namespace GameLogic
         public int CurrentWave => _timeline?.CurrentWave ?? 1;
         public bool IsAllSpawnsCompleted => _started && _timeline != null && _timeline.IsAllSpawnsCompleted;
         public bool IsAllEnemiesCleared => IsAllSpawnsCompleted && _active.Count == 0;
+        // 时间线指令已发完不等于双方都已实际生成；清理和异常丢失也不能算正常通关。
+        public bool IsWaveVictoryReady => IsRunning && !_advancing && !_hasAbnormalRemoval && IsAllEnemiesCleared &&
+            _dying.Count == 0 && _groups.All(g => g.Spawned == g.Rule.EnemyCount);
         private bool OwnsBattle => this != null && _host != null && _context != null &&
             _host.Context == _context && !_context.IsEnded && !_context.IsEndRequested;
         private bool IsRunning => _prepared && _started && OwnsBattle && _host.IsCombatRunning;
@@ -103,6 +108,8 @@ namespace GameLogic
                 throw new ArgumentException("敌人准备缺少场景、对局、配置或加载器。");
             _host = host;
             _context = context;
+            context.Combat.DamageApplying += OnDamageApplying;
+            context.Combat.TargetResolved += OnTargetResolved;
             _preparing = true;
             var generation = _generation;
             GameObject pending = null;
@@ -190,27 +197,31 @@ namespace GameLogic
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!IsRunning) return;
-            AdvanceDamageNumbers(deltaTime);
-            AdvanceDeathViews(deltaTime);
-            if (!IsRunning) return;
+            _advancing = true;
             try
             {
+                AdvanceDamageNumbers(deltaTime);
+                AdvanceDeathViews(deltaTime);
+                if (!IsRunning) return;
                 var target = _elapsed + deltaTime;
                 do
                 {
                     var next = Math.Min(target, _timeline.NextEventTime);
                     // 抵塔也是时间边界，不能由集合遍历顺序决定双方先败顺序。
                     next = Math.Min(next, _elapsed + NextArrivalDelay());
+                    next = Math.Min(next, _elapsed + NextBuffDelay());
                     next = Math.Max(_elapsed, next);
                     var step = (float)Math.Max(0d, next - _elapsed);
                     _elapsed = next;
                     MoveAll(step);
+                    AdvanceEnemyBuffs(step);
                     if (!IsRunning) return;
                     SpawnDue();
                     if (!IsRunning) return;
                 } while (_elapsed < target);
             }
             catch { AbortBattle(); throw; }
+            finally { _advancing = false; }
         }
 
         private double NextArrivalDelay()
@@ -232,6 +243,25 @@ namespace GameLogic
                 if (enemy.EffectiveSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.EffectiveSpeed);
             }
             return earliest;
+        }
+
+        private double NextBuffDelay()
+        {
+            var earliest = double.PositiveInfinity;
+            foreach (var id in _active.Keys)
+                if (_context.Registry.TryGet(id, out var entity) && entity is EnemyEntity enemy && enemy.IsAlive)
+                    earliest = Math.Min(earliest, enemy.Buffs.NextBoundary);
+            return earliest;
+        }
+
+        private void AdvanceEnemyBuffs(float deltaTime)
+        {
+            foreach (var id in _active.Keys.OrderBy(id => id).ToArray())
+            {
+                if (!OwnsBattle) return;
+                if (_context.Registry.TryGet(id, out var entity) && entity is EnemyEntity enemy && enemy.IsAlive)
+                    enemy.Buffs.Advance(deltaTime);
+            }
         }
 
         private void SpawnDue()
@@ -277,6 +307,7 @@ namespace GameLogic
                 if (!_active.TryGetValue(id, out var entry)) continue;
                 if (entry.View == null || !_context.Registry.TryGet(id, out var entity) || !(entity is EnemyEntity enemy) || !enemy.IsAlive)
                 {
+                    _hasAbnormalRemoval = true;
                     _active.Remove(id);
                     if (entry.View != null) Release(entry.View.gameObject);
                     // 表现意外被销毁时不能留下永远无法抵达的逻辑实体。
@@ -351,7 +382,19 @@ namespace GameLogic
             }
         }
 
-        /// <summary>子弹命中后统一提交受击表现，逻辑伤害仍由调用方提交。</summary>
+        private void OnDamageApplying(CombatDamageContext context)
+        {
+            if (OwnsBattle && context.Action.BattleId == _context.BattleId)
+                TryPlayDamageFeedback(context.Target.Side, context.Target.EntityId.Value, context.Outcome.GetFinalDamage());
+        }
+
+        private void OnTargetResolved(CombatDamageContext context)
+        {
+            if (OwnsBattle && context.Action.BattleId == _context.BattleId && context.Result.IsKilled)
+                NotifyKilled(context.Removal);
+        }
+
+        /// <summary>只提交受击表现；逻辑伤害由CombatRuntime统一提交。</summary>
         public bool TryPlayDamageFeedback(BattleSide side, int instanceId, int damage)
         {
             if (!OwnsBattle || damage <= 0 || !_active.TryGetValue(instanceId, out var entry) ||
@@ -468,11 +511,17 @@ namespace GameLogic
         {
             _generation++;
             _prepared = _preparing = _started = false;
+            _hasAbnormalRemoval = false;
             _elapsed = 0d;
             _timeline = null;
             _dueSpawns.Clear();
             var context = _context;
             _context = null;
+            if (context != null)
+            {
+                context.Combat.DamageApplying -= OnDamageApplying;
+                context.Combat.TargetResolved -= OnTargetResolved;
+            }
             _host = null;
             foreach (var pair in _active)
             {

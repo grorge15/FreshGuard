@@ -18,7 +18,7 @@ namespace GameLogic.Tests
                 var rules=ShopTestData.Rules(1,0,0);
                 var state=new MainMenuPlayerState(30,TimeSpan.FromMinutes(5),30,0,2500,DateTimeOffset.UtcNow);
                 var snapshot=new MatchEntrySnapshot(profile,state,rules,new ShopSequenceRandom());
-                using(var context=new BattleShopContext(rules,ShopTestData.Candidates,ShopTestData.Candidates,id=>ShopTestData.Robot(id),new ShopSequenceRandom(),null,snapshot))
+                using(var context=new BattleShopContext(rules,ShopTestData.Candidates,ShopTestData.Candidates,id=>ShopTestData.Robot(id),new ShopSequenceRandom(),snapshot))
                 {
                     Assert.That(context.GetRobotLevelCap(BattleSide.Opponent,501),Is.EqualTo(2));
                     Assert.That(context.GetRobotLevelCap(BattleSide.Opponent,502),Is.EqualTo(4));
@@ -49,7 +49,7 @@ namespace GameLogic.Tests
                     new Dictionary<int,int>{{2,6},{3,8},{4,12},{5,16},{6,20}},initialCoins:100,secondStarProbability:1);
                 var state=new MainMenuPlayerState(30,TimeSpan.FromMinutes(5),30,0,2500,DateTimeOffset.UtcNow);
                 var snapshot=new MatchEntrySnapshot(profile,state,rules,new ShopSequenceRandom());
-                using(var context=(BattleShopContext)constructor.Invoke(new object[]{rules,ShopTestData.Candidates,ShopTestData.Candidates,(Func<int,GameConfig.robot.Robot>)(id=>ShopTestData.Robot(id)),new ShopSequenceRandom(),null,snapshot}))
+                using(var context=(BattleShopContext)constructor.Invoke(new object[]{rules,ShopTestData.Candidates,ShopTestData.Candidates,(Func<int,GameConfig.robot.Robot>)(id=>ShopTestData.Robot(id)),new ShopSequenceRandom(),snapshot}))
                 {
                     Assert.That(context.TryRefresh(BattleSide.Opponent),Is.EqualTo(ShopOperationResult.Success));
                     var offer=context.GetState(BattleSide.Opponent).Slots[0].Offer;

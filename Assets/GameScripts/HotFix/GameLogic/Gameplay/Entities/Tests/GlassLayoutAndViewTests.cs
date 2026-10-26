@@ -33,9 +33,9 @@ namespace GameLogic.Tests
             Assert.IsTrue(layout.HasInitialGlass(layout.ColoredGlassCell));
             Assert.AreEqual(0, tables.TbGlass.Get(layout.NormalGlassId).Kind);
             Assert.AreEqual(1, tables.TbGlass.Get(layout.ColoredGlassId).Kind);
-            Assert.AreEqual(0.25f, tables.TbGlobal.Get(9).Value);
+            Assert.AreEqual(0.15f, tables.TbGlobal.Get(9).Value);
             Assert.AreEqual(10, tables.TbGlobal.Get(27).Value);
-            Assert.AreEqual(30, tables.TbGlobal.Get(28).Value);
+            Assert.AreEqual(10, tables.TbGlobal.Get(28).Value);
         }
 
         [Test]

@@ -13,7 +13,7 @@ using Luban;
 namespace GameConfig.skill
 {
 /// <summary>
-/// 技能配置
+/// Skill
 /// </summary>
 public partial class TbSkill
 {

@@ -17,11 +17,12 @@ public sealed partial class Skill : Luban.BeanBase
     public Skill(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
-        Name = _buf.ReadString();
         SkillType = _buf.ReadInt();
-        BehaviorType = _buf.ReadString();
-        RequiresTarget = _buf.ReadBool();
+        TimelineKey = _buf.ReadString();
         MaxLevel = _buf.ReadInt();
+        Cooldown = _buf.ReadFloat();
+        TargetRule = _buf.ReadInt();
+        {int n0 = _buf.ReadSize(); PassiveBuffIds = new System.Collections.Generic.List<int>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { int _e0;  _e0 = _buf.ReadInt(); PassiveBuffIds.Add(_e0);}}
     }
 
     public static Skill DeserializeSkill(ByteBuf _buf)
@@ -30,29 +31,33 @@ public sealed partial class Skill : Luban.BeanBase
     }
 
     /// <summary>
-    /// 技能唯一ID
+    /// id
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 技能名称
-    /// </summary>
-    public readonly string Name;
-    /// <summary>
-    /// 1主动2被动
+    /// skillType
     /// </summary>
     public readonly int SkillType;
     /// <summary>
-    /// 行为注册名
+    /// timelineKey
     /// </summary>
-    public readonly string BehaviorType;
+    public readonly string TimelineKey;
     /// <summary>
-    /// 是否需要目标实体
-    /// </summary>
-    public readonly bool RequiresTarget;
-    /// <summary>
-    /// 最高技能等级（须有对应等级记录）
+    /// maxLevel
     /// </summary>
     public readonly int MaxLevel;
+    /// <summary>
+    /// cooldown
+    /// </summary>
+    public readonly float Cooldown;
+    /// <summary>
+    /// targetRule
+    /// </summary>
+    public readonly int TargetRule;
+    /// <summary>
+    /// passiveBuffIds
+    /// </summary>
+    public readonly System.Collections.Generic.List<int> PassiveBuffIds;
    
     public const int __ID__ = 1155715156;
     public override int GetTypeId() => __ID__;
@@ -65,11 +70,12 @@ public sealed partial class Skill : Luban.BeanBase
     {
         return "{ "
         + "id:" + Id + ","
-        + "name:" + Name + ","
         + "skillType:" + SkillType + ","
-        + "behaviorType:" + BehaviorType + ","
-        + "requiresTarget:" + RequiresTarget + ","
+        + "timelineKey:" + TimelineKey + ","
         + "maxLevel:" + MaxLevel + ","
+        + "cooldown:" + Cooldown + ","
+        + "targetRule:" + TargetRule + ","
+        + "passiveBuffIds:" + Luban.StringUtil.CollectionToString(PassiveBuffIds) + ","
         + "}";
     }
 }

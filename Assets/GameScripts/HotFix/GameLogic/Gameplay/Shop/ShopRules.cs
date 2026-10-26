@@ -123,7 +123,7 @@ namespace GameLogic
 
         public int GetPrice(int qualityId, int level)
         {
-            if (level != 1 && level != 2) throw new ArgumentOutOfRangeException(nameof(level));
+            if (level < 1 || level > MaxRobotLevel) throw new ArgumentOutOfRangeException(nameof(level));
             int price;
             if (!QualityPrices.TryGetValue(qualityId, out price)) throw new ArgumentOutOfRangeException(nameof(qualityId));
             return checked(price * level);

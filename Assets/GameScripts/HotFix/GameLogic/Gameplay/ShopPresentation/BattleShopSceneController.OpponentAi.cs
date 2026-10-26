@@ -23,7 +23,7 @@ namespace GameLogic
         }
 
         private void AdvanceOpponentAi(float deltaTime)
-            => _opponentAi?.Advance(deltaTime, IsReady && !_frozen);
+            => _opponentAi?.Advance(deltaTime, CanInteractWithRobots);
 
         private ShopOperationResult CheckOpponentAiBattle(BattleShopContext context, OpponentAiAction action,
             CancellationToken cancellationToken)
@@ -31,7 +31,7 @@ namespace GameLogic
             if (cancellationToken.IsCancellationRequested || this == null || Context != context ||
                 context == null || context.IsEnded || context.IsEndRequested) return ShopOperationResult.BattleEnded;
             if (context.BattleId != action.BattleId) return ShopOperationResult.WrongBattle;
-            if (!IsReady || _frozen || _opponentBoard == null || !_opponentBoard.IsInitialized || context.IsBusy)
+            if (!CanInteractWithRobots || _opponentBoard == null || !_opponentBoard.IsInitialized || context.IsBusy)
                 return ShopOperationResult.Busy;
             return ShopOperationResult.Success;
         }
@@ -131,7 +131,7 @@ namespace GameLogic
             if (cancellationToken.IsCancellationRequested || Context != context || context.IsEnded || context.IsEndRequested)
                 return ShopOperationResult.BattleEnded;
             if (action.BattleId != context.BattleId) return ShopOperationResult.WrongBattle;
-            if (_frozen || !IsReady || !context.IsCurrentInteraction(session.InteractionId)) return ShopOperationResult.Busy;
+            if (!CanInteractWithRobots || !context.IsCurrentInteraction(session.InteractionId)) return ShopOperationResult.Busy;
             return ShopOperationResult.Success;
         }
 

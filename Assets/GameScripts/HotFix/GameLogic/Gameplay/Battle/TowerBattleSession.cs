@@ -3,14 +3,16 @@ using System;
 namespace GameLogic
 {
     public enum BattleSettlementResult { Victory, Defeat }
+    public enum BattleSettlementReason { TowerDestroyed, FinalWaveCleared }
 
     public readonly struct BattleSettlementSnapshot
     {
         public long BattleId { get; }
-        public int TowerInstanceId { get; }
-        public BattleSide DefeatedSide { get; }
-        public int TowerHp { get; }
+        public int? TowerInstanceId { get; }
+        public BattleSide? DefeatedSide { get; }
+        public int? TowerHp { get; }
         public BattleSettlementResult Result { get; }
+        public BattleSettlementReason Reason { get; }
         public int PlayerTowerHp { get; }
         public int OpponentTowerHp { get; }
 
@@ -23,6 +25,19 @@ namespace GameLogic
             PlayerTowerHp = playerTowerHp;
             OpponentTowerHp = opponentTowerHp;
             Result = opponentTowerHp == 0 ? BattleSettlementResult.Victory : BattleSettlementResult.Defeat;
+            Reason = BattleSettlementReason.TowerDestroyed;
+        }
+
+        internal BattleSettlementSnapshot(long battleId, int playerTowerHp, int opponentTowerHp)
+        {
+            BattleId = battleId;
+            TowerInstanceId = null;
+            DefeatedSide = null;
+            TowerHp = null;
+            PlayerTowerHp = playerTowerHp;
+            OpponentTowerHp = opponentTowerHp;
+            Result = BattleSettlementResult.Victory;
+            Reason = BattleSettlementReason.FinalWaveCleared;
         }
     }
 
@@ -38,6 +53,7 @@ namespace GameLogic
         private readonly long _battleId;
         private readonly BattleEntityRegistry _registry;
         private bool _disposed;
+        private bool _applyingDamage;
         public TowerEntity PlayerTower { get; }
         public TowerEntity OpponentTower { get; }
         public bool IsEnded { get; private set; }
@@ -67,16 +83,32 @@ namespace GameLogic
 
         public DamageResult ApplyDamage(long battleId, BattleSide side, int damage)
         {
-            if (_disposed || IsEnded || battleId != _battleId ||
+            if (_disposed || IsEnded || _applyingDamage || battleId != _battleId ||
                 (side != BattleSide.Player && side != BattleSide.Opponent)) return DamageResult.Ignored;
-            return _registry.ApplyTowerDamage(side == BattleSide.Player ? PlayerTower.InstanceId : OpponentTower.InstanceId, damage);
+            _applyingDamage = true;
+            try { return _registry.ApplyTowerDamage(side == BattleSide.Player ? PlayerTower.InstanceId : OpponentTower.InstanceId, damage); }
+            finally { _applyingDamage = false; }
         }
 
         /// <summary>同一逻辑抵塔时刻的双方伤害。后续时刻不能合并进本批次。</summary>
         public bool ApplyDamageBatch(long battleId, int playerDamage, int opponentDamage)
         {
-            if (_disposed || IsEnded || battleId != _battleId) return false;
-            return _registry.ApplyTowerDamageBatch(playerDamage, opponentDamage);
+            if (_disposed || IsEnded || _applyingDamage || battleId != _battleId) return false;
+            _applyingDamage = true;
+            try { return _registry.ApplyTowerDamageBatch(playerDamage, opponentDamage); }
+            finally { _applyingDamage = false; }
+        }
+
+        /// <summary>由战斗入口确认本局全部出兵和清空后调用；不在伤害通知栈中抢先判胜。</summary>
+        public bool TryCompleteWaveClear(long battleId)
+        {
+            if (_disposed || IsEnded || _applyingDamage || battleId != _battleId ||
+                !PlayerTower.IsAlive || !OpponentTower.IsAlive) return false;
+            IsEnded = true;
+            _registry.StopTowerDamage();
+            TowerNotifications.Publish(SettlementRequested,
+                new BattleSettlementSnapshot(_battleId, PlayerTower.CurrentHp, OpponentTower.CurrentHp));
+            return true;
         }
 
         private void OnTowerDied(TowerHealthSnapshot death)

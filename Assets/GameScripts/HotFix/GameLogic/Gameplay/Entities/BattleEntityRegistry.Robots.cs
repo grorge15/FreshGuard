@@ -23,39 +23,43 @@ namespace GameLogic
             if (string.IsNullOrWhiteSpace(config.RobotPrefab) || string.IsNullOrWhiteSpace(config.RobotIcon))
                 throw new ArgumentException("机器人预制体与图标资源名不能为空。", nameof(config));
 
-            var nextId = checked(_nextInstanceId + 1);
+            if (config.Id != CannonRobotEntity.CONFIG_ID && config.Id != ScatterRobotEntity.CONFIG_ID &&
+                config.Id != ImpactRobotEntity.CONFIG_ID && config.Id != PiercingRobotEntity.CONFIG_ID &&
+                config.Id != RapidFireRobotEntity.CONFIG_ID && config.Id != TractorRobotEntity.CONFIG_ID &&
+                config.Id != FrostRobotEntity.CONFIG_ID && config.Id != PoisonRobotEntity.CONFIG_ID)
+                throw new ArgumentException("未注册对应机器人实体类型：" + config.Id, nameof(config));
+            var instanceId = ReserveInstanceId();
             RobotEntity robot;
             switch (config.Id)
             {
                 case CannonRobotEntity.CONFIG_ID:
-                    robot = new CannonRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new CannonRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 case ScatterRobotEntity.CONFIG_ID:
-                    robot = new ScatterRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new ScatterRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 case ImpactRobotEntity.CONFIG_ID:
-                    robot = new ImpactRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new ImpactRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 case PiercingRobotEntity.CONFIG_ID:
-                    robot = new PiercingRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new PiercingRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 case RapidFireRobotEntity.CONFIG_ID:
-                    robot = new RapidFireRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new RapidFireRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 case TractorRobotEntity.CONFIG_ID:
-                    robot = new TractorRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new TractorRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 case FrostRobotEntity.CONFIG_ID:
-                    robot = new FrostRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new FrostRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 case PoisonRobotEntity.CONFIG_ID:
-                    robot = new PoisonRobotEntity(_nextInstanceId, config, side, level, maxLevel);
+                    robot = new PoisonRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
                 default:
                     throw new ArgumentException("未注册对应机器人实体类型：" + config.Id, nameof(config));
             }
-            _entities.Add(robot.InstanceId, robot);
-            _nextInstanceId = nextId;
+            AddEntity(robot.InstanceId, robot);
             return robot;
         }
     }

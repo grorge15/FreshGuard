@@ -73,6 +73,13 @@ namespace GameLogic
             PublishBattleProgress(true);
         }
 
+        private void TryCompleteWaveClear(BattleShopContext frameContext)
+        {
+            if (Context == frameContext && IsCombatRunning && _enemies != null &&
+                _enemies.OwnsContext(frameContext) && _enemies.IsWaveVictoryReady)
+                _towers?.TryCompleteWaveClear(frameContext.BattleId);
+        }
+
         private void ClearTowers()
         {
             var session = _towers;

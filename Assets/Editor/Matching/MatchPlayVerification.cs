@@ -129,6 +129,7 @@ namespace GameLogic.EditorTools
                 if(host.IsWaitingForMatch)
                 {
                     Require(Math.Abs(host.PreparationRemaining-3f)<.01f&&!host.IsCombatRunning,"Ready后匹配放行前开局倒计时保持3秒");
+                    Require(!host.CanInteractWithRobots,"匹配放行前双方机器人交互保持关闭");
                     Require(host.Context.GetState(BattleSide.Opponent).EnergyCoins==host.Context.Rules.InitialCoins,"匹配期间AI尚未消费金币");
                 }
                 await Wait(()=>GameApp.CurrentMatch?.Phase==BattleMatchPhase.Success&&
@@ -151,6 +152,7 @@ namespace GameLogic.EditorTools
                 await Wait(()=>host.IsCombatOperational,40);
                 await Capture("combat");
                 Require(host.IsCombatRunning,"放行后双方发球、首敌、物理反弹进入运行态");
+                Require(host.CanInteractWithRobots,"匹配放行并进入运行态后双方机器人交互自动开放");
                 Require(!Checks.Exists(c=>c.StartsWith("UNEXPECTED")),"验证期间未伪造胜负结算");
                 host.EndBattle();
                 Status="passed";

@@ -43,11 +43,16 @@ namespace GameLogic
         private void CheckCombatOperational(float delta)
         {
             if (!_checkingOperational || !_running) return;
-            if (IsCombatOperational) { _checkingOperational = false; return; }
+            // 匹配先放行开局，运行态确认后再统一开放双方交互，AI延迟也从此时开始。
+            if (IsCombatOperational && TryOpenRobotInteraction(Context.BattleId))
+            {
+                _checkingOperational = false;
+                return;
+            }
             _operationalWait += delta;
             if (_operationalWait < 30f) return;
             _checkingOperational = false;
-            InitializationError = new InvalidOperationException("开战后30秒，能源球反弹或首批敌人仍未就绪。");
+            InitializationError = new InvalidOperationException("开战后30秒，能源球反弹、首批敌人或战斗交互界面仍未就绪。");
             Debug.LogError(InitializationError.Message, this);
             // 已开战故障冻结并留存证据，不走匹配返还或伪造胜负。
             SetFrozen(true);
