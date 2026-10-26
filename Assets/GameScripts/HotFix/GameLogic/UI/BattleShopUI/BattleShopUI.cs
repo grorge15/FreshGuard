@@ -18,6 +18,8 @@ namespace GameLogic
         private float _flashUntil;
         private float _messageUntil;
         private Font _font;
+        private RobotDragSource? _offerMergeSource;
+        private int _hoveredOfferSlot = -1;
         public BattleShopContext Context { get; private set; }
         public RobotDragController Drag { get; private set; }
         private Camera EventCamera
@@ -88,6 +90,7 @@ namespace GameLogic
                 ? new Color(0.8f, 0.12f, 0.1f) : new Color(0.23f, 0.13f, 0.08f);
             for (var i = 0; i < _items.Length; i++) _items[i].Render(this, i, state.Slots[i], state.EnergyCoins);
             _storage.Render(this);
+            ApplyOfferMergeHighlights();
         }
         public void PressSlot(int slotId, int pointerId, Vector2 position, float now)
         {
@@ -95,8 +98,6 @@ namespace GameLogic
             var slot = Context.GetState(BattleSide.Player).Slots[slotId];
             if (slot.Offer != null)
             {
-                if (Context.GetState(BattleSide.Player).EnergyCoins < slot.Offer.Price)
-                { ShowFailure(ShopOperationResult.InsufficientCoins); return; }
                 Drag.Press(RobotDragSource.Offer(slotId, slot.Offer.OfferId), pointerId, position, now, new BoardCoordinate(0, 0));
             }
             else if (slot.InstanceId.HasValue) Drag.Press(slot.InstanceId.Value, pointerId, position, now);
@@ -118,6 +119,46 @@ namespace GameLogic
         public bool IsOverStorage(Vector2 position)
         {
             return _storage != null && RectTransformUtility.RectangleContainsScreenPoint(_storage.rectTransform, position, EventCamera);
+        }
+        public bool TryGetShopSlot(Vector2 position, out int slotId)
+        {
+            slotId = -1;
+            if (_items == null) return false;
+            for (var i = 0; i < _items.Length; i++)
+            {
+                var item = _items[i];
+                if (item != null && item.gameObject != null && item.gameObject.activeInHierarchy &&
+                    RectTransformUtility.RectangleContainsScreenPoint(item.rectTransform, position, EventCamera))
+                { slotId = i; return true; }
+            }
+            return false;
+        }
+        public void UpdateOfferMergeCandidates(RobotDragSource source, Vector2 position)
+        {
+            _offerMergeSource = source;
+            int slot;
+            _hoveredOfferSlot = TryGetShopSlot(position, out slot) ? slot : -1;
+            ApplyOfferMergeHighlights();
+        }
+        public void ClearOfferMergeCandidates()
+        {
+            _offerMergeSource = null;
+            _hoveredOfferSlot = -1;
+            ApplyOfferMergeHighlights();
+        }
+        private void ApplyOfferMergeHighlights()
+        {
+            if (_items == null) return;
+            var state = Context != null && !Context.IsEnded ? Context.GetState(BattleSide.Player) : null;
+            for (var i = 0; i < _items.Length; i++)
+            {
+                var item = _items[i];
+                if (item == null || item.gameObject == null) continue;
+                var offer = state?.Slots[i].Offer;
+                var eligible = _offerMergeSource.HasValue && offer != null &&
+                    Context.CheckOfferMerge(BattleSide.Player, _offerMergeSource.Value, i, offer.OfferId) == ShopOperationResult.Success;
+                item.SetMergeCandidate(eligible, eligible && i == _hoveredOfferSlot);
+            }
         }
         public void SetStorageHighlighted(bool highlighted) { _storage?.SetHighlighted(highlighted); }
         public void ShowGhost(string icon, int level, Vector2 position) { _ghost.Show(icon, level, position, EventCamera); }

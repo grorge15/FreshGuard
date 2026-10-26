@@ -15,6 +15,7 @@ namespace GameLogic
         private BattleShopUI _owner;
         private int _slot;
         private string _iconLocation;
+        private Color _baseBackgroundColor;
 
         protected override void ScriptGenerator()
         {
@@ -62,7 +63,8 @@ namespace GameLogic
             if (_background != null)
             {
                 _background.enabled = config != null;
-                _background.color = RobotLevelStyle.ColorForLevel(level);
+                _baseBackgroundColor = RobotLevelStyle.ColorForLevel(level);
+                _background.color = _baseBackgroundColor;
             }
             _icon.enabled = config != null && !hidden;
             _quality.enabled = config != null;
@@ -75,6 +77,12 @@ namespace GameLogic
                 _iconLocation = config.RobotIcon;
                 _icon.SetSprite(config.RobotIcon, cancellationToken: gameObject.GetCancellationTokenOnDestroy());
             }
+        }
+        public void SetMergeCandidate(bool eligible, bool hovered)
+        {
+            if (_background == null) return;
+            _background.color = hovered ? Color.cyan : eligible
+                ? Color.Lerp(_baseBackgroundColor, Color.cyan, 0.45f) : _baseBackgroundColor;
         }
         internal static Color QualityColor(int id)
         {
