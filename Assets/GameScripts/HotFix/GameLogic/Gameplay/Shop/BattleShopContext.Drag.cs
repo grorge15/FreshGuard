@@ -98,7 +98,7 @@ namespace GameLogic
             if (target.Location != RobotLocation.Board || target.IsDragging) return ShopOperationResult.InvalidLocation;
             if (!HasCompleteFootprint(target)) return ShopOperationResult.InvalidPlacement;
             if (config.Id != target.ConfigId || level != target.Level) return ShopOperationResult.IncompatibleMerge;
-            if (level >= 5 || level >= Rules.MaxRobotLevel || level >= target.MaxLevel)
+            if (level >= 5 || level >= Rules.MaxRobotLevel || level >= target.MaxLevel || level >= GetRobotLevelCap(side, config.Id))
                 return ShopOperationResult.MaxLevelReached;
             return ShopOperationResult.Success;
         }
@@ -408,7 +408,7 @@ namespace GameLogic
         private ShopOperationResult CreateOfferRobot(BattleSide side, ShopSlot slot, out RobotEntity robot)
         {
             robot = null;
-            try { robot = Registry.CreateRobotFromConfig(_configs[slot.Offer.RobotId], side, slot.Offer.Level, Rules.MaxRobotLevel); }
+            try { robot = Registry.CreateRobotFromConfig(_configs[slot.Offer.RobotId], side, slot.Offer.Level, GetRobotLevelCap(side, slot.Offer.RobotId)); }
             catch (ArgumentException) { return ShopOperationResult.InvalidConfiguration; }
             _owned.Add(robot.InstanceId, robot);
             return ShopOperationResult.Success;

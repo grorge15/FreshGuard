@@ -43,15 +43,26 @@ namespace GameLogic
         public CombatRuntime Combat => Battle.Combat;
         public SkillRuntime Skills => Battle.Skills;
         public ShopRewardService Rewards { get; }
+        public MatchEntrySnapshot Entry { get; }
+
+        public int GetRobotLevelCap(BattleSide side, int robotId)
+        {
+            EntityValidation.RequireSide(side);
+            int cap;
+            return side == BattleSide.Opponent && Entry != null
+                ? (Entry.OpponentLevelCaps.TryGetValue(robotId, out cap) ? cap : 1)
+                : Rules.MaxRobotLevel;
+        }
 
         public BattleShopContext(ShopRules rules, IReadOnlyList<int> playerCandidates,
             IReadOnlyList<int> opponentCandidates, Func<int, Robot> robotResolver, IShopRandom random = null,
-            SkillDefinitionRegistry skillDefinitions = null)
+            SkillDefinitionRegistry skillDefinitions = null, MatchEntrySnapshot entry = null)
         {
             Rules = rules ?? throw new ArgumentNullException(nameof(rules));
+            Entry = entry;
             if (robotResolver == null) throw new ArgumentNullException(nameof(robotResolver));
             _random = random ?? new ShopRandom();
-            _candidates = new[] { CopyCandidates(playerCandidates), CopyCandidates(opponentCandidates) };
+            _candidates = new[] { CopyCandidates(entry?.Candidates ?? playerCandidates), CopyCandidates(entry?.Candidates ?? opponentCandidates) };
             _slotWeights = new[] { MapSlotWeights(_candidates[0]), MapSlotWeights(_candidates[1]) };
             foreach (var candidates in _candidates)
                 foreach (var id in candidates)
@@ -405,7 +416,8 @@ namespace GameLogic
                 var hasPositive = false;
                 for (var index = 0; index < candidates.Length; index++)
                 {
-                    var weight = Rules.GetCandidateWeight(slot, index, candidates[index]);
+                    var ordinal = Entry == null ? index : Entry.CandidateOrdinals[candidates[index]];
+                    var weight = Rules.GetCandidateWeight(slot, ordinal, candidates[index]);
                     weights.Add(candidates[index], weight);
                     hasPositive |= weight > 0;
                 }
@@ -463,6 +475,7 @@ namespace GameLogic
             for (var index = 0; index < ids.Length; index++)
             {
                 var level = initial ? 1 : (NextUnit() < Rules.SecondStarProbability ? 2 : 1);
+                level = Math.Min(level, GetRobotLevelCap(state.Side, ids[index]));
                 offers[index] = new ShopOffer(_nextOfferId + index, ids[index], level,
                     Rules.GetPrice(_configs[ids[index]].QualityId, level));
             }
