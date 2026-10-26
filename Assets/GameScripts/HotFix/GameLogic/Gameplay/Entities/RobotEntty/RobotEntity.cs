@@ -21,6 +21,7 @@ namespace GameLogic
         public long ActionVersion { get; private set; } = 1;
         public float TriggerCooldownRemaining { get; private set; }
         public bool CanParticipate => !IsRemoved && Location == RobotLocation.Board && !IsDragging;
+        public override bool CanCast => CanParticipate;
 
         protected internal RobotEntity(int instanceId, int configId, BattleSide side, int shapeId, int skillId,
             int level, int maxLevel)

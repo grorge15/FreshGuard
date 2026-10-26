@@ -18,6 +18,20 @@ namespace GameLogic
         public Enemy Configuration { get; private set; }
         public int Cycle { get; private set; }
         public bool IsAlive => !IsRemoved && CurrentHp > 0;
+        public override bool CanCast => IsAlive;
+        public float EffectiveSpeed
+        {
+            get
+            {
+                var slow = 0f;
+                // 配置语义是“实际承受控制的比例”，1表示完整承受，0表示免疫。
+                var receivedControl = Math.Max(0f, Math.Min(1f, Configuration?.ControlResist ?? 1f));
+                foreach (var buff in Buffs.Items)
+                    if (buff.Model.BehaviorKey == "slow" && buff.Remaining > 0f)
+                        slow = Math.Max(slow, buff.Get("slow") * receivedControl);
+                return BaseSpeed * Math.Max(0.5f, 1f - slow);
+            }
+        }
 
         // MemoryPool.Acquire<T>() requires a public parameterless constructor.
         public EnemyEntity() { }

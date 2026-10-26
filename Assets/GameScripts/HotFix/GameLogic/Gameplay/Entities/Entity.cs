@@ -1,8 +1,13 @@
 namespace GameLogic
 {
     /// <summary>单局实体身份；不承载 Unity 物体或两类实体的专属战斗属性。</summary>
-    public abstract class Entity
+    public abstract class Entity : ISkillOwner
     {
+        public SkillOwnerRef OwnerRef { get; private set; }
+        public SkillContainer Skills { get; } = new SkillContainer();
+        public BuffContainer Buffs { get; private set; } = new BuffContainer();
+        public virtual bool CanCast => !IsRemoved;
+        internal void BindSkillOwner(long battleId) => OwnerRef = SkillOwnerRef.Entity(battleId, Side, InstanceId);
         public int InstanceId { get; private set; }
         public int ConfigId { get; private set; }
         public BattleSide Side { get; private set; }
@@ -15,6 +20,9 @@ namespace GameLogic
 
         protected void InitializeIdentity(int instanceId, int configId, BattleSide side)
         {
+            Skills.Clear();
+            Buffs.Dispose(); Buffs = new BuffContainer();
+            OwnerRef = default(SkillOwnerRef);
             InstanceId = instanceId;
             ConfigId = configId;
             Side = side;
@@ -24,6 +32,7 @@ namespace GameLogic
 
         protected void ClearIdentity()
         {
+            Skills.Clear(); Buffs.Dispose(); OwnerRef = default(SkillOwnerRef);
             InstanceId = 0;
             ConfigId = 0;
             Side = default(BattleSide);
@@ -34,7 +43,9 @@ namespace GameLogic
         internal void MarkRemoved(EntityRemovalReason reason)
         {
             RemovalReason = reason;
-            OnRemoved();
+            Skills.Clear();
+            try { Buffs.Dispose(); }
+            finally { OnRemoved(); }
         }
 
         protected virtual void OnRemoved() { }

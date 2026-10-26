@@ -16,11 +16,10 @@ namespace GameLogic
             EntityValidation.RequireSide(side);
             EntityValidation.RequirePositive(maxHp, nameof(maxHp));
             if (_towerBySide.ContainsKey(side)) throw new InvalidOperationException("每个阵营只能登记一座塔。");
-            var nextId = checked(_nextInstanceId + 1);
-            var tower = new TowerEntity(_nextInstanceId, configId, side, maxHp);
-            _entities.Add(tower.InstanceId, tower);
+            var instanceId = ReserveInstanceId();
+            var tower = new TowerEntity(instanceId, configId, side, maxHp);
+            AddEntity(tower.InstanceId, tower);
             _towerBySide.Add(side, tower.InstanceId);
-            _nextInstanceId = nextId;
             return tower;
         }
 
