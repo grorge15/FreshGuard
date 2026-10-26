@@ -12,27 +12,48 @@ namespace GameLogic
     public sealed class SkillDefinition
     {
         public int Id { get; }
+        public string Name { get; }
         public SkillType SkillType { get; }
         public SkillBehaviorType BehaviorType { get; }
-        public IReadOnlyList<int> IntValues { get; }
-        public IReadOnlyList<float> FloatValues { get; }
         public bool RequiresTarget { get; }
+        public int MaxLevel { get; }
 
         public SkillDefinition(int id, SkillType skillType, SkillBehaviorType behaviorType,
-            IReadOnlyList<int> intValues, IReadOnlyList<float> floatValues, bool requiresTarget)
+            bool requiresTarget, int maxLevel = 1, string name = null)
         {
             EntityValidation.RequirePositive(id, nameof(id));
-            if (intValues == null || floatValues == null) throw new ArgumentNullException(nameof(intValues));
+            EntityValidation.RequirePositive(maxLevel, nameof(maxLevel));
             Id = id; SkillType = skillType; BehaviorType = behaviorType;
+            Name = name ?? string.Empty; RequiresTarget = requiresTarget; MaxLevel = maxLevel;
+        }
+    }
+
+    /// <summary>一个技能某一级的数值定义，独立于技能身份与行为。</summary>
+    public sealed class SkillLevelDefinition
+    {
+        public int SkillId { get; }
+        public int Level { get; }
+        public IReadOnlyList<int> IntValues { get; }
+        public IReadOnlyList<float> FloatValues { get; }
+
+        public SkillLevelDefinition(int skillId, int level, IReadOnlyList<int> intValues,
+            IReadOnlyList<float> floatValues)
+        {
+            EntityValidation.RequirePositive(skillId, nameof(skillId));
+            EntityValidation.RequirePositive(level, nameof(level));
+            if (intValues == null) throw new ArgumentNullException(nameof(intValues));
+            if (floatValues == null) throw new ArgumentNullException(nameof(floatValues));
+            SkillId = skillId; Level = level;
             IntValues = new List<int>(intValues).AsReadOnly();
             FloatValues = new List<float>(floatValues).AsReadOnly();
-            RequiresTarget = requiresTarget;
         }
     }
 
     public sealed class SkillDefinitionRegistry
     {
         private readonly Dictionary<int, SkillDefinition> _definitions = new Dictionary<int, SkillDefinition>();
+        private readonly Dictionary<(int SkillId, int Level), SkillLevelDefinition> _levels =
+            new Dictionary<(int SkillId, int Level), SkillLevelDefinition>();
 
         public void Register(SkillDefinition definition)
         {
@@ -42,10 +63,21 @@ namespace GameLogic
 
         public bool TryGet(int id, out SkillDefinition definition) => _definitions.TryGetValue(id, out definition);
 
+        public void RegisterLevel(SkillLevelDefinition definition)
+        {
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+            if (!TryGet(definition.SkillId, out var skill) || definition.Level > skill.MaxLevel)
+                throw new ArgumentException("技能等级必须引用已注册技能且不超过最高等级。", nameof(definition));
+            _levels[(definition.SkillId, definition.Level)] = definition;
+        }
+
+        public bool TryGetLevel(int skillId, int level, out SkillLevelDefinition definition) =>
+            _levels.TryGetValue((skillId, level), out definition);
+
         public static SkillDefinitionRegistry FromTables(Tables tables)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
-            var registry = CreateDefaults();
+            var registry = new SkillDefinitionRegistry();
             foreach (var row in tables.TbSkill.DataList)
             {
                 SkillBehaviorType behavior;
@@ -55,8 +87,18 @@ namespace GameLogic
                     throw new ArgumentOutOfRangeException(nameof(row.SkillType));
                 registry.Register(new SkillDefinition(row.Id,
                     row.SkillType == 1 ? SkillType.Active : SkillType.Passive,
-                    behavior, row.IntValues, row.FloatValues, row.RequiresTarget));
+                    behavior, row.RequiresTarget, row.MaxLevel, row.Name));
             }
+            foreach (var row in tables.TbSkillLevel.DataList)
+            {
+                if (registry.TryGetLevel(row.SkillId, row.Level, out _))
+                    throw new ArgumentException($"技能{row.SkillId}的等级{row.Level}配置重复。", nameof(tables));
+                registry.RegisterLevel(new SkillLevelDefinition(row.SkillId, row.Level, row.IntValues, row.FloatValues));
+            }
+            foreach (var skill in registry._definitions.Values)
+                for (var level = 1; level <= skill.MaxLevel; level++)
+                    if (!registry.TryGetLevel(skill.Id, level, out _))
+                        throw new ArgumentException($"技能{skill.Id}缺少等级{level}配置。", nameof(tables));
             return registry;
         }
 
@@ -64,7 +106,8 @@ namespace GameLogic
         {
             var registry = new SkillDefinitionRegistry();
             registry.Register(new SkillDefinition(1505, SkillType.Active,
-                SkillBehaviorType.DamageThenApplySlow, new[] { 20 }, new[] { 0.3f, 3f }, true));
+                SkillBehaviorType.DamageThenApplySlow, true));
+            registry.RegisterLevel(new SkillLevelDefinition(1505, 1, new[] { 20 }, new[] { 0.3f, 3f }));
             return registry;
         }
     }
@@ -76,6 +119,7 @@ namespace GameLogic
         public BattleSide SourceSide { get; }
         public CombatSourceKind SourceKind { get; }
         public int SkillId { get; }
+        public int SkillLevel { get; }
         public SkillTriggerSource TriggerSource { get; }
         public int? TargetInstanceId { get; }
         public Vector3? TargetPosition { get; }
@@ -88,15 +132,16 @@ namespace GameLogic
         public SkillCastRequest(long battleId, int sourceInstanceId, BattleSide sourceSide,
             CombatSourceKind sourceKind, int skillId, SkillTriggerSource triggerSource,
             int? targetInstanceId, Vector3? targetPosition, Vector3 origin, Vector3 aimPoint,
-            int baseDamage, float projectileFlightTime, float projectileArcHeight)
+            int baseDamage, float projectileFlightTime, float projectileArcHeight, int skillLevel = 1)
         {
             if (battleId <= 0 || skillId < 0 || baseDamage < 0) throw new ArgumentOutOfRangeException(nameof(battleId));
             EntityValidation.RequirePositive(sourceInstanceId, nameof(sourceInstanceId));
+            EntityValidation.RequirePositive(skillLevel, nameof(skillLevel));
             EntityValidation.RequireSide(sourceSide);
             EntityValidation.RequireFiniteNonNegative(projectileFlightTime, nameof(projectileFlightTime));
             EntityValidation.RequireFiniteNonNegative(projectileArcHeight, nameof(projectileArcHeight));
             BattleId = battleId; SourceInstanceId = sourceInstanceId; SourceSide = sourceSide;
-            SourceKind = sourceKind; SkillId = skillId; TriggerSource = triggerSource;
+            SourceKind = sourceKind; SkillId = skillId; SkillLevel = skillLevel; TriggerSource = triggerSource;
             TargetInstanceId = targetInstanceId; TargetPosition = targetPosition; Origin = origin;
             AimPoint = aimPoint; BaseDamage = baseDamage; ProjectileFlightTime = projectileFlightTime;
             ProjectileArcHeight = projectileArcHeight;
@@ -113,6 +158,7 @@ namespace GameLogic
         public int SourceInstanceId { get; }
         public BattleSide SourceSide { get; }
         public int SkillId { get; }
+        public int SkillLevel { get; }
         public SkillBehaviorType BehaviorType { get; }
         public IReadOnlyList<int> TargetInstanceIds => _targets.AsReadOnly();
         public IReadOnlyList<int> IntValues => _intValues.AsReadOnly();
@@ -129,7 +175,8 @@ namespace GameLogic
             CombatActionSnapshot damageAction)
         {
             CastId = castId; BattleId = request.BattleId; SourceInstanceId = request.SourceInstanceId;
-            SourceSide = request.SourceSide; SkillId = request.SkillId; BehaviorType = definition.BehaviorType;
+            SourceSide = request.SourceSide; SkillId = request.SkillId; SkillLevel = request.SkillLevel;
+            BehaviorType = definition.BehaviorType;
             _targets = new List<int>(targets); _intValues = new List<int>(intValues); _floatValues = new List<float>(floatValues);
             Origin = request.Origin; AimPoint = request.AimPoint; ProjectileFlightTime = request.ProjectileFlightTime;
             ProjectileArcHeight = request.ProjectileArcHeight; DamageAction = damageAction;
@@ -164,7 +211,7 @@ namespace GameLogic
     public interface ISkillBehavior
     {
         SkillCastResult TryCast(SkillCastRequest request, SkillRuntimeContext context,
-            SkillDefinition definition, long castId);
+            SkillDefinition definition, SkillLevelDefinition level, long castId);
         void OnHit(SkillCastSnapshot cast, SkillRuntimeContext context);
     }
 }

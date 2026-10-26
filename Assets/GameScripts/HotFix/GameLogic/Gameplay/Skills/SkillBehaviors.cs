@@ -6,7 +6,7 @@ namespace GameLogic
     internal static class SkillBehaviorUtility
     {
         internal static SkillCastSnapshot CreateDamageCast(SkillCastRequest request, SkillRuntimeContext context,
-            SkillDefinition definition, long castId, int damage)
+            SkillDefinition definition, SkillLevelDefinition level, long castId, int damage)
         {
             if (damage < 0) throw new ArgumentOutOfRangeException(nameof(damage));
             var target = request.TargetInstanceId.HasValue
@@ -15,18 +15,18 @@ namespace GameLogic
                 request.SkillId, target, CombatOutcomeTag.SingleDamage, damage, request.Origin,
                 request.AimPoint, castId, request.SourceKind);
             action = context.Battle.Combat.CaptureAttack(action);
-            return new SkillCastSnapshot(castId, request, definition, target, definition.IntValues,
-                definition.FloatValues, action);
+            return new SkillCastSnapshot(castId, request, definition, target, level.IntValues,
+                level.FloatValues, action);
         }
     }
 
     internal sealed class BasicProjectileSkill : ISkillBehavior
     {
         public SkillCastResult TryCast(SkillCastRequest request, SkillRuntimeContext context,
-            SkillDefinition definition, long castId)
+            SkillDefinition definition, SkillLevelDefinition level, long castId)
         {
             return new SkillCastResult(true, SkillBehaviorUtility.CreateDamageCast(request, context,
-                definition, castId, request.BaseDamage));
+                definition, level, castId, request.BaseDamage));
         }
 
         public void OnHit(SkillCastSnapshot cast, SkillRuntimeContext context)
@@ -39,12 +39,12 @@ namespace GameLogic
     internal sealed class DamageThenApplySlowSkill : ISkillBehavior
     {
         public SkillCastResult TryCast(SkillCastRequest request, SkillRuntimeContext context,
-            SkillDefinition definition, long castId)
+            SkillDefinition definition, SkillLevelDefinition level, long castId)
         {
-            if (definition.IntValues.Count < 1 || definition.FloatValues.Count < 2)
+            if (level.IntValues.Count < 1 || level.FloatValues.Count < 2)
                 throw new ArgumentException("1505 必须配置一个直接伤害和两个减速参数。");
             return new SkillCastResult(true, SkillBehaviorUtility.CreateDamageCast(request, context,
-                definition, castId, definition.IntValues[0]));
+                definition, level, castId, level.IntValues[0]));
         }
 
         public void OnHit(SkillCastSnapshot cast, SkillRuntimeContext context)

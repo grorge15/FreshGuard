@@ -36,17 +36,24 @@ namespace GameLogic
                 request.BattleId != Battle.BattleId || Battle.IsDisposed) return SkillCastResult.Rejected();
 
             SkillDefinition definition;
+            SkillLevelDefinition level;
             if (request.SkillId == 0)
             {
                 definition = new SkillDefinition(1, SkillType.Active, SkillBehaviorType.BasicProjectile,
-                    Array.Empty<int>(), Array.Empty<float>(), true);
+                    true, request.SkillLevel);
+                level = new SkillLevelDefinition(1, request.SkillLevel, Array.Empty<int>(), Array.Empty<float>());
             }
             else if (!_definitions.TryGet(request.SkillId, out definition))
             {
                 // 旧机器人表中的 1500~1504 仍是单体投射物；未登记的旧技能先保留这条兼容行为。
                 definition = new SkillDefinition(request.SkillId, SkillType.Active,
-                    SkillBehaviorType.BasicProjectile, Array.Empty<int>(), Array.Empty<float>(), true);
+                    SkillBehaviorType.BasicProjectile, true, request.SkillLevel);
+                level = new SkillLevelDefinition(request.SkillId, request.SkillLevel,
+                    Array.Empty<int>(), Array.Empty<float>());
             }
+            else if (request.SkillLevel > definition.MaxLevel ||
+                !_definitions.TryGetLevel(request.SkillId, request.SkillLevel, out level))
+                return SkillCastResult.Rejected();
             if (definition.RequiresTarget &&
                 (!request.TargetInstanceId.HasValue || request.TargetInstanceId.Value <= 0 ||
                  context.IsTargetValid == null || !context.IsTargetValid(request, request.TargetInstanceId.Value)))
@@ -54,7 +61,7 @@ namespace GameLogic
 
             ISkillBehavior behavior;
             if (!_behaviors.TryGetValue(definition.BehaviorType, out behavior)) return SkillCastResult.Rejected();
-            var result = behavior.TryCast(request, context, definition, checked(++_nextCastId));
+            var result = behavior.TryCast(request, context, definition, level, checked(++_nextCastId));
             if (result.Succeeded && result.Cast != null) _activeCasts.Add(result.Cast);
             return result;
         }

@@ -265,7 +265,7 @@ public partial class Tables
     /// 波次方案（演示20波，数值可由策划调整）
     /// </summary>
     private wave.TbWavePlan m_TbWavePlan;
-    public wave.TbWavePlan TbWavePlan
+    public wave.TbWavePlan TbWavePlan 
     {
         get
         {
@@ -286,7 +286,7 @@ public partial class Tables
     /// 技能配置
     /// </summary>
     private skill.TbSkill m_TbSkill;
-    public skill.TbSkill TbSkill
+    public skill.TbSkill TbSkill 
     {
         get
         {
@@ -301,6 +301,27 @@ public partial class Tables
         {
             m_TbSkill = value;
             m_TbSkill.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 技能等级配置
+    /// </summary>
+    private skill.TbSkillLevel m_TbSkillLevel;
+    public skill.TbSkillLevel TbSkillLevel 
+    {
+        get
+        {
+            if (m_TbSkillLevel == null)
+            {
+                m_TbSkillLevel = new skill.TbSkillLevel(defaultLoader("skill_tbskilllevel"));
+                m_TbSkillLevel.ResolveRef(this);
+            }
+            return m_TbSkillLevel;
+        }
+        set
+        {
+            m_TbSkillLevel = value;
+            m_TbSkillLevel.ResolveRef(this);
         }
     }
 

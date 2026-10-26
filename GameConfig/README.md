@@ -55,6 +55,16 @@ var name = item.Name;
 基础字段使用 `##var` 和 `##type` 定义，`##group` 指定分组，`##` 行用于说明。
 新增表后执行同一个转表入口即可。
 
+## 技能与技能等级
+
+`skill.xlsx` 保存技能基础定义：`id`、`name`、`skillType`（1主动、2被动）、`behaviorType`、`requiresTarget` 和 `maxLevel`。技能行为与执行顺序由代码实现。
+
+`skilllevel.xlsx` 保存每一级数值：`id` 是独立记录ID，`skillId` 引用技能基础表，`level` 从1开始，`intValues` 和 `floatValues` 使用逗号分隔。运行时按 `(skillId, level)` 查询；同技能等级不可重复，必须完整配置1至 `maxLevel` 的所有等级。
+
+1505 当前仅配置1级：`intValues=20` 为直接伤害，`floatValues=0.3,3` 为减速30%、持续3秒。后续新增等级时增加等级行并同步调整基础表的 `maxLevel`，无需修改技能行为代码。
+
+施放请求的 `SkillLevel` 默认是1，调用方可显式指定；当前不自动绑定机器人等级。等级与数值在施放时锁定，升级或更改等级配置不会改变已经发出的投射物。
+
 ## 波次演示配置
 
 `wave_plan.xlsx` 的 `enemySpawnId` 引用 `wave_spawn.xlsx` 的独立生成组 ID，数组以逗号分隔。

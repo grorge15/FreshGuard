@@ -17,11 +17,11 @@ public sealed partial class Skill : Luban.BeanBase
     public Skill(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
+        Name = _buf.ReadString();
         SkillType = _buf.ReadInt();
         BehaviorType = _buf.ReadString();
-        {int __n0 = _buf.ReadSize(); IntValues = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); IntValues[__index0] = __e0;}}
-        {int __n0 = _buf.ReadSize(); FloatValues = new float[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { float __e0;__e0 = _buf.ReadFloat(); FloatValues[__index0] = __e0;}}
         RequiresTarget = _buf.ReadBool();
+        MaxLevel = _buf.ReadInt();
     }
 
     public static Skill DeserializeSkill(ByteBuf _buf)
@@ -34,6 +34,10 @@ public sealed partial class Skill : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
+    /// 技能名称
+    /// </summary>
+    public readonly string Name;
+    /// <summary>
     /// 1主动2被动
     /// </summary>
     public readonly int SkillType;
@@ -42,17 +46,13 @@ public sealed partial class Skill : Luban.BeanBase
     /// </summary>
     public readonly string BehaviorType;
     /// <summary>
-    /// 整数参数
-    /// </summary>
-    public readonly int[] IntValues;
-    /// <summary>
-    /// 浮点参数
-    /// </summary>
-    public readonly float[] FloatValues;
-    /// <summary>
-    /// 是否需要目标
+    /// 是否需要目标实体
     /// </summary>
     public readonly bool RequiresTarget;
+    /// <summary>
+    /// 最高技能等级（须有对应等级记录）
+    /// </summary>
+    public readonly int MaxLevel;
    
     public const int __ID__ = 1155715156;
     public override int GetTypeId() => __ID__;
@@ -65,11 +65,11 @@ public sealed partial class Skill : Luban.BeanBase
     {
         return "{ "
         + "id:" + Id + ","
+        + "name:" + Name + ","
         + "skillType:" + SkillType + ","
         + "behaviorType:" + BehaviorType + ","
-        + "intValues:" + Luban.StringUtil.CollectionToString(IntValues) + ","
-        + "floatValues:" + Luban.StringUtil.CollectionToString(FloatValues) + ","
         + "requiresTarget:" + RequiresTarget + ","
+        + "maxLevel:" + MaxLevel + ","
         + "}";
     }
 }

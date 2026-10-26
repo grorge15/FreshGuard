@@ -7,11 +7,31 @@ namespace GameLogic.Tests
     public sealed class SkillDrivenArchitectureTests
     {
         [Test]
+        public void SkillTablesLoadLevelOneParametersFromSeparateLevelTable()
+        {
+            var bytesRoot = System.IO.Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes");
+            Assert.IsTrue(System.IO.File.Exists(System.IO.Path.Combine(bytesRoot, "skill_tbskilllevel.bytes")),
+                "技能等级数据必须由独立的 SkillLevel 表导出。");
+            var tables = new GameConfig.Tables(file => new Luban.ByteBuf(
+                System.IO.File.ReadAllBytes(System.IO.Path.Combine(bytesRoot, file + ".bytes"))));
+            using (var battle = new BattleRuntime(906, SkillDefinitionRegistry.FromTables(tables)))
+            {
+                var context = new SkillRuntimeContext(battle, null, null, (request, id) => true);
+                var cast = battle.Skills.TryCast(Create1505Request(906), context);
+                Assert.IsTrue(cast.Succeeded);
+                Assert.AreEqual(20, cast.Cast.IntValues[0]);
+                Assert.AreEqual(0.3f, cast.Cast.FloatValues[0]);
+                Assert.AreEqual(3f, cast.Cast.FloatValues[1]);
+            }
+        }
+
+        [Test]
         public void SkillRuntimeLocks1505ParametersAtCastTime()
         {
             var definitions = new SkillDefinitionRegistry();
             definitions.Register(new SkillDefinition(1505, SkillType.Active,
-                SkillBehaviorType.DamageThenApplySlow, new[] { 37 }, new[] { 0.4f, 3f }, true));
+                SkillBehaviorType.DamageThenApplySlow, true));
+            definitions.RegisterLevel(new SkillLevelDefinition(1505, 1, new[] { 37 }, new[] { 0.4f, 3f }));
             using (var battle = new BattleRuntime(901, definitions))
             {
                 var context = new SkillRuntimeContext(battle, null, null, (request, id) => true);
@@ -78,7 +98,8 @@ namespace GameLogic.Tests
         {
             var definitions = new SkillDefinitionRegistry();
             definitions.Register(new SkillDefinition(1505, SkillType.Active,
-                SkillBehaviorType.DamageThenApplySlow, new[] { 37 }, new[] { 0.4f, 3f }, true));
+                SkillBehaviorType.DamageThenApplySlow, true));
+            definitions.RegisterLevel(new SkillLevelDefinition(1505, 1, new[] { 37 }, new[] { 0.4f, 3f }));
             using (var battle = new BattleRuntime(903, definitions))
             {
                 var resolution = new RecordingResolutionPort(DamageResult.Damaged);
@@ -102,7 +123,8 @@ namespace GameLogic.Tests
         {
             var definitions = new SkillDefinitionRegistry();
             definitions.Register(new SkillDefinition(1505, SkillType.Active,
-                SkillBehaviorType.DamageThenApplySlow, new[] { 37 }, new[] { 0.4f, 3f }, true));
+                SkillBehaviorType.DamageThenApplySlow, true));
+            definitions.RegisterLevel(new SkillLevelDefinition(1505, 1, new[] { 37 }, new[] { 0.4f, 3f }));
             using (var battle = new BattleRuntime(904, definitions))
             {
                 var resolution = new RecordingResolutionPort(DamageResult.Killed);
@@ -137,11 +159,64 @@ namespace GameLogic.Tests
             }
         }
 
-        private static SkillCastRequest Create1505Request(long battleId)
+        [Test]
+        public void SkillLevelsSelectDifferentParametersAndKeepEarlierCastLocked()
+        {
+            var definitions = new SkillDefinitionRegistry();
+            definitions.Register(new SkillDefinition(1505, SkillType.Active,
+                SkillBehaviorType.DamageThenApplySlow, true, maxLevel: 2));
+            definitions.RegisterLevel(new SkillLevelDefinition(1505, 1, new[] { 20 }, new[] { 0.3f, 3f }));
+            var damage = new[] { 45 };
+            var slow = new[] { 0.4f, 4f };
+            definitions.RegisterLevel(new SkillLevelDefinition(1505, 2, damage, slow));
+            using (var battle = new BattleRuntime(907, definitions))
+            {
+                var context = new SkillRuntimeContext(battle, null, null, (request, id) => true);
+                var first = battle.Skills.TryCast(Create1505Request(907, 1), context);
+                var second = battle.Skills.TryCast(Create1505Request(907, 2), context);
+                definitions.RegisterLevel(new SkillLevelDefinition(1505, 1, new[] { 99 }, new[] { 0.5f, 9f }));
+                damage[0] = 999;
+                slow[0] = 1f;
+
+                Assert.IsTrue(first.Succeeded);
+                Assert.IsTrue(second.Succeeded);
+                Assert.AreEqual(1, first.Cast.SkillLevel);
+                Assert.AreEqual(20, first.Cast.DamageAction.LockedDamage);
+                Assert.AreEqual(0.3f, first.Cast.FloatValues[0]);
+                Assert.AreEqual(2, second.Cast.SkillLevel);
+                Assert.AreEqual(45, second.Cast.DamageAction.LockedDamage);
+                Assert.AreEqual(0.4f, second.Cast.FloatValues[0]);
+                Assert.AreEqual(4f, second.Cast.FloatValues[1]);
+            }
+        }
+
+        [TestCase(2)]
+        [TestCase(3)]
+        public void KnownSkillRejectsMissingOrOutOfRangeLevel(int requestedLevel)
+        {
+            var definitions = new SkillDefinitionRegistry();
+            definitions.Register(new SkillDefinition(1505, SkillType.Active,
+                SkillBehaviorType.DamageThenApplySlow, true, maxLevel: 2));
+            definitions.RegisterLevel(new SkillLevelDefinition(1505, 1, new[] { 20 }, new[] { 0.3f, 3f }));
+            using (var battle = new BattleRuntime(908, definitions))
+            {
+                var context = new SkillRuntimeContext(battle, null, null, (request, id) => true);
+                Assert.IsFalse(battle.Skills.TryCast(Create1505Request(908, requestedLevel), context).Succeeded);
+            }
+        }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void SkillRequestRejectsNonPositiveLevel(int level)
+        {
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => Create1505Request(909, level));
+        }
+
+        private static SkillCastRequest Create1505Request(long battleId, int skillLevel = 1)
         {
             return new SkillCastRequest(battleId, 101, BattleSide.Player, CombatSourceKind.Robot,
                 1505, SkillTriggerSource.RobotContact, 202, new Vector3(1f, 2f, 0f),
-                new Vector3(3f, 4f, 0f), new Vector3(5f, 6f, 0f), 20, 0.6f, 1f);
+                new Vector3(3f, 4f, 0f), new Vector3(5f, 6f, 0f), 20, 0.6f, 1f, skillLevel);
         }
 
         private sealed class RecordingResolutionPort : ICombatResolutionPort

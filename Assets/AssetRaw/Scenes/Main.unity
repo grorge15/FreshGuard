@@ -2320,6 +2320,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: OpponentBerserkBall_1
       objectReference: {fileID: 0}
+    - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
 --- !u!4 &972265627 stripped
@@ -2530,6 +2534,10 @@ PrefabInstance:
     - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_Name
       value: OpponentBerserkBall_2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
@@ -3597,6 +3605,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PlayerBerserkBall_2
       objectReference: {fileID: 0}
+    - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
 --- !u!4 &1827594063 stripped
@@ -3901,6 +3913,10 @@ PrefabInstance:
     - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_Name
       value: PlayerBerserkBall_1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2916220808402958481, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
