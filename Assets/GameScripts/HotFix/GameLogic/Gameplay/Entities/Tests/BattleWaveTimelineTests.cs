@@ -79,6 +79,35 @@ namespace GameLogic.Tests
             StringAssert.Contains("2002", error.Message);
         }
 
+        [TestCase(5, 10)]
+        [TestCase(20, 10)]
+        [TestCase(21, 15)]
+        [TestCase(30, 15)]
+        public void ConfiguredLastWaveAndCycleSizeDetermineCompletion(int waveCount, int wavesPerCycle)
+        {
+            var plans = Enumerable.Range(1, waveCount).Select(w => WaveTestData.Plan(w, w)).ToArray();
+            var spawns = Enumerable.Range(1, waveCount).Select(w => WaveTestData.Spawn(w, w - 1, w, 2001, 1)).ToArray();
+            var timeline = BattleWaveTimeline.FromTables(WaveTestData.Tables(plans, spawns, wavesPerCycle));
+            var due = new List<BattleWaveTimeline.SpawnCommand>();
+            timeline.CollectDue(waveCount - 1.5d, due);
+            Assert.IsFalse(timeline.IsAllSpawnsCompleted);
+            timeline.CollectDue(waveCount - 1d, due);
+            Assert.AreEqual(1, due.Count);
+            Assert.AreEqual(waveCount, timeline.CurrentWave);
+            Assert.IsTrue(timeline.IsAllSpawnsCompleted);
+            Assert.AreEqual((waveCount - 1) / wavesPerCycle + 1, due[0].Group.Cycle);
+        }
+
+        [Test]
+        public void MissingThirdCycleHealthIsRejectedInsteadOfReusingCycleTwo()
+        {
+            var plans = Enumerable.Range(1, 21).Select(w => WaveTestData.Plan(w, w)).ToArray();
+            var spawns = Enumerable.Range(1, 21).Select(w => WaveTestData.Spawn(w, w - 1, w, 2001, 1)).ToArray();
+            var error = Assert.Throws<ArgumentException>(() =>
+                BattleWaveTimeline.FromTables(WaveTestData.Tables(plans, spawns, 10)));
+            StringAssert.Contains("Cycle", error.Message);
+        }
+
         [Test]
         public void DemoTablesExecuteTwentyWavesWithTwoHundredEnemiesPerSide()
         {

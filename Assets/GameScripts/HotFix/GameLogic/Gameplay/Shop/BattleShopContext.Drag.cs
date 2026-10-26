@@ -23,13 +23,14 @@ namespace GameLogic
             return ResolveDragSource(side, source, out robot, out slot, out config, out level, out definition);
         }
 
-        public ShopOperationResult TryBeginDrag(BattleSide side, RobotDragSource source, out RobotDragSession session)
+        public ShopOperationResult TryBeginDrag(BattleSide side, RobotDragSource source, out RobotDragSession session,
+            bool allowUnaffordableOffer = false)
         {
-            return BeginDrag(side, source, out session, true);
+            return BeginDrag(side, source, out session, true, allowUnaffordableOffer);
         }
 
         private ShopOperationResult BeginDrag(BattleSide side, RobotDragSource source,
-            out RobotDragSession session, bool notify)
+            out RobotDragSession session, bool notify, bool allowUnaffordableOffer = false)
         {
             session = null;
             var gate = CheckMutation(side);
@@ -41,8 +42,11 @@ namespace GameLogic
             PlaceableDefinition definition;
             var result = ResolveDragSource(side, source, out robot, out slot, out config, out level, out definition, true);
             if (result != ShopOperationResult.Success) return result;
-            result = CheckOfferFunds(side, slot);
-            if (result != ShopOperationResult.Success) return result;
+            if (!allowUnaffordableOffer)
+            {
+                result = CheckOfferFunds(side, slot);
+                if (result != ShopOperationResult.Success) return result;
+            }
             BoardModel board = null;
             if (robot != null && robot.Location == RobotLocation.Board)
             {
@@ -78,6 +82,80 @@ namespace GameLogic
                 if (!RestoreInteraction()) return;
                 CompleteInteraction();
                 Notify(side);
+            }
+            finally { FinishMutation(); }
+        }
+
+        public ShopOperationResult CheckOfferMerge(BattleSide side, RobotDragSource source,
+            int targetSlotId, long targetOfferId)
+        {
+            ShopSlot sourceSlot;
+            ShopSlot targetSlot;
+            Robot config;
+            return ResolveOfferMerge(side, source, targetSlotId, targetOfferId,
+                out sourceSlot, out targetSlot, out config);
+        }
+
+        private ShopOperationResult ResolveOfferMerge(BattleSide side, RobotDragSource source,
+            int targetSlotId, long targetOfferId, out ShopSlot sourceSlot, out ShopSlot targetSlot,
+            out Robot config, bool validateConfig = false)
+        {
+            sourceSlot = null;
+            targetSlot = null;
+            config = null;
+            if (IsEnded || _endRequested) return ShopOperationResult.BattleEnded;
+            if (!IsValidSide(side)) return ShopOperationResult.InvalidArgument;
+            if (source.Kind != RobotDragSourceKind.ShopOffer) return ShopOperationResult.IncompatibleMerge;
+            if (source.SlotId == targetSlotId) return ShopOperationResult.IncompatibleMerge;
+            RobotEntity owned;
+            int level;
+            PlaceableDefinition definition;
+            var result = ResolveDragSource(side, source, out owned, out sourceSlot, out config,
+                out level, out definition, validateConfig);
+            if (result != ShopOperationResult.Success) return result;
+            Robot targetConfig;
+            result = ResolveDragSource(side, RobotDragSource.Offer(targetSlotId, targetOfferId),
+                out owned, out targetSlot, out targetConfig, out level, out definition, validateConfig);
+            if (result != ShopOperationResult.Success) return result;
+            if (sourceSlot.Offer.RobotId != targetSlot.Offer.RobotId ||
+                sourceSlot.Offer.Level != targetSlot.Offer.Level) return ShopOperationResult.IncompatibleMerge;
+            if (sourceSlot.Offer.Level < 1) return ShopOperationResult.InvalidConfiguration;
+            if (sourceSlot.Offer.Level >= Rules.MaxRobotLevel) return ShopOperationResult.MaxLevelReached;
+            return ShopOperationResult.Success;
+        }
+
+        public ShopOperationResult TryCommitOfferMerge(long interactionId, int targetSlotId, long targetOfferId)
+        {
+            RobotDragSession session;
+            var gate = CheckInteractionCommit(interactionId, out session);
+            if (gate != ShopOperationResult.Success) return gate;
+            ShopSlot sourceSlot;
+            ShopSlot targetSlot;
+            Robot config;
+            var result = ResolveOfferMerge(session.Side, session.Source, targetSlotId, targetOfferId,
+                out sourceSlot, out targetSlot, out config, true);
+            if (result != ShopOperationResult.Success) return result;
+            ShopOffer merged;
+            try
+            {
+                // 先完成所有可能失败的计算，再同步替换两个商品；不创建实体、不扣费。
+                if (_nextOfferId == long.MaxValue) return ShopOperationResult.InvalidConfiguration;
+                var level = sourceSlot.Offer.Level + 1;
+                merged = new ShopOffer(_nextOfferId, config.Id, level, Rules.GetPrice(config.QualityId, level));
+            }
+            catch (ArgumentException) { return ShopOperationResult.InvalidConfiguration; }
+            catch (OverflowException) { return ShopOperationResult.InvalidConfiguration; }
+            _committing = true;
+            try
+            {
+                _offerDefinitions.Remove(sourceSlot.Offer.OfferId);
+                _offerDefinitions.Remove(targetSlot.Offer.OfferId);
+                sourceSlot.Offer = null;
+                targetSlot.Offer = merged;
+                _nextOfferId++;
+                CompleteInteraction();
+                Notify(session.Side);
+                return ShopOperationResult.Success;
             }
             finally { FinishMutation(); }
         }

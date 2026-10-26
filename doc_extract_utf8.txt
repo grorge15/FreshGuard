@@ -1,0 +1,84 @@
+P0 [Heading 2] 设计目的
+P1 [List Paragraph] 完成正常胜负从终局结果、杯数变化、助力币奖励到结算页及返回主界面的玩家闭环。
+P2 [Heading 2] 概述
+P3 [List Paragraph] 本案负责杯数结算、基础助力币发放、正常胜负结算页、直接双倍奖励以及返回主界面。
+P4 [Heading 2] 具体设计
+P5 [Heading 2] 配置表相关
+P6 [Heading 2] D道具表/ItemBase
+P7 [Heading 2] J结算奖励表/ResultAward
+P8 [Heading 2] 客户端相关
+P9 [Heading 2] 结算界面UI示意图（胜利/失败）
+P10 [List Paragraph] 胜利示意图：
+P12 [List Paragraph] 失败示意图：
+P14 [Heading 2] 结算入口与结果来源
+P15 [List Paragraph] 玩家基地耐久率先降至0时，结果为失败。
+P16 [List Paragraph] AI基地耐久率先降至0时，结果为胜利。
+P17 [List Paragraph] 双方基地耐久同时降至0时，结果为胜利。
+P18 [List Paragraph] 第20波双方Boss均完成行动且玩家基地耐久仍大于0时，结果为胜利。
+P19 [List Paragraph] 结果锁定后不再接受能够改变胜负的新战斗行为、商店购买或资源操作。
+P20 [List Paragraph] 本案中的“正常结算”仅指按照战斗终局规则产生的胜利或失败，不包含玩家主动退出或关闭游戏。
+P21 [Heading 2] 配置匹配与杯数变化
+P22 [List Paragraph] 杯数变化敌我双方共用同一规则。
+P23 [List Paragraph] 使用战斗开始前的玩家杯数匹配ResultAward中cupRange字段，区间上下限均包含在内，必须且只能命中一行。
+P24 [List Paragraph] 杯数变化数值——正常胜利读取命中行的 winCup ；正常失败读取 loseCup 。
+P25 [List Paragraph] 玩家主动退出或关闭游戏结束本局时，同样使用退出前杯数匹配配置，并按普通失败读取 loseCup 。
+P26 [List Paragraph] 结算后杯数最小不小于0，最大不大于99999。
+P27 [List Paragraph] 结算页面杯数展示 = 玩家杯数结算前 ± 杯数实际变化值：
+P30 [List Paragraph] 页面展示杯数经过上下限修正后实际变化值，而不是直接照抄配置变化值。
+P31 [List Paragraph] 正常终局锁定后，杯数变化在进入结算页前生效且只生效一次。主动退出时在返回主界面前生效；关闭游戏结束本局时也必须完成一次失败扣杯，但不生成待补显的结算页。
+P32 [Heading 2] 基础助力币奖励
+P34 [Caption] 该图仅为UI示例，图中资源与数量不是具体开发结果
+P35 [List Paragraph] 正常胜利读取命中行的 winAward ，正常失败读取 loseAward ；Demo版本两者均只发放 ItemBase.id=2101 助力币。
+P36 [List Paragraph] 正常终局锁定后，系统在显示结算页前自动发放一次基础助力币。关闭结算页或关闭客户端不会撤销已经发放的基础奖励，也不会在重新进入游戏时再次发放。
+P37 [List Paragraph] 玩家主动退出或关闭游戏结束本局时不发放助力币奖励。
+P38 [List Paragraph] 结算页使用 ItemBase 中的名称、图标资源和品质信息展示奖励；图标资源路径暂为空时不影响数值发放。
+P39 [Heading 2] 双倍奖励按钮
+P41 [List Paragraph] 正常胜利页与正常失败页均保留双倍奖励按钮。
+P42 [List Paragraph] Demo版本不接入IAA，不显示广告相关流程。
+P43 [List Paragraph] 点击按钮后，系统直接额外发放一份与本局基础助力币相同的奖励，使本局助力币总奖励变为基础奖励的2倍。
+P44 [List Paragraph] 双倍奖励只影响助力币，不影响杯数；每局最多成功触发一次。
+P45 [List Paragraph] 加发成功后，结算页的奖励数量更新为最终总数，按钮进入已领取状态：
+P47 [List Paragraph] 玩家未点击双倍按钮便离开结算页或关闭游戏时，本局双倍机会结束；重新启动后不补显上一局结算页，也不提供延后领取入口。
+P48 [Heading 2] 返回主界面按钮
+P50 [List Paragraph] 胜利页与失败页的主按钮统一为“返回主界面”。
+P51 [List Paragraph] 点击后直接返回主界面，不进入匹配界面。
+P52 [List Paragraph] 返回主界面后不再次显示本局结算页，也不重复执行杯数或基础奖励结算。
+P53 [Heading 2] 切入后台、主动退出与关闭游戏
+P54 [List Paragraph] 单纯将游戏切入后台时，战斗进入冻结状态，局内计时、单位行为、投射物及其他战斗对象均停止推进；重新回到游戏后从冻结点继续，不视为退出，不触发结算。
+P55 [List Paragraph] 玩家在游戏内主动退出战斗时，本局按失败扣除杯数，不显示结算页、不发助力币，也不能领取双倍奖励；若客户端仍在运行，则直接返回主界面。
+P56 [List Paragraph] 玩家关闭游戏进程导致本局结束时，本局按失败扣除杯数，不显示结算页、不发助力币，也不生成待领取奖励。此后重新启动游戏直接进入正常主界面流程，不补显上一局结算页、不恢复上一局战斗、不补发奖励。
+P57 [Heading 2] 规则验算示例
+P59 [Heading 2] 美术相关
+P60 [List Paragraph] 胜利/失败背景：
+P62 [List Paragraph] 胜利/失败图标：
+P64 [List Paragraph] 玩家与敌方信息展示背景UI：
+P66 [List Paragraph] 结算资源展示背景：
+P69 [List Paragraph] 胜利/失败中央VS图标：
+P71 [List Paragraph] 奖杯图标：
+P73 [List Paragraph] 返回主界面按钮：
+P75 [List Paragraph] 双倍领取按钮（正常状态）：
+P77 [List Paragraph] 双倍领取按钮（已领取状态）：
+
+TABLE 0
+字段名 | 字段说明 | 数据类型 | 释义
+id | 道具id | int | 全局唯一索引id
+name | 道具名称 | string | 道具名称
+icon | 道具图标 | string | 道具图标资源路径
+type | 道具类型 | int | 道具类型
+qualityId | 品质id | int | 道具对应品质
+desc | 道具描述 | string | 道具描述
+
+TABLE 1
+字段名 | 字段说明 | 数据类型 | 释义
+id | 结算奖励id | int | 全局唯一索引id
+cupRange | 杯数区间 | int[] | 奖励对应杯数区间
+winCup | 胜利杯数变化 | int | 胜利杯数变化
+loseCup | 失败杯数变化 | int | 失败杯数变化
+winAward | 胜利奖励 | int[][] | 胜利奖励
+loseAward | 失败奖励 | int[][] | 失败奖励
+
+TABLE 2
+场景 | 配置匹配与结果
+450杯正常胜利 | 命中 ResultAward.id=2204 ；杯数+28后为478；自动发基础助力币110。点击双倍后再发110，本局共获得220。
+2杯正常失败 | 命中 ResultAward.id=2200 ；配置变化为-5，受下限修正后为0杯，页面显示实际变化-2；自动发基础助力币35。点击双倍后本局共获得70。
+2杯主动退出 | 命中 ResultAward.id=2200 ；杯数降至0，不显示结算页、不发助力币、无双倍机会，直接返回主界面。

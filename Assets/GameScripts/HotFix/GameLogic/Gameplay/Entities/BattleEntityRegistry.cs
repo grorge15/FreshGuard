@@ -141,7 +141,6 @@ namespace GameLogic
             {
                 if (!TryGet(id, out var entity)) continue;
                 (entity as RobotEntity)?.AdvanceTime(deltaTime);
-                (entity as EnemyEntity)?.AdvanceCombatStatus(deltaTime);
                 (entity as GlassEntity)?.AdvanceTime(deltaTime);
                 entity.Skills.Advance(deltaTime);
                 if (advanceEnemyBuffs || !(entity is EnemyEntity)) entity.Buffs.Advance(deltaTime);

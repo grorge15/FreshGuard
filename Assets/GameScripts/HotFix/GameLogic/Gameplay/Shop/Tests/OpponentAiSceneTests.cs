@@ -13,6 +13,7 @@ namespace GameLogic.Tests
         private GameObject _root;
         private BattleShopSceneController _host;
         private PlacementBoardView _board;
+        private PlacementController _placement;
         private BattleShopContext _context;
         private Texture2D _texture;
         private Sprite _sprite;
@@ -41,6 +42,20 @@ namespace GameLogic.Tests
             Set(_host, "_ready", true);
             Set(_host, "_opponentBoard", _board);
             Set(_host, "_rules", _context.Rules);
+            var playerObject = new GameObject("PlayerBoard");
+            playerObject.transform.SetParent(_root.transform);
+            var playerBoard = playerObject.AddComponent<PlacementBoardView>();
+            Set(playerBoard, "_slotPrefab", renderer);
+            _placement = _root.AddComponent<PlacementController>();
+            var cameraObject = new GameObject("SceneCamera");
+            cameraObject.transform.SetParent(_root.transform);
+            Set(_placement, "_playerBoard", playerBoard);
+            Set(_placement, "_enemyBoard", _board);
+            Set(_placement, "_sceneCamera", cameraObject.AddComponent<Camera>());
+            Assert.IsTrue(_placement.Initialize());
+            Set(_host, "_placement", _placement);
+            // 原有用例在交互已经开放的阶段验证异步事务。
+            Set(_host, "_interactionOpened", true);
             _load = new UniTaskCompletionSource<GameObject>();
             Func<string, Transform, CancellationToken, UniTask<GameObject>> loader = (name, parent, token) => _load.Task;
             typeof(BattleShopSceneController).GetProperty("OpponentViewLoader", Private).SetValue(_host, loader);
@@ -56,6 +71,98 @@ namespace GameLogic.Tests
             UnityEngine.Object.DestroyImmediate(_sprite);
             UnityEngine.Object.DestroyImmediate(_texture);
         }
+
+        [Test]
+        public void ReadyBeforeInteractionOpeningCannotLoadPurchaseMoveOrRefresh()
+        {
+            Set(_host, "_interactionOpened", false);
+            var coins = _context.GetState(BattleSide.Opponent).EnergyCoins;
+            var offer = _context.GetState(BattleSide.Opponent).Slots[0].Offer;
+            var loads = 0;
+            Func<string, Transform, CancellationToken, UniTask<GameObject>> loader = (name, parent, token) =>
+            { loads++; return UniTask.FromResult(View()); };
+            typeof(BattleShopSceneController).GetProperty("OpponentViewLoader", Private).SetValue(_host, loader);
+            Assert.IsTrue(_host.IsReady);
+            Assert.IsFalse(_host.CanInteractWithRobots);
+            Assert.AreEqual(ShopOperationResult.Busy, Execute(Plan()).GetAwaiter().GetResult());
+            Assert.AreEqual(ShopOperationResult.Busy, Execute(new OpponentAiAction(OpponentAiActionKind.Move,
+                sourceInstanceId: 999, battleId: _context.BattleId)).GetAwaiter().GetResult());
+            Assert.AreEqual(ShopOperationResult.Busy, Execute(new OpponentAiAction(OpponentAiActionKind.Refresh,
+                battleId: _context.BattleId)).GetAwaiter().GetResult());
+            Assert.AreEqual(0, loads);
+            Assert.AreEqual(coins, _context.GetState(BattleSide.Opponent).EnergyCoins);
+            Assert.AreSame(offer, _context.GetState(BattleSide.Opponent).Slots[0].Offer);
+            Assert.IsFalse(_context.IsBusy);
+        }
+
+        [Test]
+        public void OpeningRequiresCurrentBattleAndVisibleRunningCombatUi()
+        {
+            Set(_host, "_interactionOpened", false);
+            Assert.IsFalse(_host.TryOpenRobotInteraction(_context.BattleId + 1));
+            Assert.IsFalse(_host.TryOpenRobotInteraction(_context.BattleId));
+            Assert.IsFalse(_host.CanInteractWithRobots);
+        }
+
+        [Test]
+        public void ClosingInteractionDuringLoadCannotCommitOrConsumeFunds()
+        {
+            var coins = _context.GetState(BattleSide.Opponent).EnergyCoins;
+            var task = Execute(Plan());
+            Set(_host, "_interactionOpened", false);
+            var prepared = View();
+            _load.TrySetResult(prepared);
+            Assert.AreEqual(ShopOperationResult.Busy, task.GetAwaiter().GetResult());
+            Assert.IsTrue(prepared == null);
+            Assert.AreEqual(coins, _context.GetState(BattleSide.Opponent).EnergyCoins);
+            Assert.IsFalse(_context.IsBusy);
+        }
+
+        [Test]
+        public void SharedInteractionGateRequiresPlacementAndFreezesOnPause()
+        {
+            Assert.IsTrue(_host.CanInteractWithRobots);
+            Set(_host, "_frozen", true);
+            Assert.IsFalse(_host.CanInteractWithRobots);
+            Set(_host, "_frozen", false);
+            Assert.IsTrue(_host.CanInteractWithRobots);
+            _placement.SuspendPlacement();
+            Assert.IsFalse(_host.CanInteractWithRobots);
+            Assert.AreEqual(ShopOperationResult.Busy, Execute(Plan()).GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void SchedulerDoesNotCountCoveredPreparationTimeAndRetainsDelayAfterPause()
+        {
+            var calls = 0;
+            var ai = new OpponentAiController(new OpponentAiSettings(),
+                () => _context.CreateOpponentAiSnapshot(_board.Model),
+                (action, token) => { calls++; return UniTask.FromResult(ShopOperationResult.Success); });
+            Set(_host, "_opponentAi", ai);
+            try
+            {
+                Set(_host, "_interactionOpened", false);
+                AdvanceAi(10f);
+                Assert.AreEqual(0, calls);
+                Set(_host, "_interactionOpened", true);
+                AdvanceAi(0.5f);
+                Assert.AreEqual(0, calls);
+                Set(_host, "_frozen", true);
+                AdvanceAi(100f);
+                Assert.AreEqual(0, calls);
+                Set(_host, "_frozen", false);
+                AdvanceAi(0.29f);
+                Assert.AreEqual(0, calls);
+                AdvanceAi(0.02f);
+                Assert.AreEqual(1, calls);
+                AdvanceAi(0f);
+                Assert.AreEqual(1, calls, "交互开放不能补跑加载期动作。");
+            }
+            finally { ai.Dispose(); Set(_host, "_opponentAi", null); }
+        }
+
+        private void AdvanceAi(float deltaTime) => typeof(BattleShopSceneController)
+            .GetMethod("AdvanceOpponentAi", Private).Invoke(_host, new object[] { deltaTime });
 
         [Test]
         public void SlowLoadLeavesSharedInteractionAvailableAndNeverCancelsPlayersDrag()

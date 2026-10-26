@@ -364,6 +364,145 @@ namespace GameLogic.Tests
             f.Start(); Assert.AreEqual(2, f.LiveCount);
         }
 
+        [TestCase(5, 10)]
+        [TestCase(20, 10)]
+        [TestCase(21, 15)]
+        [TestCase(30, 15)]
+        public void ConfiguredFinalWaveOpensOneVictoryAfterBothSidesAndDeathViewsFinish(int waveCount, int wavesPerCycle)
+        {
+            _fixture = new Fixture(WaveTestData.Tables(
+                Enumerable.Range(1, waveCount).Select(w => WaveTestData.Plan(w, w)).ToArray(),
+                Enumerable.Range(1, waveCount).Select(w => WaveTestData.Spawn(w, w - 1, w, 2001, 1)).ToArray(), wavesPerCycle));
+            var f = _fixture;
+            f.SetRoutes(new[] { new Vector3(-100f, 0f, 0f) });
+            f.Prepare();
+            var enemies = (EnemyBattleController)f.Controller;
+            Assert.IsFalse(enemies.IsWaveVictoryReady);
+            f.Start(); f.Advance(waveCount - 1);
+            Assert.AreEqual(waveCount, enemies.CurrentWave);
+            Assert.IsTrue(enemies.IsAllSpawnsCompleted);
+            Assert.IsFalse(enemies.IsWaveVictoryReady);
+            foreach (var view in f.Views)
+            {
+                Assert.AreEqual(DamageResult.Killed, f.Context.Registry.ApplyDamage(view.InstanceId, int.MaxValue, out var removal));
+                enemies.NotifyKilled(removal);
+            }
+            Assert.IsTrue(enemies.IsAllEnemiesCleared);
+            Assert.IsFalse(enemies.IsWaveVictoryReady, "逻辑清空后仍须等待最后的死亡表现");
+            CheckWaveClear(f, f.Context);
+            Assert.IsTrue(f.Host.IsCombatRunning);
+            f.Host.SetFrozen(true); f.Advance(4f);
+            Assert.Greater(enemies.DeathViewCount, 0);
+            Assert.IsFalse(enemies.IsWaveVictoryReady);
+            f.Host.SetFrozen(false);
+            f.Advance(3f);
+            Assert.IsTrue(enemies.IsWaveVictoryReady, "无动画事件时现有3秒兜底也必须允许完成");
+            var notices = 0;
+            Action<BattleSettlementSnapshot> listener = snapshot =>
+            {
+                notices++;
+                Assert.AreEqual(f.Context.BattleId, snapshot.BattleId);
+                Assert.AreEqual(BattleSettlementReason.FinalWaveCleared, snapshot.Reason);
+                Assert.AreEqual(BattleSettlementResult.Victory, snapshot.Result);
+                Assert.AreEqual(5, snapshot.PlayerTowerHp);
+                Assert.AreEqual(5, snapshot.OpponentTowerHp);
+                Assert.IsTrue(f.Context.IsEnded);
+            };
+            TEngine.GameEvent.AddEventListener<BattleSettlementSnapshot>(BattleSettlementEvents.Requested, listener);
+            try
+            {
+                CheckWaveClear(f, f.Context);
+                Assert.IsFalse(f.Host.IsCombatRunning);
+                Assert.IsFalse(enemies.IsWaveVictoryReady);
+                f.Host.EndBattle(); f.Host.EndBattle();
+                Assert.AreEqual(1, notices);
+            }
+            finally { TEngine.GameEvent.RemoveEventListener<BattleSettlementSnapshot>(BattleSettlementEvents.Requested, listener); }
+        }
+
+        [Test]
+        public void EmptyGapBeforeFutureSpawnCannotWinAndDeathCallbackCompletesOnlyTheLastWave()
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1), WaveTestData.Plan(2, 2) },
+                new[] { WaveTestData.Spawn(1, 0, 1, 2001, 1), WaveTestData.Spawn(2, 10, 11, 2001, 1) }));
+            var f = _fixture; f.Prepare(); f.Start();
+            var enemies = (EnemyBattleController)f.Controller;
+            KillAndComplete(f);
+            Assert.AreEqual(0, enemies.LiveCount);
+            Assert.IsFalse(enemies.IsAllSpawnsCompleted);
+            Assert.IsFalse(enemies.IsWaveVictoryReady);
+            CheckWaveClear(f, f.Context);
+            Assert.IsTrue(f.Host.IsCombatRunning);
+            f.Advance(10f);
+            KillAndComplete(f);
+            Assert.IsTrue(enemies.IsWaveVictoryReady);
+            CheckWaveClear(f, f.Context);
+            Assert.IsFalse(f.Host.IsCombatRunning);
+        }
+
+        [TestCase(0, BattleSettlementReason.FinalWaveCleared, BattleSettlementResult.Victory)]
+        [TestCase(4, BattleSettlementReason.TowerDestroyed, BattleSettlementResult.Defeat)]
+        public void LastLeakCommitsDamageBeforeChoosingVictoryOrDefeat(int previousDamage,
+            BattleSettlementReason reason, BattleSettlementResult result)
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 1, 2001, 1) }));
+            var f = _fixture;
+            f.SetRoutes(new[] { new Vector3(-0.61f, 0f, 0f) });
+            f.Prepare();
+            f.Host.Towers.ApplyDamage(f.Context.BattleId, BattleSide.Player, previousDamage);
+            var notifications = 0;
+            f.Host.Towers.SettlementRequested += snapshot =>
+            {
+                notifications++;
+                Assert.AreEqual(reason, snapshot.Reason);
+                Assert.AreEqual(result, snapshot.Result);
+                Assert.AreEqual(4 - previousDamage, snapshot.PlayerTowerHp);
+            };
+            f.Host.Towers.PlayerTower.HealthChanged += _ =>
+                Assert.IsFalse(((EnemyBattleController)f.Controller).IsWaveVictoryReady, "抵塔伤害提交过程中不能提前就绪");
+            f.Start(); f.Advance(1f);
+            CheckWaveClear(f, f.Context);
+            Assert.AreEqual(1, notifications);
+        }
+
+        [Test]
+        public void ManualRemovalAndOldContextCannotProduceClearVictory()
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 1, 2001, 1) }));
+            var f = _fixture; f.Prepare(); f.Start();
+            foreach (var view in f.Views) f.Context.Registry.Remove(view.InstanceId, EntityRemovalReason.Manual, out _);
+            f.Advance(0f);
+            var enemies = (EnemyBattleController)f.Controller;
+            Assert.IsTrue(enemies.IsAllEnemiesCleared);
+            Assert.IsFalse(enemies.IsWaveVictoryReady);
+            CheckWaveClear(f, f.Context);
+            Assert.IsTrue(f.Host.IsCombatRunning);
+            f.Clear();
+            Assert.IsFalse(enemies.IsWaveVictoryReady);
+            f.Prepare(); f.Start(); KillAndComplete(f);
+            Assert.IsTrue(enemies.IsWaveVictoryReady, "新准备必须重置异常移除状态");
+            using (var old = new BattleShopContext(ShopRules.FromTables(f.Tables), new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, f.Tables.TbRobot.Get))
+                CheckWaveClear(f, old);
+            Assert.IsTrue(f.Host.IsCombatRunning, "旧局上下文不能结算当前局");
+            CheckWaveClear(f, f.Context);
+            Assert.IsFalse(f.Host.IsCombatRunning);
+        }
+
+        private static void KillAndComplete(Fixture f)
+        {
+            foreach (var view in f.Views)
+            {
+                f.Context.Registry.ApplyDamage(view.InstanceId, int.MaxValue, out var removal);
+                ((EnemyBattleController)f.Controller).NotifyKilled(removal);
+                view.OnDeathAnimationComplete();
+            }
+        }
+
+        private static void CheckWaveClear(Fixture f, BattleShopContext context) => typeof(BattleShopSceneController)
+            .GetMethod("TryCompleteWaveClear", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(f.Host, new object[] { context });
+
         private Fixture Create(bool prepare = true) { _fixture = new Fixture(); if (prepare) _fixture.Prepare(); return _fixture; }
         private static Tables LoadTables() => new Tables(name => new ByteBuf(File.ReadAllBytes(
             Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));

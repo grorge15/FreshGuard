@@ -33,6 +33,8 @@ namespace GameLogic
         private bool _prepared;
         private bool _preparing;
         private bool _started;
+        private bool _hasAbnormalRemoval;
+        private bool _advancing;
         private int _generation;
         private double _elapsed;
         private BattleWaveTimeline _timeline;
@@ -70,6 +72,9 @@ namespace GameLogic
         public int CurrentWave => _timeline?.CurrentWave ?? 1;
         public bool IsAllSpawnsCompleted => _started && _timeline != null && _timeline.IsAllSpawnsCompleted;
         public bool IsAllEnemiesCleared => IsAllSpawnsCompleted && _active.Count == 0;
+        // 时间线指令已发完不等于双方都已实际生成；清理和异常丢失也不能算正常通关。
+        public bool IsWaveVictoryReady => IsRunning && !_advancing && !_hasAbnormalRemoval && IsAllEnemiesCleared &&
+            _dying.Count == 0 && _groups.All(g => g.Spawned == g.Rule.EnemyCount);
         private bool OwnsBattle => this != null && _host != null && _context != null &&
             _host.Context == _context && !_context.IsEnded && !_context.IsEndRequested;
         private bool IsRunning => _prepared && _started && OwnsBattle && _host.IsCombatRunning;
@@ -192,11 +197,12 @@ namespace GameLogic
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!IsRunning) return;
-            AdvanceDamageNumbers(deltaTime);
-            AdvanceDeathViews(deltaTime);
-            if (!IsRunning) return;
+            _advancing = true;
             try
             {
+                AdvanceDamageNumbers(deltaTime);
+                AdvanceDeathViews(deltaTime);
+                if (!IsRunning) return;
                 var target = _elapsed + deltaTime;
                 do
                 {
@@ -215,6 +221,7 @@ namespace GameLogic
                 } while (_elapsed < target);
             }
             catch { AbortBattle(); throw; }
+            finally { _advancing = false; }
         }
 
         private double NextArrivalDelay()
@@ -300,6 +307,7 @@ namespace GameLogic
                 if (!_active.TryGetValue(id, out var entry)) continue;
                 if (entry.View == null || !_context.Registry.TryGet(id, out var entity) || !(entity is EnemyEntity enemy) || !enemy.IsAlive)
                 {
+                    _hasAbnormalRemoval = true;
                     _active.Remove(id);
                     if (entry.View != null) Release(entry.View.gameObject);
                     // 表现意外被销毁时不能留下永远无法抵达的逻辑实体。
@@ -503,6 +511,7 @@ namespace GameLogic
         {
             _generation++;
             _prepared = _preparing = _started = false;
+            _hasAbnormalRemoval = false;
             _elapsed = 0d;
             _timeline = null;
             _dueSpawns.Clear();

@@ -98,6 +98,50 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
+        public IEnumerator FinalWaveClearOpensVictoryWithSurvivingTowersAfterCleanupOnlyOnce()
+        {
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            var context = new BattleShopContext(ShopRules.FromTables(tables), new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, tables.TbRobot.Get);
+            var root = new GameObject("FinalWaveCheckOutBattle");
+            var host = root.AddComponent<BattleShopSceneController>();
+            var towers = new TowerBattleSession(context.BattleId, context.Registry, 5);
+            SetField(host, "<Context>k__BackingField", context);
+            SetField(host, "_towers", towers);
+            SetField(host, "_ready", true);
+            SetField(host, "_running", true);
+            towers.SettlementRequested += (Action<BattleSettlementSnapshot>)Delegate.CreateDelegate(typeof(Action<BattleSettlementSnapshot>), host,
+                host.GetType().GetMethod("OnTowerSettlementRequested", BindingFlags.NonPublic | BindingFlags.Instance));
+            BattleSettlementSnapshot snapshot = default;
+            towers.SettlementRequested += value => snapshot = value;
+            Begin(context.BattleId);
+            try
+            {
+                towers.ApplyDamageBatch(context.BattleId, 1, 2);
+                Assert.IsTrue(towers.TryCompleteWaveClear(context.BattleId));
+                Assert.IsNull(GameModule.UI.GetUI<CheckOutUI>(), "清理完成之前不能打开结算页");
+                for (var frame = 0; frame < 12 && GameModule.UI.GetUI<CheckOutUI>() == null; frame++) yield return null;
+                var window = GameModule.UI.GetUI<CheckOutUI>();
+                Assert.IsNotNull(window);
+                Assert.IsTrue(context.IsEnded);
+                Assert.IsNull(host.Context);
+                Assert.IsTrue(window.transform.Find("m_go_Victory").gameObject.activeSelf);
+                var displayed = (BattleSettlementSnapshot)window.UserData;
+                Assert.AreEqual(BattleSettlementReason.FinalWaveCleared, displayed.Reason);
+                Assert.AreEqual(4, displayed.PlayerTowerHp);
+                Assert.AreEqual(3, displayed.OpponentTowerHp);
+                Assert.IsNull(displayed.DefeatedSide);
+                GameEvent.Send(BattleSettlementEvents.Requested, snapshot);
+                yield return null;
+                Assert.AreEqual(1, _loader.LoadCount);
+            }
+            finally
+            {
+                if (root != null) Object.DestroyImmediate(root);
+                context.Dispose();
+            }
+        }
+
+        [UnityTest]
         public IEnumerator LateOldWindowCannotCloseNewResultOrAcceptOldNotifications()
         {
             var oldSnapshot = Snapshot(100, BattleSide.Player);
