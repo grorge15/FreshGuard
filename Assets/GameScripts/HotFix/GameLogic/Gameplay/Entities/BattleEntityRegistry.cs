@@ -90,6 +90,10 @@ namespace GameLogic
         }
 
         public DamageResult ApplyDamage(int enemyInstanceId, int damage, out EntityRemovalSnapshot removal)
+            => ApplyDamage(enemyInstanceId, damage, out removal, null);
+
+        // 致死通知观察已提交的0血量，仍在归池前；无论回调是否抛异常都完成移除。
+        internal DamageResult ApplyDamage(int enemyInstanceId, int damage, out EntityRemovalSnapshot removal, Action onKilled)
         {
             removal = default(EntityRemovalSnapshot);
             Entity entity;
@@ -98,7 +102,9 @@ namespace GameLogic
             if (enemy == null || !enemy.IsAlive) return DamageResult.Ignored;
             enemy.ApplyDamage(damage);
             if (enemy.CurrentHp > 0) return DamageResult.Damaged;
-            Remove(enemyInstanceId, EntityRemovalReason.Killed, out removal);
+            removal = new EntityRemovalSnapshot(enemy, EntityRemovalReason.Killed);
+            try { onKilled?.Invoke(); }
+            finally { Remove(enemyInstanceId, EntityRemovalReason.Killed, out _); }
             return DamageResult.Killed;
         }
 

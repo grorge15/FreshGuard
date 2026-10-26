@@ -16,7 +16,6 @@ namespace GameLogic
         private readonly EnemyBattleController _enemies;
         private readonly IDictionary<int, GameObject> _views;
         private readonly SharedEnemyTargetSelector _targets;
-        private readonly ICombatResolutionPort _resolution;
         private readonly Dictionary<int, Reserve> _reserves = new Dictionary<int, Reserve>();
         private readonly IBulletWorld _bulletWorld;
         private readonly Func<string, Transform, CancellationToken, UniTask<GameObject>> _load;
@@ -55,7 +54,6 @@ namespace GameLogic
             _views = views ?? throw new ArgumentNullException(nameof(views));
             _load = load ?? throw new ArgumentNullException(nameof(load));
             _targets = new SharedEnemyTargetSelector(context, enemies);
-            _resolution = new EnemyCombatResolutionPort(context, enemies);
             _bulletWorld = new EnemyBulletWorld(host, context, enemies);
             _context.Battle.CanCastNow = () => IsRunning;
             _preparedRoot = new GameObject("PreparedRobotBullets").transform;
@@ -210,22 +208,10 @@ namespace GameLogic
             if (!IsRunning || !_reserves.TryGetValue(sourceId, out var reserve) || reserve.Ready != ready || ready == null) return;
             var action = _context.Combat.CaptureAttack(new CombatActionSnapshot(_context.BattleId,
                 sourceId, cast.Owner.Side, cast.SkillId, new[] { cast.Target.EntityId }, CombatOutcomeTag.SingleDamage,
-                damage, origin, aimPoint, sequence: 1));
-            var state = new BulletState(new BulletLauncher(model, action), _bulletWorld, hit => ResolveHit(hit, cast));
+                damage, origin, aimPoint, sequence: 1, hitBuffs: cast.HitBuffs));
+            var state = new BulletState(new BulletLauncher(model, action), _bulletWorld,
+                hit => _context.Combat.Resolve(hit.Action));
             Launch(reserve, ready.GetComponent<RobotBulletView>(), state);
-        }
-
-        private void ResolveHit(BulletState hit, SkillCastSnapshot cast)
-        {
-            var result = _context.Combat.Resolve(hit.Action, _resolution);
-            if (_context.Battle.IsDisposed || cast.Get("slow") <= 0f || cast.Get("duration") <= 0f ||
-                !_context.Battle.Catalog.TryGetBuff(2505, out var slow)) return;
-            foreach (var target in result.Targets)
-                if (target.IsHit && target.AppliedDamage > 0 && !target.IsKilled &&
-                    _context.Registry.TryGet(target.TargetInstanceId, out var entity) &&
-                    entity is EnemyEntity enemy && enemy.IsAlive && enemy.Side == cast.Owner.Side)
-                    _context.Battle.AddBuff(enemy, slow, cast.Owner, cast.Get("duration"),
-                        new Dictionary<string, float> { { "slow", cast.Get("slow") } });
         }
 
         private void Launch(Reserve reserve, RobotBulletView bullet, BulletState state)
@@ -300,5 +286,48 @@ namespace GameLogic
             if (Application.isPlaying) UnityEngine.Object.Destroy(instance);
             else UnityEngine.Object.DestroyImmediate(instance);
         }
+    }
+}
+
+namespace GameLogic
+{
+    /// <summary>每侧共享一个锁定目标；只同步读取存活实体和路线进度。</summary>
+    public sealed class SharedEnemyTargetSelector
+    {
+        private readonly BattleShopContext _context;
+        private readonly EnemyBattleController _enemies;
+        private readonly int?[] _targets = new int?[2];
+        private readonly List<int> _candidates = new List<int>();
+
+        public SharedEnemyTargetSelector(BattleShopContext context, EnemyBattleController enemies)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+            _enemies = enemies != null ? enemies : throw new ArgumentNullException(nameof(enemies));
+        }
+
+        public int? GetTarget(BattleSide side)
+        {
+            EntityValidation.RequireSide(side);
+            var index = (int)side;
+            if (!_enemies.OwnsContext(_context)) { Clear(); return null; }
+            var locked = _targets[index];
+            if (locked.HasValue && _enemies.TryGetTargetPosition(side, locked.Value, out _)) return locked;
+            _targets[index] = null;
+            _enemies.CopyTargetCandidates(side, _candidates);
+            var best = -1f;
+            foreach (var id in _candidates)
+            {
+                if (!_context.Registry.TryGet(id, out var entity) || !(entity is EnemyEntity enemy) || !enemy.IsAlive) continue;
+                if (enemy.RouteProgress > best || enemy.RouteProgress == best &&
+                    (!_targets[index].HasValue || id < _targets[index].Value))
+                {
+                    best = enemy.RouteProgress;
+                    _targets[index] = id;
+                }
+            }
+            return _targets[index];
+        }
+
+        public void Clear() { _targets[0] = _targets[1] = null; _candidates.Clear(); }
     }
 }

@@ -103,6 +103,8 @@ namespace GameLogic
                 throw new ArgumentException("敌人准备缺少场景、对局、配置或加载器。");
             _host = host;
             _context = context;
+            context.Combat.DamageApplying += OnDamageApplying;
+            context.Combat.TargetResolved += OnTargetResolved;
             _preparing = true;
             var generation = _generation;
             GameObject pending = null;
@@ -372,7 +374,19 @@ namespace GameLogic
             }
         }
 
-        /// <summary>子弹命中后统一提交受击表现，逻辑伤害仍由调用方提交。</summary>
+        private void OnDamageApplying(CombatDamageContext context)
+        {
+            if (OwnsBattle && context.Action.BattleId == _context.BattleId)
+                TryPlayDamageFeedback(context.Target.Side, context.Target.EntityId.Value, context.Outcome.GetFinalDamage());
+        }
+
+        private void OnTargetResolved(CombatDamageContext context)
+        {
+            if (OwnsBattle && context.Action.BattleId == _context.BattleId && context.Result.IsKilled)
+                NotifyKilled(context.Removal);
+        }
+
+        /// <summary>只提交受击表现；逻辑伤害由CombatRuntime统一提交。</summary>
         public bool TryPlayDamageFeedback(BattleSide side, int instanceId, int damage)
         {
             if (!OwnsBattle || damage <= 0 || !_active.TryGetValue(instanceId, out var entry) ||
@@ -494,6 +508,11 @@ namespace GameLogic
             _dueSpawns.Clear();
             var context = _context;
             _context = null;
+            if (context != null)
+            {
+                context.Combat.DamageApplying -= OnDamageApplying;
+                context.Combat.TargetResolved -= OnTargetResolved;
+            }
             _host = null;
             foreach (var pair in _active)
             {

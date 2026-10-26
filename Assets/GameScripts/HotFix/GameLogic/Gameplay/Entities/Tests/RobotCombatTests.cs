@@ -197,7 +197,7 @@ namespace GameLogic.Tests
                 robot.InstanceId, robot.Side, robot.SkillId, new[] { targetId }, CombatOutcomeTag.SingleDamage,
                 damage, start, aimPoint, sequence: 1));
             Call(bullet, "Initialize", _fixture.Host, _fixture.Context, _fixture.Controller, action,
-                new EnemyCombatResolutionPort(_fixture.Context, enemies), 0.6f, 1f);
+                0.6f, 1f);
             return bullet;
         }
 

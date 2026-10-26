@@ -1,23 +1,20 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 namespace GameLogic
 {
-    /// <summary>主线程单局运行时。双方独立规则集合，攻击序号统一分配；终局使所有未结算快照失效。</summary>
+    /// <summary>单局伤害入口：发射冻结数值，逐目标执行Buff、扣血与击杀通知。表现只订阅数值快照。</summary>
     public sealed class CombatRuntime : IDisposable
     {
-        private readonly List<ICombatModifier>[] _modifiers = { new List<ICombatModifier>(), new List<ICombatModifier>() };
-        private readonly CombatModifierPipeline _pipeline = new CombatModifierPipeline();
         private readonly object _owner = new object();
-        // 移除后仍保留本局归属，飞行中的冻结规则仍可能向本方状态回写事实。
-        private readonly Dictionary<ICombatModifier, BattleSide> _modifierOwners =
-            new Dictionary<ICombatModifier, BattleSide>(new ModifierReferenceComparer());
+        private BattleRuntime _battle;
         private long _sequence;
+        private readonly HashSet<int> _resolving = new HashSet<int>();
         public long BattleId { get; }
         public float BattleTime { get; private set; }
-        public CombatHistory History { get; } = new CombatHistory();
         public bool IsDisposed { get; private set; }
+        public event Action<CombatDamageContext> DamageApplying;
+        public event Action<CombatDamageContext> TargetResolved;
 
         public CombatRuntime(long battleId)
         {
@@ -25,27 +22,15 @@ namespace GameLogic
             BattleId = battleId;
         }
 
-        public void AddModifier(BattleSide side, ICombatModifier modifier)
+        internal void Bind(BattleRuntime battle)
         {
-            ThrowIfDisposed(); EntityValidation.RequireSide(side);
-            if (modifier == null) throw new ArgumentNullException(nameof(modifier));
-            if (_modifierOwners.TryGetValue(modifier, out var ownerSide) && ownerSide != side)
-                throw new InvalidOperationException("修改器实例在一局内不能改变阵营归属。");
-            foreach (var list in _modifiers)
-                foreach (var existing in list)
-                    if (ReferenceEquals(existing, modifier)) throw new InvalidOperationException("修改器实例不能重复注册或跨阵营共享。");
-            _modifiers[(int)side].Add(modifier);
-            _modifierOwners[modifier] = side;
+            if (battle.BattleId != BattleId || (_battle != null && !ReferenceEquals(_battle, battle)))
+                throw new InvalidOperationException("伤害入口不能跨对局绑定。");
+            _battle = battle;
         }
 
-        public bool RemoveModifier(BattleSide side, ICombatModifier modifier)
-        {
-            ThrowIfDisposed(); EntityValidation.RequireSide(side);
-            return _modifiers[(int)side].Remove(modifier);
-        }
-
-        public int GetModifierCount(BattleSide side)
-        { EntityValidation.RequireSide(side); return _modifiers[(int)side].Count; }
+        private bool Valid => !IsDisposed && _battle != null && !_battle.IsDisposed && _battle.IsBattleValid();
+        private bool Active => Valid && _battle.CanCastNow();
 
         public CombatActionSnapshot CaptureAttack(CombatActionSnapshot action)
         {
@@ -53,69 +38,110 @@ namespace GameLogic
             if (action == null) throw new ArgumentNullException(nameof(action));
             if (action.BattleId != BattleId || action.Owner != null)
                 throw new InvalidOperationException("攻击必须来自当前对局且尚未锁定。");
-            return _pipeline.Capture(_owner, checked(++_sequence), action,
-                _modifiers[(int)action.SourceSide].ToArray(), Context(CombatModifierPhase.Capture), ThrowIfDisposed);
+            var draft = new CombatOutcomeDraft(action);
+            DispatchSource(action, buffs => buffs.OnAttack(draft, () => Active));
+            ThrowIfDisposed();
+            if (draft.IsCancelled || !Active) throw new InvalidOperationException("攻击准备期间被取消或对局已结束。");
+            return action.Lock(_owner, checked(++_sequence), draft);
         }
 
-        public CombatResolutionResult Resolve(CombatActionSnapshot action, ICombatResolutionPort port)
+        public CombatResolutionResult Resolve(CombatActionSnapshot action)
         {
             ThrowIfDisposed();
-            if (action == null || port == null) throw new ArgumentNullException(nameof(action));
+            if (action == null) throw new ArgumentNullException(nameof(action));
             if (action.BattleId != BattleId || !ReferenceEquals(action.Owner, _owner) || action.Consumed)
                 throw new InvalidOperationException("攻击快照不属于当前运行时或已结算。");
-            // 先封住重入和重复扣血。结算失败不重试，场景调用方负责中止异常对局。
             action.Consumed = true;
-            var draft = new CombatOutcomeDraft(action, (port as ICombatTargetQuery)?.GetValidTargets(action));
-            ThrowIfDisposed();
-            var context = Context(CombatModifierPhase.Resolution);
-            _pipeline.ModifyAtResolution(draft, context, ThrowIfDisposed);
-            var result = port.Resolve(draft);
-            if (result == null || !ReferenceEquals(result.Action, action))
-                throw new InvalidOperationException("结算端口必须返回本次攻击的结果。");
-            if (IsDisposed) return result; // 结算端口可能同步触发终局，不能重新写回已清空的状态。
-            if (action.SourceKind == CombatSourceKind.Robot)
-                foreach (var target in result.Targets)
-                    if (target.IsHit) History.RecordHit(target.TargetInstanceId, action.SourceInstanceId,
-                        BattleTime, target.IsEliteOrBoss);
-            foreach (var observer in action.Observers)
+            var results = new List<CombatTargetResolution>();
+            foreach (var id in action.TargetInstanceIds)
             {
-                if (IsDisposed) break;
-                observer.OnResolved(result, context);
+                if (!Active) break;
+                results.Add(ResolveTarget(action, id));
             }
-            return result;
+            return new CombatResolutionResult(new CombatOutcomeDraft(action), results);
+        }
+
+        private CombatTargetResolution ResolveTarget(CombatActionSnapshot action, int id)
+        {
+            var ignored = new CombatTargetResolution(id, 0, DamageResult.Ignored);
+            if (!TryGetTarget(action, id, out var enemy) || !_resolving.Add(id)) return ignored;
+            try
+            {
+                var reference = enemy.OwnerRef;
+                var context = new CombatDamageContext(new CombatOutcomeDraft(action, new[] { id }), reference);
+                DispatchSource(action, buffs => buffs.OnHit(context, () => Active));
+                if (!TryGetTarget(action, id, out enemy)) return ignored;
+                enemy.Buffs.OnBeHurt(context, () => Active);
+                if (!TryGetTarget(action, id, out enemy)) return ignored;
+                var damage = context.Outcome.GetFinalDamage();
+                if (damage <= 0) return ignored;
+                DamageApplying?.Invoke(context);
+                if (!TryGetTarget(action, id, out enemy)) return ignored;
+                // 回调结束后只保存值与旧Buff容器；ApplyDamage可能同步归池并创建其他敌人。
+                var applied = Math.Min(enemy.CurrentHp, damage);
+                var elite = enemy.Configuration != null && enemy.Configuration.EnemyType >= 2;
+                var victimBuffs = enemy.Buffs;
+                context.Result = new CombatTargetResolution(id, damage,
+                    damage >= enemy.CurrentHp ? DamageResult.Killed : DamageResult.Damaged, applied, elite);
+                var result = _battle.Registry.ApplyDamage(id, damage, out var removal,
+                    () => victimBuffs.OnBeKilled(context, () => Valid));
+                context.Result = new CombatTargetResolution(id, damage, result,
+                    result == DamageResult.Ignored ? 0 : applied, elite);
+                context.Removal = removal;
+                // 扣血已经提交，暂停不应打断事实通知；终局/销毁仍立即停止。
+                if (!Valid) return context.Result;
+                if (context.Result.IsKilled) DispatchSource(action, buffs => buffs.OnKill(context, () => Valid), true);
+                if (Valid && context.Result.AppliedDamage > 0 && !context.Result.IsKilled)
+                {
+                    var source = SkillOwnerRef.Entity(BattleId, action.SourceSide, action.SourceInstanceId);
+                    foreach (var effect in context.HitBuffs)
+                    {
+                        if (!TryGetTarget(action, id, out enemy, true) || !enemy.OwnerRef.Equals(reference)) break;
+                        if (!_battle.Catalog.TryGetBuff(effect.BuffId, out var model))
+                            throw new InvalidOperationException("命中效果引用了未配置Buff：" + effect.BuffId);
+                        _battle.AddBuff(enemy, model, source, effect.Duration, effect.Parameters);
+                    }
+                }
+                if (Valid) TargetResolved?.Invoke(context);
+                return context.Result;
+            }
+            finally { _resolving.Remove(id); }
+        }
+
+        private bool TryGetTarget(CombatActionSnapshot action, int id, out EnemyEntity enemy, bool committed = false)
+        {
+            enemy = null;
+            if (!(committed ? Valid : Active) || !_battle.Registry.TryGet(id, out var entity) || !(entity is EnemyEntity target) ||
+                !target.IsAlive || target.Side != action.SourceSide) return false;
+            enemy = target;
+            return true;
+        }
+
+        private void DispatchSource(CombatActionSnapshot action, Action<BuffContainer> dispatch, bool committed = false)
+        {
+            if (!(committed ? Valid : Active)) return;
+            dispatch((action.SourceSide == BattleSide.Player ? _battle.Player : _battle.Opponent).Buffs);
+            if ((committed ? Valid : Active) && _battle.Registry.TryGet(action.SourceInstanceId, out var source) &&
+                !source.IsRemoved && source.Side == action.SourceSide) dispatch(source.Buffs);
         }
 
         public void AdvanceTime(float deltaTime)
         {
-            ThrowIfDisposed(); EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
+            ThrowIfDisposed();
+            EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             EntityValidation.RequireFiniteNonNegative(BattleTime + deltaTime, nameof(deltaTime));
-            BattleTime += deltaTime; History.Prune(BattleTime);
-            var modifiers = new List<ICombatModifier>();
-            foreach (var list in _modifiers) modifiers.AddRange(list);
-            foreach (var modifier in modifiers)
-            {
-                if (IsDisposed) break;
-                modifier.AdvanceTime(deltaTime);
-            }
+            BattleTime += deltaTime;
         }
 
         public void Dispose()
         {
             if (IsDisposed) return;
             IsDisposed = true;
-            foreach (var list in _modifiers) list.Clear();
-            _modifierOwners.Clear();
-            History.Clear(); BattleTime = 0f; _sequence = 0;
+            DamageApplying = null; TargetResolved = null;
+            BattleTime = 0f; _resolving.Clear();
         }
 
-        private CombatModifierContext Context(CombatModifierPhase phase) =>
-            new CombatModifierContext(BattleId, BattleTime, History, phase);
-        private void ThrowIfDisposed() { if (IsDisposed) throw new ObjectDisposedException(nameof(CombatRuntime)); }
-
-        private sealed class ModifierReferenceComparer : IEqualityComparer<ICombatModifier>
-        {
-            public bool Equals(ICombatModifier x, ICombatModifier y) => ReferenceEquals(x, y);
-            public int GetHashCode(ICombatModifier modifier) => RuntimeHelpers.GetHashCode(modifier);
-        }
+        private void ThrowIfDisposed()
+        { if (IsDisposed) throw new ObjectDisposedException(nameof(CombatRuntime)); }
     }
 }

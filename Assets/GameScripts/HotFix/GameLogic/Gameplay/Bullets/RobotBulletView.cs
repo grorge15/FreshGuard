@@ -21,12 +21,12 @@ namespace GameLogic
         public void Present(BulletState state)
         { if (this != null) transform.position = state.Position; }
         public void Initialize(BattleShopSceneController host, BattleShopContext context, EnemyBattleController enemies,
-            CombatActionSnapshot action, ICombatResolutionPort resolution, float flightTime, float arcHeight)
+            CombatActionSnapshot action, float flightTime, float arcHeight)
         {
-            if (host == null || context == null || enemies == null || resolution == null) throw new ArgumentNullException(nameof(context));
+            if (host == null || context == null || enemies == null) throw new ArgumentNullException(nameof(context));
             if (action == null || action.BattleId != context.BattleId) throw new ArgumentException(nameof(action));
             Bind(new BulletState(new BulletLauncher(new BulletModel(flightTime, arcHeight), action),
-                new EnemyBulletWorld(host, context, enemies), state => context.Combat.Resolve(state.Action, resolution)));
+                new EnemyBulletWorld(host, context, enemies), state => context.Combat.Resolve(state.Action)));
         }
         public bool Advance(float deltaTime)
         {

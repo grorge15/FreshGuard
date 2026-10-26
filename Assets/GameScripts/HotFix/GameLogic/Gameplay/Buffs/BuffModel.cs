@@ -53,6 +53,11 @@ namespace GameLogic
         void OnRemoved(BuffContainer container, BuffObj buff);
         void OnTick(BuffContainer container, BuffObj buff);
         void OnCast(BuffContainer container, BuffObj buff, SkillCastContext context);
+        void OnAttack(BuffContainer container, BuffObj buff, CombatOutcomeDraft attack);
+        void OnHit(BuffContainer container, BuffObj buff, CombatDamageContext context);
+        void OnBeHurt(BuffContainer container, BuffObj buff, CombatDamageContext context);
+        void OnKill(BuffContainer container, BuffObj buff, CombatDamageContext context);
+        void OnBeKilled(BuffContainer container, BuffObj buff, CombatDamageContext context);
     }
     public class BuffBehavior : IBuffBehavior
     {
@@ -60,5 +65,10 @@ namespace GameLogic
         public virtual void OnRemoved(BuffContainer container, BuffObj buff) { }
         public virtual void OnTick(BuffContainer container, BuffObj buff) { }
         public virtual void OnCast(BuffContainer container, BuffObj buff, SkillCastContext context) { }
+        public virtual void OnAttack(BuffContainer container, BuffObj buff, CombatOutcomeDraft attack) { }
+        public virtual void OnHit(BuffContainer container, BuffObj buff, CombatDamageContext context) { }
+        public virtual void OnBeHurt(BuffContainer container, BuffObj buff, CombatDamageContext context) { }
+        public virtual void OnKill(BuffContainer container, BuffObj buff, CombatDamageContext context) { }
+        public virtual void OnBeKilled(BuffContainer container, BuffObj buff, CombatDamageContext context) { }
     }
 }

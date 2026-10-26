@@ -3,6 +3,49 @@ using System.Collections.Generic;
 
 namespace GameLogic
 {
+    [Flags]
+    public enum CombatOutcomeTag
+    {
+        None = 0, SingleDamage = 1 << 0, AreaDamage = 1 << 1, DamageOverTime = 1 << 2,
+        Slow = 1 << 3, Knockback = 1 << 4, Pull = 1 << 5, Energy = 1 << 6
+    }
+    // 同组加法、异组乘法；这是计算规则，不再单独维护另一套效果对象。
+    public enum CombatModifierGroup { GlobalDamage, AreaDamage, SkillDamage, TargetCondition, Equipment }
+    public enum CombatSourceKind { Robot, Enemy, Other }
+
+    public sealed class CombatBuffApplication
+    {
+        public int BuffId { get; }
+        public float Duration { get; }
+        public IReadOnlyDictionary<string, float> Parameters { get; }
+        public CombatBuffApplication(int buffId, float duration, IReadOnlyDictionary<string, float> parameters = null)
+        {
+            EntityValidation.RequirePositive(buffId, nameof(buffId));
+            EntityValidation.RequireFiniteNonNegative(duration, nameof(duration));
+            if (duration <= 0f) throw new ArgumentOutOfRangeException(nameof(duration));
+            BuffId = buffId; Duration = duration; Parameters = BuffObj.Copy(parameters);
+        }
+    }
+
+    /// <summary>一次伤害的同步上下文；效果只能保存其中的标识与数值，不能保存实体引用。</summary>
+    public sealed class CombatDamageContext
+    {
+        public CombatOutcomeDraft Outcome { get; }
+        public CombatActionSnapshot Action => Outcome.Action;
+        public SkillOwnerRef Target { get; }
+        public CombatTargetResolution Result { get; internal set; }
+        public EntityRemovalSnapshot Removal { get; internal set; }
+        private readonly List<CombatBuffApplication> _hitBuffs;
+        internal IReadOnlyList<CombatBuffApplication> HitBuffs => _hitBuffs;
+        public CombatDamageContext(CombatOutcomeDraft outcome, SkillOwnerRef target)
+        {
+            Outcome = outcome; Target = target;
+            _hitBuffs = new List<CombatBuffApplication>(outcome.Action.HitBuffs);
+        }
+        public void AddBuff(CombatBuffApplication application)
+            => _hitBuffs.Add(application ?? throw new ArgumentNullException(nameof(application)));
+    }
+
     public sealed class CombatOutcomeDraft
     {
         private readonly Dictionary<CombatModifierGroup, double> _percents = new Dictionary<CombatModifierGroup, double>();
@@ -11,6 +54,8 @@ namespace GameLogic
         public IReadOnlyList<int> TargetInstanceIds { get; }
         public int HitCount => TargetInstanceIds.Count;
         public int BaseDamage => Action.BaseDamage;
+        public bool IsCancelled { get; private set; }
+        public void Cancel() => IsCancelled = true;
 
         public CombatOutcomeDraft(CombatActionSnapshot action, IReadOnlyList<int> targets = null)
         {
@@ -29,6 +74,7 @@ namespace GameLogic
 
         public int GetFinalDamage()
         {
+            if (IsCancelled) return 0;
             double value = BaseDamage;
             // 固定分组顺序，避免注册顺序引起浮点计算差异。
             var groups = new List<CombatModifierGroup>(_percents.Keys);
@@ -79,14 +125,4 @@ namespace GameLogic
         }
     }
 
-    public interface ICombatResolutionPort
-    {
-        CombatResolutionResult Resolve(CombatOutcomeDraft outcome);
-    }
-
-    /// <summary>可选的命中前目标查询，让密集火力等动态条件读取仍有效的目标数量。</summary>
-    public interface ICombatTargetQuery
-    {
-        IReadOnlyList<int> GetValidTargets(CombatActionSnapshot action);
-    }
 }

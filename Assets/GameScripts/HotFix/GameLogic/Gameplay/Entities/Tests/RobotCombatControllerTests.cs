@@ -14,6 +14,59 @@ namespace GameLogic.Tests
         private EnemyBattleControllerTests.Fixture _f;
         private Dictionary<int, GameObject> _views;
         private RobotCombatController _combat;
+        [Test]
+        public void BuffAttackIsFrozenAtLaunchAndTargetDefenseIsEvaluatedAtImpact()
+        {
+            Prepare(); var robot = AddRobot(); var target = _f.PlayerView.InstanceId;
+            var callbacks = new List<string>();
+            robot.Buffs.Add(new BuffModel(90, "custom"), robot.OwnerRef, 10f, behavior: new CombatHookBuff
+            {
+                Attack = attack => attack.AddPercent(CombatModifierGroup.GlobalDamage, 0.5f),
+                Hit = context => callbacks.Add("hit")
+            });
+            Assert.IsTrue(Contact(robot));
+            _f.Context.Registry.TryGet(target, out var entity);
+            entity.Buffs.Add(new BuffModel(91, "custom"), entity.OwnerRef, 10f, behavior: new CombatHookBuff
+            {
+                Hurt = context => { callbacks.Add("hurt"); context.Outcome.AddPercent(CombatModifierGroup.TargetCondition, -0.5f); }
+            });
+            _combat.AdvanceExistingBullets(0.6f);
+            Assert.AreEqual(85, ((EnemyEntity)entity).CurrentHp);
+            CollectionAssert.AreEqual(new[] { "hit", "hurt" }, callbacks);
+        }
+
+        [Test]
+        public void LethalHitNotifiesVictimBeforePoolReturnAndKillerAfterConfirmedDamage()
+        {
+            Prepare(); var robot = AddRobot(); var target = _f.PlayerView.InstanceId;
+            var callbacks = new List<string>();
+            robot.Buffs.Add(new BuffModel(90, "custom"), robot.OwnerRef, 10f, behavior: new CombatHookBuff
+            {
+                Attack = attack => attack.AddPercent(CombatModifierGroup.GlobalDamage, 9f),
+                Kill = context => { callbacks.Add("kill"); Assert.AreEqual(100, context.Result.AppliedDamage); }
+            });
+            _f.Context.Registry.TryGet(target, out var entity);
+            entity.Buffs.Add(new BuffModel(91, "custom"), entity.OwnerRef, 10f, behavior: new CombatHookBuff
+            {
+                Killed = context => { callbacks.Add("killed"); Assert.AreEqual(0, ((EnemyEntity)entity).CurrentHp); }
+            });
+            Assert.IsTrue(Contact(robot)); _combat.AdvanceExistingBullets(0.6f);
+            Assert.IsFalse(_f.Context.Registry.TryGet(target, out _));
+            CollectionAssert.AreEqual(new[] { "killed", "kill" }, callbacks);
+        }
+
+        private sealed class CombatHookBuff : BuffBehavior
+        {
+            internal Action<CombatOutcomeDraft> Attack;
+            internal Action<CombatDamageContext> Hit, Hurt, Kill, Killed;
+            internal Action<SkillCastContext> Cast;
+            public override void OnCast(BuffContainer c, BuffObj b, SkillCastContext x) => Cast?.Invoke(x);
+            public override void OnAttack(BuffContainer c, BuffObj b, CombatOutcomeDraft x) => Attack?.Invoke(x);
+            public override void OnHit(BuffContainer c, BuffObj b, CombatDamageContext x) => Hit?.Invoke(x);
+            public override void OnBeHurt(BuffContainer c, BuffObj b, CombatDamageContext x) => Hurt?.Invoke(x);
+            public override void OnKill(BuffContainer c, BuffObj b, CombatDamageContext x) => Kill?.Invoke(x);
+            public override void OnBeKilled(BuffContainer c, BuffObj b, CombatDamageContext x) => Killed?.Invoke(x);
+        }
         [SetUp]
         public void SetUp()
         {
@@ -23,13 +76,12 @@ namespace GameLogic.Tests
         [TearDown] public void TearDown() { _combat?.Dispose(); _f.Dispose(); }
 
         [Test]
-        public void ModifierAcquiredDuringFlightOnlyChangesTheNextBullet()
+        public void BuffAcquiredDuringFlightOnlyChangesTheNextBullet()
         {
             Prepare(); var robot = AddRobot();
             var target = _f.PlayerView.InstanceId;
             Assert.IsTrue(Contact(robot));
-            _f.Context.Combat.AddModifier(BattleSide.Player,
-                new PercentCombatModifier(CombatOutcomeTag.SingleDamage, CombatModifierGroup.GlobalDamage, 0.5f));
+            AddDamageBuff(BattleSide.Player, 0.5f);
             _combat.AdvanceExistingBullets(0.6f);
             _f.Context.Registry.TryGet(target, out var entity);
             Assert.AreEqual(80, ((EnemyEntity)entity).CurrentHp);
@@ -48,8 +100,7 @@ namespace GameLogic.Tests
         {
             Prepare(); var robot = AddRobot(); var second = AddRobot();
             var target = _f.PlayerView.InstanceId;
-            _f.Context.Combat.AddModifier(BattleSide.Player,
-                new PercentCombatModifier(CombatOutcomeTag.SingleDamage, CombatModifierGroup.GlobalDamage, 9f));
+            AddDamageBuff(BattleSide.Player, 9f);
             Assert.IsTrue(Contact(robot)); Assert.IsTrue(Contact(second));
             _combat.AdvanceExistingBullets(0.6f);
             Assert.IsFalse(_f.Context.Registry.TryGet(target, out _));
@@ -61,8 +112,7 @@ namespace GameLogic.Tests
         public void FrozenBattleKeepsBulletAndCombatTimeStillAndEndClearsRuntime()
         {
             Prepare(); var robot = AddRobot(); Assert.IsTrue(Contact(robot));
-            _f.Context.Combat.AddModifier(BattleSide.Player,
-                new PercentCombatModifier(CombatOutcomeTag.SingleDamage, CombatModifierGroup.GlobalDamage, 0.5f));
+            AddDamageBuff(BattleSide.Player, 0.5f);
             _f.Host.SetFrozen(true);
             var time = _f.Context.Combat.BattleTime;
             typeof(BattleShopSceneController).GetMethod("Update",
@@ -72,30 +122,36 @@ namespace GameLogic.Tests
             Assert.AreEqual(0f, _f.Root.GetComponentInChildren<RobotBulletView>().Elapsed);
             _f.Context.EndBattle();
             Assert.IsTrue(_f.Context.Combat.IsDisposed);
-            Assert.AreEqual(0, _f.Context.Combat.GetModifierCount(BattleSide.Player));
+            Assert.AreEqual(0, _f.Context.Battle.Player.Buffs.Count);
         }
 
         [Test]
-        public void ModifierTickFailureEndsBattleAndClearsRuntime()
+        public void BuffTickFailureEndsBattleAndClearsRuntime()
         {
             Prepare(); var robot = AddRobot(); Assert.IsTrue(Contact(robot));
             var context = _f.Context;
-            context.Combat.AddModifier(BattleSide.Player, new ThrowingTickModifier());
-            LogAssert.Expect(LogType.Exception, new System.Text.RegularExpressions.Regex("InvalidOperationException: expected modifier tick failure"));
-            Assert.DoesNotThrow(() => typeof(BattleShopSceneController).GetMethod("Update",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(_f.Host, null));
+            context.Battle.Player.Buffs.Add(new BuffModel(93, "custom", tickInterval: 0.0000001f),
+                context.Battle.Player.OwnerRef, 10f, behavior: new ThrowingTickBuff());
+            LogAssert.Expect(LogType.Exception, new System.Text.RegularExpressions.Regex("InvalidOperationException: expected buff tick failure"));
+            Assert.DoesNotThrow(() => _f.Host.GetType().GetMethod("AdvanceBattle",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(_f.Host, new object[] { 0.1f }));
             Assert.IsTrue(context.IsEnded);
             Assert.IsTrue(context.Combat.IsDisposed);
-            Assert.AreEqual(0, context.Combat.GetModifierCount(BattleSide.Player));
+            Assert.AreEqual(0, context.Battle.Player.Buffs.Count);
             Assert.IsFalse(_f.Host.IsCombatRunning);
         }
 
-        private sealed class ThrowingTickModifier : ICombatModifier
+        private void AddDamageBuff(BattleSide side, float percent)
         {
-            public ICombatModifier CaptureForAction() => new ThrowingTickModifier();
-            public void Modify(CombatOutcomeDraft outcome, CombatModifierContext context) { }
-            public void OnResolved(CombatResolutionResult result, CombatModifierContext context) { }
-            public void AdvanceTime(float deltaTime) => throw new InvalidOperationException("expected modifier tick failure");
+            var owner = side == BattleSide.Player ? _f.Context.Battle.Player : _f.Context.Battle.Opponent;
+            owner.Buffs.Add(new BuffModel(92, "custom"), owner.OwnerRef, 10f, behavior: new CombatHookBuff
+            { Attack = attack => attack.AddPercent(CombatModifierGroup.GlobalDamage, percent) });
+        }
+
+        private sealed class ThrowingTickBuff : BuffBehavior
+        {
+            public override void OnTick(BuffContainer container, BuffObj buff)
+                => throw new InvalidOperationException("expected buff tick failure");
         }
 
         [Test]
@@ -350,9 +406,9 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void FrostUsesIndependentLevelOneDamageThenSlowsAndRefreshesOnlyItsOwnSource()
+        public void FrostUsesRobotSkillLevelThenSlowsAndRefreshesOnlyItsOwnSource()
         {
-            Prepare(); var frost=AddRobot(level:3,configId:601); var second=AddRobot(configId:601);
+            Prepare(); var frost=AddRobot(configId:601); var second=AddRobot(configId:601);
             var target=_f.PlayerView.InstanceId;
             Assert.IsTrue(Contact(frost)); Assert.AreEqual(20,_f.Root.GetComponentInChildren<RobotBulletView>().Damage);
             Assert.IsTrue(frost.Skills.TryGet(1505,out var skill)); Assert.AreEqual(1,skill.Level);
@@ -370,13 +426,76 @@ namespace GameLogic.Tests
             enemy.Buffs.Advance(3f); Assert.AreEqual(0,enemy.Buffs.Count); Assert.AreEqual(enemy.BaseSpeed,enemy.EffectiveSpeed);
         }
 
+        [TestCase(0.6f, 6f)]
+        [TestCase(0f, 6f)]
+        [TestCase(0.6f, 0f)]
+        public void OnCastSlowParametersAreFrozenIntoTheLaunchedBullet(float slow, float duration)
+        {
+            Prepare(); var frost = AddRobot(configId: 601); var target = _f.PlayerView.InstanceId;
+            SkillCastContext captured = null;
+            frost.Buffs.Add(new BuffModel(94, "custom"), frost.OwnerRef, 10f, behavior: new CombatHookBuff
+            {
+                Cast = context => { captured = context; context.Parameters["slow"] = slow; context.Parameters["duration"] = duration; }
+            });
+            Assert.IsTrue(Contact(frost));
+            captured.Parameters["slow"] = 0.9f; captured.Parameters["duration"] = 9f;
+            _combat.AdvanceExistingBullets(0.6f);
+            _f.Context.Registry.TryGet(target, out var entity);
+            if (slow <= 0f || duration <= 0f) Assert.AreEqual(0, entity.Buffs.Count);
+            else
+            {
+                Assert.AreEqual(slow, entity.Buffs.Items[0].Get("slow"));
+                Assert.AreEqual(duration, entity.Buffs.Items[0].Remaining);
+            }
+        }
+
+        [TestCase(true)] [TestCase(false)]
+        public void FreezingInsideDeathHooksStillCompletesCommittedKillNotifications(bool victimFreezes)
+        {
+            Prepare(); var robot = AddRobot(); var target = _f.PlayerView.InstanceId;
+            var kills = 0; var notifications = 0;
+            robot.Buffs.Add(new BuffModel(94, "custom"), robot.OwnerRef, 10f, behavior: new CombatHookBuff
+            {
+                Attack = attack => attack.AddPercent(CombatModifierGroup.GlobalDamage, 9f),
+                Kill = context => { kills++; if (!victimFreezes) _f.Host.SetFrozen(true); }
+            });
+            _f.Context.Registry.TryGet(target, out var entity);
+            entity.Buffs.Add(new BuffModel(95, "custom"), entity.OwnerRef, 10f, behavior: new CombatHookBuff
+            { Killed = context => { if (victimFreezes) _f.Host.SetFrozen(true); } });
+            _f.Context.Combat.TargetResolved += context => { if (context.Result.IsKilled) notifications++; };
+            Assert.IsTrue(Contact(robot)); _combat.AdvanceExistingBullets(0.6f);
+            Assert.IsFalse(_f.Context.Registry.TryGet(target, out _));
+            Assert.AreEqual(1, kills);
+            Assert.AreEqual(1, notifications);
+        }
+
+        [TestCase(true)] [TestCase(false)]
+        public void RequestingBattleEndInsideDeathHooksStopsFollowingNotifications(bool victimEnds)
+        {
+            Prepare(); var robot = AddRobot(); var target = _f.PlayerView.InstanceId;
+            var kills = 0; var notifications = 0;
+            robot.Buffs.Add(new BuffModel(94, "custom"), robot.OwnerRef, 10f, behavior: new CombatHookBuff
+            {
+                Attack = attack => attack.AddPercent(CombatModifierGroup.GlobalDamage, 9f),
+                Kill = context => { kills++; if (!victimEnds) _f.Context.RequestEndBattle(); }
+            });
+            _f.Context.Registry.TryGet(target, out var entity);
+            entity.Buffs.Add(new BuffModel(95, "custom"), entity.OwnerRef, 10f, behavior: new CombatHookBuff
+            { Killed = context => { if (victimEnds) _f.Context.RequestEndBattle(); } });
+            _f.Context.Combat.TargetResolved += context => notifications++;
+            Assert.IsTrue(Contact(robot)); _combat.AdvanceExistingBullets(0.6f);
+            Assert.IsTrue(_f.Context.IsEndRequested);
+            Assert.IsFalse(_f.Context.Registry.TryGet(target, out _));
+            Assert.AreEqual(victimEnds ? 0 : 1, kills);
+            Assert.AreEqual(0, notifications);
+        }
+
         [Test]
         public void FrostLethalDamageDoesNotAttachBuffToRecycledEnemyOrNextSpawn()
         {
             Prepare(); var frost=AddRobot(configId:601); var target=_f.PlayerView.InstanceId;
             _f.Context.Registry.TryGet(target,out var entity); var oldBuffs=entity.Buffs;
-            _f.Context.Combat.AddModifier(BattleSide.Player,new PercentCombatModifier(
-                CombatOutcomeTag.SingleDamage,CombatModifierGroup.GlobalDamage,9f));
+            AddDamageBuff(BattleSide.Player, 9f);
             Assert.IsTrue(Contact(frost)); _combat.AdvanceExistingBullets(0.6f);
             Assert.IsFalse(_f.Context.Registry.TryGet(target,out _)); Assert.IsTrue(oldBuffs.IsDisposed); Assert.AreEqual(0,oldBuffs.Count);
             _f.Advance(0.5f); var living=0;

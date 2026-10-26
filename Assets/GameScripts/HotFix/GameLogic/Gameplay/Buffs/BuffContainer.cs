@@ -114,6 +114,30 @@ namespace GameLogic
                 }
             });
         }
+        internal void OnAttack(CombatOutcomeDraft attack, Func<bool> active)
+            => DispatchCombat((behavior, buff) => behavior.OnAttack(this, buff, attack), active);
+        internal void OnHit(CombatDamageContext context, Func<bool> active)
+            => DispatchCombat((behavior, buff) => behavior.OnHit(this, buff, context), active);
+        internal void OnBeHurt(CombatDamageContext context, Func<bool> active)
+            => DispatchCombat((behavior, buff) => behavior.OnBeHurt(this, buff, context), active);
+        internal void OnKill(CombatDamageContext context, Func<bool> active)
+            => DispatchCombat((behavior, buff) => behavior.OnKill(this, buff, context), active);
+        internal void OnBeKilled(CombatDamageContext context, Func<bool> active)
+            => DispatchCombat((behavior, buff) => behavior.OnBeKilled(this, buff, context), active);
+
+        private void DispatchCombat(Action<IBuffBehavior, BuffObj> callback, Func<bool> active)
+        {
+            if (IsDisposed) return;
+            Dispatch(() =>
+            {
+                foreach (var buff in _items.OrderByDescending(b => b.Model.Priority).ThenBy(b => b.Order).ToArray())
+                {
+                    if (IsDisposed || !active()) break;
+                    callback(buff.Behavior, buff);
+                }
+            });
+        }
+
         private void Mutate(Action action)
         {
             if (_dispatchDepth > 0 || _flushing) { _pending.Enqueue(action); return; }

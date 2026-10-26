@@ -378,8 +378,11 @@ namespace GameLogic
             finally { if (prepared != null) Destroy(prepared); }
         }
 
-        private void Update()
+        private void Update() => AdvanceBattle(Time.deltaTime);
+
+        internal void AdvanceBattle(float deltaTime)
         {
+            EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (_pendingTowerSettlement.HasValue) { EndBattle(); return; }
             if (Context != null && Context.IsEnded) { EndBattle(); return; }
             if (IsReady && !_frozen)
@@ -387,11 +390,11 @@ namespace GameLogic
                 var startedThisFrame = false;
                 _rewards?.Advance();
                 if (!IsReady) return;
-                AdvanceOpponentAi(Time.deltaTime);
+                AdvanceOpponentAi(deltaTime);
                 if (!IsReady) return;
                 if (!_running)
                 {
-                    _preparationRemaining = Mathf.Max(0f, _preparationRemaining - Time.deltaTime);
+                    _preparationRemaining = Mathf.Max(0f, _preparationRemaining - deltaTime);
                     if (_preparationRemaining > 0f) return;
                     _running = true;
                     if (!_bootstrap.LaunchBoth(_playerBoard, _opponentBoard))
@@ -407,7 +410,7 @@ namespace GameLogic
                 var frameContext = Context;
                 try
                 {
-                    frameContext.Battle.AdvanceBeforeEnemyMovement(Time.deltaTime);
+                    frameContext.Battle.AdvanceBeforeEnemyMovement(deltaTime);
                 }
                 catch (Exception e)
                 {
@@ -416,21 +419,23 @@ namespace GameLogic
                     return;
                 }
                 if (Context != frameContext || !IsCombatRunning) return;
-                _bootstrap.AdvanceBerserk(Time.deltaTime);
+                _bootstrap.AdvanceBerserk(deltaTime);
                 if (!IsCombatRunning) return;
-                _playerGlass?.Advance(Time.deltaTime);
-                _opponentGlass?.Advance(Time.deltaTime);
+                _playerGlass?.Advance(deltaTime);
+                _opponentGlass?.Advance(deltaTime);
                 if (!startedThisFrame && IsCombatRunning)
                 {
-                    try { _enemies?.Advance(Time.deltaTime); }
+                    try { _enemies?.Advance(deltaTime); }
                     catch (Exception e) { Debug.LogException(e, this); }
                 }
                 if (IsCombatRunning)
                 {
                     try
                     {
-                        _combat?.AdvanceExistingBullets(Time.deltaTime);
-                        if (IsCombatRunning) _combat?.AdvanceAttacks(Time.deltaTime);
+                        _combat?.AdvanceExistingBullets(deltaTime);
+                        if (IsCombatRunning) _combat?.AdvanceAttacks(deltaTime);
+                        if (IsCombatRunning && _enemies != null && _enemies.IsAllEnemiesCleared)
+                            _towers?.CompleteWaves(frameContext.BattleId);
                     }
                     catch (Exception e) { Debug.LogException(e, this); EndBattle(); }
                 }

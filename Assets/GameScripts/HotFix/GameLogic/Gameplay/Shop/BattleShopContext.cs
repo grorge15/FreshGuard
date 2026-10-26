@@ -37,8 +37,8 @@ namespace GameLogic
         public bool IsBusy => ActiveInteraction != null;
         public ShopRules Rules { get; }
         public int RefreshPrice => Rules.RefreshPrice;
-        public BattleEntityRegistry Registry { get; } = new BattleEntityRegistry();
-        public CombatRuntime Combat { get; }
+        public BattleEntityRegistry Registry => Battle.Registry;
+        public CombatRuntime Combat => Battle.Combat;
         public BattleRuntime Battle { get; }
         public ShopRewardService Rewards { get; }
 
@@ -65,8 +65,8 @@ namespace GameLogic
             };
             Rewards = new ShopRewardService(this);
             foreach (var state in _states) ApplyBatch(state, GenerateBatch(state, true));
-            Combat = new CombatRuntime(BattleId);
-            Battle = new BattleRuntime(BattleId, Registry, Combat);
+            Battle = new BattleRuntime(BattleId);
+            Battle.IsBattleValid = () => !IsEnded && !_endRequested;
         }
 
         public BattleShopState GetState(BattleSide side)
@@ -254,7 +254,6 @@ namespace GameLogic
                     try { action(); }
                     catch (Exception exception) { if (failure == null) failure = exception; }
                 };
-                clean(Battle.Dispose);
                 clean(() => RestoreInteraction());
                 clean(CompleteInteraction);
                 foreach (var pair in _boards)
@@ -266,7 +265,7 @@ namespace GameLogic
                     state.StorageInstanceId = null;
                     foreach (var slot in state.Slots) { slot.InstanceId = null; slot.Offer = null; }
                 }
-                clean(Registry.Dispose);
+                clean(Battle.Dispose);
                 _owned.Clear();
                 _rewardKeys.Clear();
                 _offerDefinitions.Clear();

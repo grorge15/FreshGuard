@@ -1,9 +1,11 @@
 using System;
+using TEngine;
 
 namespace GameLogic
 {
     public sealed class BattleRuntime : IDisposable
     {
+        private readonly bool _ownsRegistry;
         public long BattleId { get; }
         public BattleEntityRegistry Registry { get; }
         public CombatRuntime Combat { get; }
@@ -15,12 +17,18 @@ namespace GameLogic
         public BattlefieldRuntime Player { get; }
         public BattlefieldRuntime Opponent { get; }
         public bool IsDisposed { get; private set; }
+        // 终局请求立即失效；暂停只影响 CanCastNow，不影响已提交伤害的通知。
+        public Func<bool> IsBattleValid { get; set; } = () => true;
         public Func<bool> CanCastNow { get; set; } = () => true;
+        public BattleRuntime(long battleId)
+            : this(battleId, new BattleEntityRegistry(), new CombatRuntime(battleId))
+        { _ownsRegistry = true; }
         public BattleRuntime(long battleId, BattleEntityRegistry registry, CombatRuntime combat)
         {
             BattleId = battleId; Registry = registry ?? throw new ArgumentNullException(nameof(registry));
             Combat = combat ?? throw new ArgumentNullException(nameof(combat));
             if (combat.BattleId != battleId) throw new ArgumentException("结算运行时归属错误。");
+            Combat.Bind(this);
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
             Player = new BattlefieldRuntime(this, BattleSide.Player); Opponent = new BattlefieldRuntime(this, BattleSide.Opponent);
@@ -37,7 +45,7 @@ namespace GameLogic
             if (IsDisposed) return;
             entity.BindSkillOwner(BattleId);
             if (entity is RobotEntity robot && robot.SkillId > 0 && Catalog.TryGet(robot.SkillId, out var model))
-                Grant(entity, model);
+                Grant(entity, model).SetLevel(Math.Min(robot.Level, model.MaxLevel));
         }
         public SkillObj Grant(ISkillOwner owner, SkillModel model)
         {
@@ -100,7 +108,51 @@ namespace GameLogic
             clean(Timelines.Dispose); clean(Bullets.Dispose); clean(Player.Clear); clean(Opponent.Clear); clean(Combat.Dispose);
             foreach (var id in Registry.CopyIds())
                 if (Registry.TryGet(id, out var entity)) { entity.Skills.Clear(); clean(entity.Buffs.Dispose); }
+            if (_ownsRegistry) clean(Registry.Dispose);
             if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         }
+    }
+}
+
+namespace GameLogic
+{
+    /// <summary>战场不是实体：没有伪造主角身份，也不承担网格占用。</summary>
+    public sealed class BattlefieldRuntime : ISkillOwner
+    {
+        private readonly BattleRuntime _battle;
+        public SkillOwnerRef OwnerRef { get; }
+        public long BattleId => OwnerRef.BattleId;
+        public BattleSide Side => OwnerRef.Side;
+        public SkillContainer Skills { get; } = new SkillContainer();
+        public BuffContainer Buffs { get; } = new BuffContainer();
+        public bool CanCast => !_battle.IsDisposed;
+        internal BattlefieldRuntime(BattleRuntime battle, BattleSide side)
+        { _battle = battle; OwnerRef = SkillOwnerRef.Battlefield(battle.BattleId, side); }
+        internal void Clear() { Skills.Clear(); Buffs.Dispose(); }
+    }
+}
+
+
+
+namespace GameLogic
+{
+    /// <summary>按对局标识隔离的展示数据；时间唯一来自战斗时间轴。</summary>
+    public readonly struct BattleProgressSnapshot
+    {
+        public long BattleId { get; }
+        public int CurrentWave { get; }
+        public double ElapsedSeconds { get; }
+
+        public BattleProgressSnapshot(long battleId, int currentWave, double elapsedSeconds)
+        {
+            BattleId = battleId;
+            CurrentWave = currentWave;
+            ElapsedSeconds = elapsedSeconds;
+        }
+    }
+
+    public static class BattleProgressEvents
+    {
+        public static readonly int Changed = RuntimeId.ToRuntimeId("BattleProgressEvents.Changed");
     }
 }

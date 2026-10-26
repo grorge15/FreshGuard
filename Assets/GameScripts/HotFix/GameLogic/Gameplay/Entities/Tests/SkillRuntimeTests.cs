@@ -24,6 +24,36 @@ namespace GameLogic.Tests
         [TearDown] public void TearDown() { _battle.Dispose(); _registry.Dispose(); }
 
         [Test]
+        public void RobotSkillLevelFollowsCreationUpgradeAndConfiguredMaximum()
+        {
+            AddSkill(7, "unused");
+            var robot = _registry.CreateRobot(1, BattleSide.Player, 1, 7, level: 2);
+            Assert.IsTrue(robot.Skills.TryGet(7, out var skill));
+            Assert.AreEqual(2, skill.Level, "初始星级应同步到技能等级");
+            Assert.IsTrue(robot.TryUpgrade());
+            Assert.AreEqual(2, skill.Level, "技能等级不能超过自身配置上限");
+        }
+
+        [Test]
+        public void UpgradingRobotChangesNextCastLevelWithoutChangingAcceptedCast()
+        {
+            _battle.Timelines.RegisterAction("level", new CallbackAction((cast, node) => _events.Add(cast.Level.ToString())));
+            _battle.Timelines.Register(new TimelineModel("later", 1f, new[] { new TimelineNode(1f, "level") }));
+            AddSkill(7, "later");
+            var robot = _registry.CreateRobot(1, BattleSide.Player, 1, 7);
+            robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
+            Assert.IsTrue(Cast(robot, 7).Accepted);
+            Assert.IsTrue(robot.TryUpgrade());
+            robot.Skills.TryGet(7, out var skill);
+            Assert.AreEqual(2, skill.Level);
+            _battle.Advance(1f);
+            CollectionAssert.AreEqual(new[] { "1" }, _events);
+            Assert.IsTrue(Cast(robot, 7).Accepted);
+            _battle.Advance(1f);
+            CollectionAssert.AreEqual(new[] { "1", "2" }, _events);
+        }
+
+        [Test]
         public void BattlefieldDirectActionNeedsNoEntityAndRejectsCrossSideTargets()
         {
             var buff = new BuffModel(9, "noop"); _catalog.Add(buff);

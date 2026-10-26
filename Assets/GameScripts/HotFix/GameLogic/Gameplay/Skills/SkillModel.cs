@@ -26,11 +26,22 @@ namespace GameLogic
     }
     public sealed class SkillLevelModel
     {
+        private readonly Func<IReadOnlyDictionary<string, float>, IReadOnlyList<CombatBuffApplication>> _hitBuffFactory;
         public int SkillId { get; }
         public int Level { get; }
         public IReadOnlyDictionary<string, float> Parameters { get; }
-        public SkillLevelModel(int skillId, int level, IReadOnlyDictionary<string, float> parameters)
-        { SkillId = skillId; Level = level; Parameters = BuffObj.Copy(parameters); }
+        public IReadOnlyList<CombatBuffApplication> HitBuffs { get; }
+        public SkillLevelModel(int skillId, int level, IReadOnlyDictionary<string, float> parameters,
+            IReadOnlyList<CombatBuffApplication> hitBuffs = null,
+            Func<IReadOnlyDictionary<string, float>, IReadOnlyList<CombatBuffApplication>> hitBuffFactory = null)
+        {
+            SkillId = skillId; Level = level; Parameters = BuffObj.Copy(parameters);
+            HitBuffs = new List<CombatBuffApplication>(hitBuffs ?? Array.Empty<CombatBuffApplication>()).AsReadOnly();
+            _hitBuffFactory = hitBuffFactory;
+        }
+        // 配置适配层负责参数绑定；施法钩子完成后才物化为不可变的命中数据。
+        internal IReadOnlyList<CombatBuffApplication> CaptureHitBuffs(IReadOnlyDictionary<string, float> parameters)
+            => _hitBuffFactory == null ? HitBuffs : new List<CombatBuffApplication>(_hitBuffFactory(parameters)).AsReadOnly();
     }
     public sealed class SkillObj
     {

@@ -3,6 +3,7 @@ using System;
 namespace GameLogic
 {
     public enum BattleSettlementResult { Victory, Defeat }
+    public enum BattleEndReason { TowerDestroyed, WavesCleared }
 
     public readonly struct BattleSettlementSnapshot
     {
@@ -13,9 +14,11 @@ namespace GameLogic
         public BattleSettlementResult Result { get; }
         public int PlayerTowerHp { get; }
         public int OpponentTowerHp { get; }
+        public BattleEndReason Reason { get; }
 
         internal BattleSettlementSnapshot(long battleId, TowerHealthSnapshot death, int playerTowerHp, int opponentTowerHp)
         {
+            Reason = BattleEndReason.TowerDestroyed;
             BattleId = battleId;
             TowerInstanceId = death.InstanceId;
             DefeatedSide = death.Side;
@@ -23,6 +26,13 @@ namespace GameLogic
             PlayerTowerHp = playerTowerHp;
             OpponentTowerHp = opponentTowerHp;
             Result = opponentTowerHp == 0 ? BattleSettlementResult.Victory : BattleSettlementResult.Defeat;
+        }
+
+        internal BattleSettlementSnapshot(long battleId, int playerTowerHp, int opponentTowerHp)
+        {
+            BattleId = battleId; PlayerTowerHp = playerTowerHp; OpponentTowerHp = opponentTowerHp;
+            Result = BattleSettlementResult.Victory; Reason = BattleEndReason.WavesCleared;
+            TowerInstanceId = 0; TowerHp = 0; DefeatedSide = BattleSide.Opponent;
         }
     }
 
@@ -77,6 +87,16 @@ namespace GameLogic
         {
             if (_disposed || IsEnded || battleId != _battleId) return false;
             return _registry.ApplyTowerDamageBatch(playerDamage, opponentDamage);
+        }
+
+        public bool CompleteWaves(long battleId)
+        {
+            if (_disposed || IsEnded || battleId != _battleId || !PlayerTower.IsAlive || !OpponentTower.IsAlive) return false;
+            IsEnded = true;
+            _registry.StopTowerDamage();
+            TowerNotifications.Publish(SettlementRequested,
+                new BattleSettlementSnapshot(_battleId, PlayerTower.CurrentHp, OpponentTower.CurrentHp));
+            return true;
         }
 
         private void OnTowerDied(TowerHealthSnapshot death)

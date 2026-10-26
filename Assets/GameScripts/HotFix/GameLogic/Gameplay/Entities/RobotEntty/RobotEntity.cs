@@ -82,6 +82,7 @@ namespace GameLogic
             if (IsRemoved || Level >= MaxLevel) return false;
             ActionVersion++;
             Level++;
+            if (Skills.TryGet(SkillId, out var skill)) skill.SetLevel(Math.Min(Level, skill.Model.MaxLevel));
             TriggerCooldownRemaining = 0f;
             return true;
         }
