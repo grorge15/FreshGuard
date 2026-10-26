@@ -265,7 +265,7 @@ public partial class Tables
     /// 波次方案（演示20波，数值可由策划调整）
     /// </summary>
     private wave.TbWavePlan m_TbWavePlan;
-    public wave.TbWavePlan TbWavePlan
+    public wave.TbWavePlan TbWavePlan 
     {
         get
         {
@@ -280,6 +280,69 @@ public partial class Tables
         {
             m_TbWavePlan = value;
             m_TbWavePlan.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// Skill
+    /// </summary>
+    private skill.TbSkill m_TbSkill;
+    public skill.TbSkill TbSkill 
+    {
+        get
+        {
+            if (m_TbSkill == null)
+            {
+                m_TbSkill = new skill.TbSkill(defaultLoader("skill_tbskill"));
+                m_TbSkill.ResolveRef(this);
+            }
+            return m_TbSkill;
+        }
+        set
+        {
+            m_TbSkill = value;
+            m_TbSkill.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// SkillLevel
+    /// </summary>
+    private skill.TbSkillLevel m_TbSkillLevel;
+    public skill.TbSkillLevel TbSkillLevel 
+    {
+        get
+        {
+            if (m_TbSkillLevel == null)
+            {
+                m_TbSkillLevel = new skill.TbSkillLevel(defaultLoader("skill_tbskilllevel"));
+                m_TbSkillLevel.ResolveRef(this);
+            }
+            return m_TbSkillLevel;
+        }
+        set
+        {
+            m_TbSkillLevel = value;
+            m_TbSkillLevel.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// Buff
+    /// </summary>
+    private buff.TbBuff m_TbBuff;
+    public buff.TbBuff TbBuff 
+    {
+        get
+        {
+            if (m_TbBuff == null)
+            {
+                m_TbBuff = new buff.TbBuff(defaultLoader("buff_tbbuff"));
+                m_TbBuff.ResolveRef(this);
+            }
+            return m_TbBuff;
+        }
+        set
+        {
+            m_TbBuff = value;
+            m_TbBuff.ResolveRef(this);
         }
     }
 
