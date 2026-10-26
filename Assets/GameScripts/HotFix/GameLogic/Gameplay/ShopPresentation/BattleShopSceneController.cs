@@ -51,7 +51,7 @@ namespace GameLogic
         public bool IsCombatRunning => IsReady && _running && !_frozen;
         /// <summary>
         /// 真正进入可见战斗态：双方能源球已发射、首批敌人已生成，并且物理系统已经完成至少一次反弹。
-        /// 加载遮罩只有在此条件满足后才允许关闭。
+        /// 开战后的运行检查；匹配界面以IsReady为准，不等待发球和反弹。
         /// </summary>
         public bool IsCombatOperational
         {
@@ -128,7 +128,7 @@ namespace GameLogic
                         if (!GameModule.Resource.CheckLocationValid(sprite))
                             throw new InvalidOperationException("玻璃图片资源未收集：" + sprite);
                 }
-                foreach (var candidates in new[] { _playerCandidates, _opponentCandidates })
+                foreach (var candidates in new IReadOnlyList<int>[] { _matchEntry?.Candidates ?? _playerCandidates, _matchEntry?.Candidates ?? _opponentCandidates })
                     foreach (var id in candidates)
                     {
                         var config = tables.TbRobot.Get(id);
@@ -143,8 +143,8 @@ namespace GameLogic
                 preparation.SetActive(false);
                 _preparedRoot = preparation.transform;
                 Context = new BattleShopContext(_rules, _playerCandidates, _opponentCandidates, tables.TbRobot.Get,
-                    skillDefinitions: SkillDefinitionRegistry.FromTables(tables));
-                BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
+                    skillDefinitions: SkillDefinitionRegistry.FromTables(tables), entry: _matchEntry);
+                if (_matchReleased) BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
                 _rewards = new BattleRewardAdapter(Context);
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
                 GameEvent.AddEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
@@ -451,8 +451,10 @@ namespace GameLogic
         {
             if (_pendingTowerSettlement.HasValue) { EndBattle(); return; }
             if (Context != null && Context.IsEnded) { EndBattle(); return; }
-            if (IsReady && !_frozen)
+            if (IsReady && !_frozen && _matchReleased)
             {
+                CheckCombatOperational(Time.deltaTime);
+                if (_frozen) return;
                 var startedThisFrame = false;
                 _rewards?.Advance();
                 if (!IsReady) return;
@@ -591,6 +593,9 @@ namespace GameLogic
 
         private void Cleanup()
         {
+            _matchEntry = null;
+            _matchReleased = true;
+            _checkingOperational = false;
             DisposeOpponentAi();
             CombatWindow = null;
             ShopWindow = null;

@@ -18,6 +18,8 @@ namespace GameLogic
         private Button _energyPlusButton;
         private Button _coinsPlusButton;
         private bool _starting;
+        private string _statusMessage;
+        private float _statusUntil;
 
         public static MainMenuPlayerState State => GameApp.PlayerState;
 
@@ -44,19 +46,15 @@ namespace GameLogic
 
         protected override void OnUpdate()
         {
+            var previousEnergy = State?.Energy;
             State?.Refresh(DateTimeOffset.UtcNow);
+            if (previousEnergy != State?.Energy) GameApp.SavePlayerStateAsync().Forget();
             RefreshView();
         }
 
         private void OnStartClicked()
         {
             if (_starting || State == null) return;
-            State.Refresh(DateTimeOffset.UtcNow);
-            if (!State.TrySpendEnergy(MainMenuPlayerState.DefaultEnergyCost))
-            {
-                SetStatus("当前体力不足");
-                return;
-            }
             _starting = true;
             if (_startButton != null) _startButton.interactable = false;
             GameApp.BeginBattleFromMainMenu(this).Forget();
@@ -65,12 +63,14 @@ namespace GameLogic
         private void OnEnergyPlusClicked()
         {
             State?.AddEnergy(5);
+            GameApp.SavePlayerStateAsync().Forget();
             RefreshView();
         }
 
         private void OnCoinsPlusClicked()
         {
             State?.AddCoins(100);
+            GameApp.SavePlayerStateAsync().Forget();
             RefreshView();
         }
 
@@ -90,6 +90,11 @@ namespace GameLogic
             if (_coins != null) _coins.text = State.Coins.ToString();
             if (_energyCountdown != null)
             {
+                if (!string.IsNullOrEmpty(_statusMessage) && Time.unscaledTime < _statusUntil)
+                {
+                    _energyCountdown.text = _statusMessage;
+                    return;
+                }
                 var remaining = State.Energy >= State.EnergyCapacity
                     ? TimeSpan.Zero
                     : State.NextEnergyRecoveryUtc - DateTimeOffset.UtcNow;
@@ -102,8 +107,12 @@ namespace GameLogic
 
         private void SetStatus(string message)
         {
+            _statusMessage = message;
+            _statusUntil = Time.unscaledTime + 3f;
             if (_energyCountdown != null) _energyCountdown.text = message;
         }
+
+        public void ShowStatus(string message) { SetStatus(message); }
 
         private Text FindText(params string[] names)
         {
