@@ -69,7 +69,7 @@ namespace GameLogic.Tests
             {
                 var shape = new PlaceableDefinition("Square", 2, 2);
                 fixture.Controller.BeginDrag(shape, new BoardCoordinate(0, 0));
-                fixture.UpdateAt(fixture.Player, 9, 6);
+                fixture.UpdateCenteredAt(fixture.Player, 9, 6, new Vector2(0.5f, 0.5f));
                 foreach (var cell in new[] { new BoardCoordinate(9, 6), new BoardCoordinate(10, 6), new BoardCoordinate(9, 7), new BoardCoordinate(10, 7) })
                 {
                     var color = fixture.Player.Slot(cell.Column, cell.Row).color;
@@ -79,7 +79,7 @@ namespace GameLogic.Tests
                 Assert.IsFalse(fixture.Controller.TryCommit(out target));
                 Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(9, 6)));
                 fixture.Controller.BeginDrag(shape, new BoardCoordinate(0, 0));
-                fixture.UpdateAt(fixture.Player, 8, 6);
+                fixture.UpdateCenteredAt(fixture.Player, 8, 6, new Vector2(0.5f, 0.5f));
                 Assert.IsTrue(fixture.Controller.TryCommit(out target));
                 Assert.IsTrue(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(9, 7)));
                 Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(10, 7)));
@@ -243,13 +243,21 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void GrabbedCellOffsetsAnchorAndCommitCannotRepeat()
+        public void FootprintCenterIgnoresGrabbedCellAndCommitCannotRepeat()
         {
             using (var fixture = new DragFixture())
             {
                 Assert.IsFalse(fixture.Controller.BeginDrag(LShape(), new BoardCoordinate(1, 1)));
+                foreach (var grabbed in LShape().Cells)
+                {
+                    Assert.IsTrue(fixture.Controller.BeginDrag(LShape(), grabbed));
+                    fixture.UpdateCenteredAt(fixture.Player, 2, 2, new Vector2(0.5f, 0.5f));
+                    BoardPlacementTarget preview;
+                    Assert.IsTrue(fixture.Controller.TryGetDragTarget(out preview));
+                    Assert.AreEqual(new BoardCoordinate(2, 2), preview.Anchor);
+                }
                 Assert.IsTrue(fixture.Controller.BeginDrag(LShape(), new BoardCoordinate(0, 1)));
-                fixture.UpdateAt(fixture.Player, 2, 3);
+                fixture.UpdateCenteredAt(fixture.Player, 2, 2, new Vector2(0.5f, 0.5f));
                 BoardPlacementTarget target;
                 Assert.IsTrue(fixture.Controller.TryCommit(out target));
                 Assert.AreEqual(new BoardCoordinate(2, 2), target.Anchor);
@@ -258,6 +266,72 @@ namespace GameLogic.Tests
                 Assert.That(target.AnchorWorldPosition.y, Is.EqualTo(-2.7f).Within(0.0001f));
                 Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(3, 3)));
                 Assert.IsFalse(fixture.Controller.TryCommit(out target));
+            }
+        }
+
+        [TestCase(4, 1)]
+        [TestCase(1, 4)]
+        [TestCase(3, 1)]
+        [TestCase(1, 3)]
+        [TestCase(2, 2)]
+        [TestCase(3, 2)]
+        public void CenteredAnchorTracksContinuousPointerAndTieBreaksUp(int width, int height)
+        {
+            var center = new Vector2((width - 1) * 0.5f, (height - 1) * 0.5f);
+            foreach (var size in new[] { 0.2f, 0.35f, 0.7f })
+            foreach (var columns in new[] { 10, 11 })
+            foreach (var rows in new[] { 8, 9 })
+            {
+                var point = MapGridMath.GetLocalPosition(new BoardCoordinate(2, 2), columns, rows, size) + (Vector3)(center * size);
+                foreach (var offset in new[] { -0.49f, 0f, 0.49f })
+                    Assert.AreEqual(new BoardCoordinate(2, 2), MapGridMath.GetCenteredAnchor(
+                        point + new Vector3(offset * size, offset * size), columns, rows, size, center));
+            }
+            // Binary-exact geometry isolates the specified tie rule from screen projection rounding.
+            var tie = MapGridMath.GetLocalPosition(new BoardCoordinate(2, 2), 10, 8, 1f) +
+                (Vector3)center + new Vector3(0.5f, 0.5f);
+            Assert.AreEqual(new BoardCoordinate(3, 3), MapGridMath.GetCenteredAnchor(tie, 10, 8, 1f, center));
+            Assert.AreEqual(new BoardCoordinate(-1, -1), MapGridMath.GetCenteredAnchor(
+                MapGridMath.GetLocalPosition(new BoardCoordinate(-1, -1), 10, 8, 1f) + (Vector3)center,
+                10, 8, 1f, center), "不能夹紧越界锚点");
+        }
+
+        [Test]
+        public void SparseOffsetFootprintUsesActualBoundsUnderBoardTransform()
+        {
+            using (var fixture = new DragFixture())
+            {
+                fixture.Player.Root.transform.localScale = new Vector3(0.6f, 0.6f, 1f);
+                fixture.Player.Root.transform.localRotation = Quaternion.Euler(0f, 0f, 20f);
+                var shape = new PlaceableDefinition("OffsetT", new[]
+                {
+                    new BoardCoordinate(1, 2), new BoardCoordinate(2, 2),
+                    new BoardCoordinate(3, 2), new BoardCoordinate(2, 1)
+                });
+                Assert.IsTrue(fixture.Controller.BeginDrag(shape, new BoardCoordinate(3, 2)));
+                fixture.UpdateCenteredAt(fixture.Player, 2, 2, new Vector2(2f, 1.5f));
+                BoardPlacementTarget target;
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(new BoardCoordinate(2, 2), target.Anchor);
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(3, 3)));
+                Assert.IsTrue(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(4, 3)));
+            }
+        }
+
+        [Test]
+        public void MergeOccupantUsesPointerCellRatherThanCenteredAnchor()
+        {
+            using (var fixture = new DragFixture())
+            {
+                Assert.IsTrue(fixture.Player.View.Model.TryPlace(new BoardCoordinate(4, 3), new PlaceableDefinition("123", 1, 1)));
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Long", 3, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateAt(fixture.Player, 4, 3);
+                BoardPlacementTarget target;
+                int occupant;
+                Assert.IsTrue(fixture.Controller.TryGetDragTarget(out target));
+                Assert.AreEqual(new BoardCoordinate(3, 3), target.Anchor);
+                Assert.IsTrue(fixture.Controller.TryGetDragOccupant(out occupant));
+                Assert.AreEqual(123, occupant);
             }
         }
 
@@ -490,6 +564,11 @@ namespace GameLogic.Tests
             public void UpdateAt(BoardFixture board, int column, int row)
             {
                 Controller.UpdateDrag(Camera.WorldToScreenPoint(board.View.GetCellWorldPosition(new BoardCoordinate(column, row))));
+            }
+            public void UpdateCenteredAt(BoardFixture board, int column, int row, Vector2 center)
+            {
+                var local = board.View.GetCellLocalPosition(new BoardCoordinate(column, row)) + (Vector3)(center * board.View.CellSize);
+                Controller.UpdateDrag(Camera.WorldToScreenPoint(board.Root.transform.TransformPoint(local)));
             }
             public void Dispose()
             {

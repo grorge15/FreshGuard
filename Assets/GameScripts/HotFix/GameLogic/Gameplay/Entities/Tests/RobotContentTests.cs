@@ -128,7 +128,8 @@ namespace GameLogic.Tests
             var view = prefab.GetComponent("RobotView");
             Assert.IsNotNull(view);
             Assert.AreEqual(configId, new SerializedObject(view).FindProperty("_configId").intValue);
-            var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true);
+            var renderers = prefab.GetComponentsInChildren<SpriteRenderer>(true)
+                .Where(r => r.transform.parent == prefab.transform && r.name.StartsWith("Cell_", StringComparison.Ordinal)).ToArray();
             Assert.AreEqual(cells.Length, renderers.Length);
             var unique = new System.Collections.Generic.HashSet<BoardCoordinate>();
             for (var i = 0; i < cells.Length; i++)
@@ -143,20 +144,44 @@ namespace GameLogic.Tests
                 Assert.AreEqual(Color.white, sprite.color);
                 Assert.Greater(sprite.sortingOrder, -10);
                 Assert.AreEqual(0.329f, sprite.sprite.bounds.size.x * cell.localScale.x, 0.0001f);
-                var collider = cell.GetComponent<BoxCollider2D>();
-                Assert.IsNotNull(collider, "每个机器人实体格都需要静态碰撞体。");
-                Assert.IsTrue(collider.enabled);
-                Assert.IsFalse(collider.isTrigger);
-                Assert.That(Vector2.Distance(collider.size, sprite.sprite.bounds.size), Is.LessThan(0.0001f));
-                Assert.That(Vector2.Distance(collider.offset, sprite.sprite.bounds.center), Is.LessThan(0.0001f));
+                Assert.IsNull(cell.GetComponent<Collider2D>(), "格子只负责显示，不再保留独立碰撞体。");
             }
             Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Sprite>(
                 "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"));
-            Assert.AreEqual(cells.Length, prefab.GetComponentsInChildren<Collider2D>(true).Length,
-                "仅实际占格参与碰撞，不能用根节点包围盒填满L/T空白区。");
+            var body = prefab.GetComponent<PolygonCollider2D>();
+            Assert.IsNotNull(body, "机器人需要根据占格生成整体实体碰撞轮廓。");
+            Assert.IsTrue(body.enabled);
+            Assert.IsFalse(body.isTrigger);
+            Assert.GreaterOrEqual(body.pathCount, 1);
+            CollectionAssert.AreEqual(new Collider2D[] { body }, prefab.GetComponentsInChildren<Collider2D>(true),
+                "机器人只能保留根节点的整体碰撞体。");
+            Assert.IsNull(prefab.transform.Find("DragHitArea"), "整体轮廓也用于拖拽命中，不需要重复区域。");
             Assert.IsNotNull(prefab.GetComponent<RobotBoardPointerInput>());
-            Assert.IsNotNull(prefab.transform.Find("LevelLabel"));
+            Assert.IsNull(prefab.transform.Find("LevelLabel"), "机器人等级只使用颜色表示，不再显示等级文字。");
+            Assert.IsEmpty(prefab.GetComponentsInChildren<TextMesh>(true));
             Assert.IsEmpty(prefab.GetComponentsInChildren<Rigidbody2D>(true));
+            var instance = UnityEngine.Object.Instantiate(prefab, new Vector3(100, 100, 0), Quaternion.identity);
+            try
+            {
+                Physics2D.SyncTransforms();
+                var polygon = instance.GetComponent<PolygonCollider2D>();
+                // 格子中心、相邻格接缝均属于实体；形状内的空白格必须保持畅通。
+                for (var x = 0; x <= cells.Max(c => c[0]); x++)
+                    for (var y = 0; y <= cells.Max(c => c[1]); y++)
+                    {
+                        var occupied = cells.Any(c => c[0] == x && c[1] == y);
+                        var point = instance.transform.TransformPoint(new Vector3(x * 0.35f, y * 0.35f, 0));
+                        Assert.AreEqual(occupied, polygon.OverlapPoint(point), "整体轮廓必须保留配置凹口。");
+                        if (!occupied) continue;
+                        foreach (var direction in new[] { Vector2Int.right, Vector2Int.up })
+                        {
+                            if (!cells.Any(c => c[0] == x + direction.x && c[1] == y + direction.y)) continue;
+                            var seam = new Vector3((x + direction.x * 0.5f) * 0.35f, (y + direction.y * 0.5f) * 0.35f, 0);
+                            Assert.IsTrue(polygon.OverlapPoint(instance.transform.TransformPoint(seam)), "相邻格接缝不能有洞。");
+                        }
+                    }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(instance); }
         }
     }
 }

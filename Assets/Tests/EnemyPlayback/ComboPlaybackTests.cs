@@ -41,15 +41,47 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
+        public IEnumerator TinyBallCannotEnterSeamsOfAllEightRobots()
+        {
+            typeof(PhysicalCollisionBall).GetField("radius", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(_ball, 0.003f);
+            _ball.GetComponent<CircleCollider2D>().radius = 0.003f; // 直径小于原来的 0.021 格间隙。
+            var contacts = 0;
+            _ball.RobotContactDetected += (ball, id) => contacts++;
+            foreach (var name in new[] { "Cannon", "Scatter", "Piercing", "RapidFire", "Impact", "Frost", "Tractor", "Poison" })
+            {
+                var view = Robot(name);
+                Physics2D.SyncTransforms();
+                var cells = Cells(view);
+                var body = view.GetComponent<PolygonCollider2D>();
+                var first = cells[0];
+                var second = cells.Skip(1).First(c => Vector2.Distance(c.position, first.position) < 0.36f);
+                var seam = (Vector2)((first.position + second.position) * 0.5f);
+                var horizontal = Mathf.Abs(first.position.x - second.position.x) > 0.1f;
+                var start = horizontal ? new Vector2(seam.x, body.bounds.max.y + 0.6f) :
+                    new Vector2(body.bounds.max.x + 0.6f, seam.y);
+                var previousContacts = contacts;
+                _ball.LaunchAt(start, horizontal ? 270f : 180f);
+                for (var step = 0; step < 30 && _ball.BounceCount == 0; step++) Tick();
+                Assert.Greater(_ball.BounceCount, 0, name + " 的格间接缝必须阻挡小球");
+                Assert.AreEqual(1, _ball.ComboCount);
+                Assert.AreEqual(previousContacts + 1, contacts, "同一次整体轮廓接触不能重复发起攻击。");
+                Assert.IsFalse(body.OverlapPoint(_ball.GetComponent<Rigidbody2D>().position));
+                Assert.Greater(horizontal ? _ball.CurrentDirection.y : _ball.CurrentDirection.x, 0f);
+                _ball.Stop();
+                UnityEngine.Object.DestroyImmediate(view.gameObject);
+            }
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator ActualRobotCellsCountOneEpisodeAndSeparationAllowsAnother()
         {
             foreach (var shape in new[] { "I", "L", "T" })
             {
                 var view = Robot(shape);
-                var boxes = view.GetComponentsInChildren<BoxCollider2D>();
                 Physics2D.SyncTransforms();
-                var top = boxes.OrderByDescending(c => c.bounds.max.y).First();
-                var start = (Vector2)top.bounds.center + Vector2.up;
+                var top = Cells(view).OrderByDescending(c => c.position.y).First();
+                var start = (Vector2)top.position + Vector2.up;
                 _ball.LaunchAt(start, 270f);
                 for (var step = 0; step < 30 && _ball.ComboCount == 0; step++) Tick();
                 Assert.AreEqual(1, _ball.ComboCount, shape + "真实碰撞应记一次");
@@ -71,8 +103,8 @@ namespace GameLogic.Tests
         public IEnumerator SeamContactFreezeAndBerserkTransitionsDoNotDuplicate()
         {
             var view = Robot("I"); Physics2D.SyncTransforms();
-            var boxes = view.GetComponentsInChildren<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
-            var seam = (Vector2)((boxes[0].bounds.center + boxes[1].bounds.center) * 0.5f);
+            var cells = Cells(view);
+            var seam = (Vector2)((cells[0].position + cells[1].position) * 0.5f);
             _ball.LaunchAt(seam + Vector2.up, 270f);
             for (var step = 0; step < 30 && _ball.ComboCount == 0; step++) Tick();
             Assert.AreEqual(1, _ball.ComboCount);
@@ -97,23 +129,24 @@ namespace GameLogic.Tests
         public IEnumerator SlidingAcrossRobotCellsKeepsOneContactEpisode()
         {
             var view = Robot("I"); Physics2D.SyncTransforms();
-            var boxes = view.GetComponentsInChildren<BoxCollider2D>().OrderBy(c => c.bounds.center.x).ToArray();
-            _ball.LaunchAt((Vector2)boxes[0].bounds.center + Vector2.up, 270f);
+            var cells = Cells(view);
+            _ball.LaunchAt((Vector2)cells[0].position + Vector2.up, 270f);
             for (var step = 0; step < 30 && _ball.ComboCount == 0; step++) Tick();
             Assert.AreEqual(1, _ball.ComboCount);
             var sphere = _ball.GetComponent<CircleCollider2D>();
-            var initial = new HashSet<Collider2D>(boxes.Where(c => sphere.IsTouching(c)));
-            Assert.IsNotEmpty(initial, "必须从真实接触开始横向滑动");
+            var body = view.GetComponent<PolygonCollider2D>();
+            Assert.IsTrue(sphere.IsTouching(body), "必须从真实接触开始横向滑动");
+            Assert.IsTrue(view.TryGetNearestOccupiedCell(sphere.bounds.center, out var initial));
             var changedCell = false;
             for (var step = 0; step < 50; step++)
             {
                 Direction(new Vector2(0.5f, -1f).normalized); Tick();
-                var touching = boxes.Where(c => sphere.IsTouching(c)).ToArray();
-                Assert.IsNotEmpty(touching, "横向移动过程不能完全离开机器人");
+                Assert.IsTrue(sphere.IsTouching(body), "滑动必须保持与整体轮廓真实接触。");
                 Assert.AreEqual(1, _ball.ComboCount, "持续跨格接触只能计一次");
-                if (touching.All(c => !initial.Contains(c))) { changedCell = true; break; }
+                Assert.IsTrue(view.TryGetNearestOccupiedCell(sphere.bounds.center, out var current));
+                if (!current.Equals(initial)) { changedCell = true; break; }
             }
-            Assert.IsTrue(changedCell, "必须实际离开起始子Collider并接触另一个格子");
+            Assert.IsTrue(changedCell, "必须沿整体轮廓实际滑到另一个占格上方");
             yield return null;
         }
 
@@ -148,11 +181,18 @@ namespace GameLogic.Tests
             opponentBall.Stop(); yield return null;
         }
 
+        private static Transform[] Cells(RobotView view) => view.transform.Cast<Transform>()
+            .Where(child => child.name.StartsWith("Cell_", StringComparison.Ordinal))
+            .OrderBy(child => child.position.x).ThenBy(child => child.position.y).ToArray();
+
         private RobotView Robot(string shape, BattleSide side = BattleSide.Player)
         {
+            shape = shape == "I" ? "Cannon" : shape == "L" ? "Scatter" : shape == "T" ? "Impact" : shape;
             var view = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/Robot" + shape + ".prefab")).GetComponent<RobotView>();
             SceneManager.MoveGameObjectToScene(view.gameObject, _scene);
-            var robot = _registry.CreateRobot(view.ConfigId, side, 1, 1);
+            var tables = new GameConfig.Tables(name => new Luban.ByteBuf(AssetDatabase.LoadAssetAtPath<TextAsset>(
+                "Assets/AssetRaw/Configs/bytes/" + name + ".bytes").bytes));
+            var robot = _registry.CreateRobotFromConfig(tables.TbRobot.Get(view.ConfigId), side);
             typeof(RobotEntity).GetMethod("TrySetLocation", BindingFlags.Instance | BindingFlags.NonPublic)
                 .Invoke(robot, new object[] { RobotLocation.Board, new BoardCoordinate(0, 0) });
             view.Bind(_registry, robot.InstanceId); return view;

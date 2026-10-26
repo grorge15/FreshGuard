@@ -26,6 +26,32 @@ namespace FreshGuard.Editor
         private static Vector2 Point(Transform node) => RectTransformUtility.WorldToScreenPoint(GameModule.UI.UICamera, node.position);
         private static GameObject Slot(BattleShopUI ui, int id) => ui.transform.Find("m_rect_ShopPanel/m_tf_Offers/Slot_" + id).gameObject;
 
+        private static Vector2 PlacementPoint(Camera camera, PlacementBoardView board, BoardCoordinate anchor, PlaceableDefinition shape)
+        {
+            var center = new Vector2((shape.Cells.Min(c => c.Column) + shape.Cells.Max(c => c.Column)) * 0.5f,
+                (shape.Cells.Min(c => c.Row) + shape.Cells.Max(c => c.Row)) * 0.5f);
+            var local = board.GetCellLocalPosition(anchor) + (Vector3)(center * board.CellSize);
+            return camera.WorldToScreenPoint(board.transform.TransformPoint(local));
+        }
+
+        private static async UniTask ReleaseWithoutMove(BattleShopUI ui, BattleShopSceneController host,
+            Vector2 point, BoardCoordinate expectedAnchor)
+        {
+            ui.Drag.Release(-1, point);
+            BoardPlacementTarget target;
+            // Existing board views can commit synchronously and clear the preview before Release returns.
+            if (ui.Drag.Phase == RobotDragPhase.Committing)
+                Require(host.Placement.TryGetDragTarget(out target) && target.Anchor.Equals(expectedAnchor),
+                    "PointerUp最终坐标未同步到预览与提交目标。");
+            var ghost = ui.transform.Find("m_item_DragGhost/m_img_RobotIcon").GetComponent<RectTransform>();
+            var canvas = ghost.GetComponentInParent<Canvas>().rootCanvas;
+            var eventCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            var ghostCenter = RectTransformUtility.WorldToScreenPoint(eventCamera, ghost.TransformPoint(ghost.rect.center));
+            Require(Vector2.Distance(ghostCenter, point) < 0.1f, "PointerUp最终图像中心未跟随指针。");
+            await UniTask.WaitUntil(() => ui.Drag.Phase == RobotDragPhase.Idle).Timeout(TimeSpan.FromSeconds(15));
+            await UniTask.Yield();
+        }
+
         private static void PickSlot(BattleShopUI ui, int id)
         {
             var node = Slot(ui, id);
@@ -177,20 +203,29 @@ namespace FreshGuard.Editor
                 context.Rewards.TryGrantGlassBreak(context.BattleId, "merge-verification-funds", BattleSide.Player, 2000);
                 await UniTask.Yield();
                 var anchor = new BoardCoordinate(2, 2);
-                var dropPoint = (Vector2)camera.WorldToScreenPoint(board.GetCellWorldPosition(anchor));
+                GameConfig.robot.Robot config;
+                int level;
+                PlaceableDefinition shape;
+                Require(context.GetDragContent(BattleSide.Player, RobotDragSource.Offer(0, state.Slots[0].Offer.OfferId),
+                    out config, out level, out shape) == ShopOperationResult.Success, "读取形状失败。");
+                var dropPoint = PlacementPoint(camera, board, anchor, shape);
+                var anchorPoint = (Vector2)camera.WorldToScreenPoint(board.GetCellWorldPosition(anchor));
                 var beforeBuy = state.EnergyCoins;
                 var price = state.Slots[0].Offer.Price;
                 var configId = state.Slots[0].Offer.RobotId;
                 PickSlot(ui, 0);
-                await Drop(ui, dropPoint);
+                // No Move event at the final position: PointerUp must refresh the centered target.
+                await ReleaseWithoutMove(ui, host, dropPoint, anchor);
                 var targetId = int.Parse(board.Model.GetOccupant(anchor));
                 Entity entity;
                 Require(context.Registry.TryGet(targetId, out entity), "合法购买部署没有实体。");
                 var target = (RobotEntity)entity;
+                Require(target.Anchor.Equals(anchor), "最终预览与实际部署锚点不一致。");
                 Require(state.EnergyCoins == beforeBuy - price && state.Slots[0].Offer == null && !state.Slots[0].InstanceId.HasValue,
                     "部署购买未原子清槽扣费。");
-                Require(View(targetId).GetComponentInChildren<TextMesh>().text == "Lv1", "盘面等级标签未显示。");
-                checks.Add("合法商品购买部署与盘面等级显示");
+                Require(View(targetId).GetComponentInChildren<TextMesh>() == null &&
+                    View(targetId).GetComponentInChildren<SpriteRenderer>().color == Color.white, "盘面应只用等级颜色标识。");
+                checks.Add("形状中心部署、无Move的PointerUp最终预览/落地一致与盘面等级显示");
 
                 // 命中目标的非锚点格，以验证合成目标按指针而非拖拽锚点判定。
                 var lastCell = target.Definition.Cells[target.Definition.Cells.Count - 1];
@@ -217,16 +252,19 @@ namespace FreshGuard.Editor
                 ui.Drag.Advance(Time.unscaledTime + 0.21f);
                 Require(target.IsDragging && board.Model.GetOccupant(anchor) == null, "场上拿起未释放占格。");
                 Require(originalView.GetComponentsInChildren<Collider2D>(true).All(c => !c.enabled), "场上拿起仍参与碰撞。");
-                await Drop(ui, new Vector2(-1000, -1000));
+                ui.Drag.Move(-1, PlacementPoint(camera, board, new BoardCoordinate(2, 5), target.Definition));
+                // A prior valid preview must not be used after release outside the board without a Move.
+                ui.Drag.Release(-1, new Vector2(-1000, -1000));
+                await UniTask.WaitUntil(() => ui.Drag.Phase == RobotDragPhase.Idle).Timeout(TimeSpan.FromSeconds(15));
                 Require(!target.IsDragging && board.Model.GetOccupant(anchor) == targetId.ToString() && View(targetId) == originalView,
-                    "场上失败未原位恢复同实例。");
+                    "最终非法位置误用之前有效预览，或未原位恢复同实例。");
                 ExecuteEvents.Execute(input, Pointer(hitPoint), ExecuteEvents.pointerDownHandler);
                 ui.Drag.Advance(Time.unscaledTime + 0.21f);
                 var movedAnchor = new BoardCoordinate(2, 5);
                 var movedPointer = new BoardCoordinate(movedAnchor.Column + lastCell.Column, movedAnchor.Row + lastCell.Row);
-                await Drop(ui, camera.WorldToScreenPoint(board.GetCellWorldPosition(movedPointer)));
+                await ReleaseWithoutMove(ui, host, PlacementPoint(camera, board, movedAnchor, target.Definition), movedAnchor);
                 Require(target.Anchor.Equals(movedAnchor) && target.Level == 2 && View(targetId) == originalView,
-                    "重新放置改变了实例、等级或抓取偏移。");
+                    "中心重新放置改变了实例、等级或目标锚点。");
                 var movedHit = (Vector2)camera.WorldToScreenPoint(board.GetCellWorldPosition(movedPointer));
                 ExecuteEvents.Execute(input, Pointer(movedHit), ExecuteEvents.pointerDownHandler);
                 ui.Drag.Advance(Time.unscaledTime + 0.21f);
@@ -234,7 +272,7 @@ namespace FreshGuard.Editor
                 await Drop(ui, Point(storageNode));
                 Require(state.StorageInstanceId == targetId && target.Location == RobotLocation.Storage && !target.CanParticipate,
                     "场上机器人未进入空存储位。");
-                checks.Add("场上回位、抓取偏移重新放置及空存储位");
+                checks.Add("场上回位、边缘抓取后中心重新放置及空存储位");
 
                 // 新商品与已存机器人交换；原机器人以已购状态进入商品原槽。
                 var swapSlot = await FindOffer(context, configId, 1);
@@ -258,7 +296,7 @@ namespace FreshGuard.Editor
                 ui.PressStorage(-1, Point(storageNode), Time.unscaledTime);
                 ui.Drag.Advance(Time.unscaledTime + 0.21f);
                 var secondAnchor = new BoardCoordinate(2, 5);
-                await Drop(ui, camera.WorldToScreenPoint(board.GetCellWorldPosition(secondAnchor)));
+                await Drop(ui, PlacementPoint(camera, board, secondAnchor, target.Definition));
                 Require(!state.StorageInstanceId.HasValue && context.Registry.TryGet(storedId, out entity), "暂存来源回场失败。");
                 var second = (RobotEntity)entity;
                 var upgradeSlot = await FindOffer(context, configId, 1);
@@ -270,7 +308,7 @@ namespace FreshGuard.Editor
                 ExecuteEvents.Execute(secondView.gameObject, Pointer(camera.WorldToScreenPoint(board.GetCellWorldPosition(secondAnchor))), ExecuteEvents.pointerDownHandler);
                 ui.Drag.Advance(Time.unscaledTime + 0.21f);
                 var mergeCoins = state.EnergyCoins;
-                await Drop(ui, dropPoint);
+                await Drop(ui, anchorPoint);
                 Require(target.Level == 3 && !context.Registry.TryGet(storedId, out entity) && state.EnergyCoins == mergeCoins &&
                     board.Model.GetOccupant(secondAnchor) == null && View(targetId) == originalView, "场上来源合成没有完整消耗或重复收费。");
                 checks.Add("场上来源合成、完整占格释放与零额外费用");
@@ -279,7 +317,7 @@ namespace FreshGuard.Editor
                 var storageTargetSlot = await FindOffer(context, configId, 1);
                 PickSlot(ui, storageTargetSlot);
                 var secondPoint = (Vector2)camera.WorldToScreenPoint(board.GetCellWorldPosition(secondAnchor));
-                await Drop(ui, secondPoint);
+                await Drop(ui, PlacementPoint(camera, board, secondAnchor, target.Definition));
                 var storageTargetId = int.Parse(board.Model.GetOccupant(secondAnchor));
                 Require(context.Registry.TryGet(storageTargetId, out entity), "存储直合验收目标未部署。");
                 var storageTarget = (RobotEntity)entity;
@@ -288,7 +326,7 @@ namespace FreshGuard.Editor
                 await Drop(ui, Point(storageNode));
                 var storageSourceId = state.StorageInstanceId.Value;
                 // 场上来源不得向满存储交换，必须完整回位。
-                ExecuteEvents.Execute(originalView.gameObject, Pointer(dropPoint), ExecuteEvents.pointerDownHandler);
+                ExecuteEvents.Execute(originalView.gameObject, Pointer(anchorPoint), ExecuteEvents.pointerDownHandler);
                 ui.Drag.Advance(Time.unscaledTime + 0.21f);
                 await Drop(ui, Point(storageNode));
                 Require(target.Anchor.Equals(anchor) && !target.IsDragging && board.Model.GetOccupant(anchor) == targetId.ToString() &&
@@ -307,7 +345,7 @@ namespace FreshGuard.Editor
                 var thirdPoint = (Vector2)camera.WorldToScreenPoint(board.GetCellWorldPosition(thirdAnchor));
                 var thirdSlot = await FindOffer(context, configId, 1);
                 PickSlot(ui, thirdSlot);
-                await Drop(ui, thirdPoint);
+                await Drop(ui, PlacementPoint(camera, board, thirdAnchor, target.Definition));
                 var purchasedTargetId = int.Parse(board.Model.GetOccupant(thirdAnchor));
                 Require(context.Registry.TryGet(purchasedTargetId, out entity), "已购直合验收目标未部署。");
                 var purchasedTarget = (RobotEntity)entity;
@@ -332,7 +370,7 @@ namespace FreshGuard.Editor
                 var cancelOffer = state.Slots[cancelSlot].Offer;
                 var cancelCoins = state.EnergyCoins;
                 var cancelAnchor = new BoardCoordinate(6, 5);
-                var cancelPoint = (Vector2)camera.WorldToScreenPoint(board.GetCellWorldPosition(cancelAnchor));
+                var cancelPoint = PlacementPoint(camera, board, cancelAnchor, target.Definition);
                 PickSlot(ui, cancelSlot);
                 ui.Drag.Move(-1, cancelPoint);
                 ui.Drag.Release(-1, cancelPoint);

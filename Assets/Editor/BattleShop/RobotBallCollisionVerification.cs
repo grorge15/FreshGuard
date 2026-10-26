@@ -85,8 +85,9 @@ namespace FreshGuard.Editor
                         "真实商店部署失败。");
                     var view = UnityEngine.Object.FindObjectsOfType<RobotView>().Single(item => item.InstanceId == robot.InstanceId);
                     var position = view.transform.position;
-                    var colliders = view.GetComponentsInChildren<BoxCollider2D>();
-                    Require(colliders.Length == 4 && colliders.All(item => item.enabled && !item.isTrigger), "部署碰撞体未启用。");
+                    var outline = view.GetComponent<PolygonCollider2D>();
+                    Require(outline != null && outline.enabled && !outline.isTrigger, "整体实体碰撞体未启用。");
+                    Require(view.GetComponentsInChildren<Collider2D>(true).Length == 1, "机器人只能保留整体碰撞体。");
                     Physics2D.SyncTransforms();
                     var emptyClear = true;
                     var cells = robot.Configuration.ShapeId_Ref.CellOffsets;
@@ -95,7 +96,7 @@ namespace FreshGuard.Editor
                         {
                             if (cells.Any(cell => cell[0] == x && cell[1] == y)) continue;
                             var point = view.transform.TransformPoint(new Vector3(x * 0.35f, y * 0.35f, 0));
-                            emptyClear &= colliders.All(item => !item.OverlapPoint(point));
+                            emptyClear &= !outline.OverlapPoint(point);
                         }
                     ballSettings.Update();
                     ballSettings.FindProperty("spawnPosition").vector2Value = board.GetCellWorldPosition(new BoardCoordinate(3, 3));
@@ -117,7 +118,7 @@ namespace FreshGuard.Editor
                         "碰撞、静态位置、空格或反弹速度验证失败：" + configId);
                 }
                 report.passed = true;
-                report.details = "I/L/T 通过真实商店部署；Physics2D 实际碰撞反弹、恒速、机器人不移动及空白格无碰撞体均通过。";
+                report.details = "Cannon/Scatter/Impact 通过真实商店部署；Physics2D 实际碰撞反弹、恒速、机器人不移动及空白格无碰撞体均通过。";
             }
             catch (Exception e) { report.details = e.ToString(); Debug.LogError("[Robot Collision Verification] " + report.details); }
             finally

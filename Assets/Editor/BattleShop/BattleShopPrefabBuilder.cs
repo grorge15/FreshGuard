@@ -22,10 +22,11 @@ namespace FreshGuard.Editor
             if (scene.path != "Assets/AssetRaw/Scenes/Main.unity")
                 throw new InvalidOperationException("请先打开本工程业务 Main 场景。");
             EnsureFolder(FOLDER);
-            var item = Save(BuildItem(), "ShopRobotItem");
-            var storage = Save(BuildStorage(), "StorageRobotSlot");
-            var ghost = Save(BuildGhost(), "RobotDragGhost");
-            Save(BuildWindow(item, storage, ghost), "BattleShopUI");
+            var item = LoadOrCreate("ShopRobotItem", BuildItem);
+            var storage = LoadOrCreate("StorageRobotSlot", BuildStorage);
+            var ghost = LoadOrCreate("RobotDragGhost", BuildGhost);
+            LoadOrCreate("BattleShopUI", () => BuildWindow(item, storage, ghost));
+            NormalizeExistingPrefabs();
             AttachMain();
             AssetDatabase.SaveAssets();
             EditorSceneManager.SaveScene(scene);
@@ -40,6 +41,91 @@ namespace FreshGuard.Editor
             var parent = path.Substring(0, slash);
             EnsureFolder(parent);
             AssetDatabase.CreateFolder(parent, path.Substring(slash + 1));
+        }
+
+        private static GameObject LoadOrCreate(string name, Func<GameObject> factory)
+        {
+            var path = FOLDER + "/" + name + ".prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            return existing != null ? existing : Save(factory(), name);
+        }
+
+        private static void NormalizeExistingPrefabs()
+        {
+            if (Application.isPlaying || EditorApplication.isCompiling) return;
+            var changed = NormalizeItemPrefab();
+            changed |= NormalizeWindowPrefab();
+            changed |= NormalizeGhostPrefab();
+            if (changed) AssetDatabase.SaveAssets();
+        }
+
+        private static bool NormalizeItemPrefab()
+        {
+            var path = FOLDER + "/ShopRobotItem.prefab";
+            var root = PrefabUtility.LoadPrefabContents(path);
+            if (root == null) return false;
+            try
+            {
+                var layout = root.GetComponent<LayoutElement>();
+                if (layout == null) return false;
+                UnityEngine.Object.DestroyImmediate(layout);
+                PrefabUtility.SaveAsPrefabAsset(root, path);
+                return true;
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static bool NormalizeWindowPrefab()
+        {
+            var path = FOLDER + "/BattleShopUI.prefab";
+            var root = PrefabUtility.LoadPrefabContents(path);
+            if (root == null) return false;
+            try
+            {
+                var offers = root.transform.Find("m_rect_ShopPanel/m_tf_Offers");
+                if (offers == null) return false;
+                var layout = offers.GetComponent<HorizontalLayoutGroup>();
+                // 仅迁移仍使用旧自动布局的资源，已有手工布局不再重设。
+                if (layout == null) return false;
+                var changed = true;
+                UnityEngine.Object.DestroyImmediate(layout);
+                for (var i = 0; i < 3; i++)
+                {
+                    var slot = offers.Find("Slot_" + i) as RectTransform;
+                    if (slot == null) continue;
+                    var position = new Vector2((i - 1) * 124, 0);
+                    if (slot.anchorMin != new Vector2(0.5f, 0.5f) || slot.anchorMax != new Vector2(0.5f, 0.5f) ||
+                        slot.anchoredPosition != position || slot.sizeDelta.x <= 0 || slot.sizeDelta.y <= 0)
+                    {
+                        changed = true;
+                        slot.anchorMin = slot.anchorMax = new Vector2(0.5f, 0.5f);
+                        if (slot.sizeDelta.x <= 0 || slot.sizeDelta.y <= 0)
+                            slot.sizeDelta = new Vector2(112, 132);
+                        slot.anchoredPosition = position;
+                    }
+                }
+                if (changed) PrefabUtility.SaveAsPrefabAsset(root, path);
+                return changed;
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static bool NormalizeGhostPrefab()
+        {
+            var path = FOLDER + "/RobotDragGhost.prefab";
+            var root = PrefabUtility.LoadPrefabContents(path);
+            if (root == null) return false;
+            try
+            {
+                var changed = root.GetComponent<Image>() != null ||
+                    root.transform.Find("m_img_LevelBackground") != null ||
+                    root.transform.Find("m_text_Level") != null;
+                if (!changed) return false;
+                RobotMergePrefabBuilder.UpgradeGhost(root.transform);
+                PrefabUtility.SaveAsPrefabAsset(root, path);
+                return true;
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
         }
 
         private static GameObject Save(GameObject root, string name)
@@ -92,16 +178,11 @@ namespace FreshGuard.Editor
             var root = Rect("ShopRobotItem", null, new Vector2(112, 132), Vector2.zero);
             Image(root, new Color(1f, 0.98f, 0.91f, 0.72f), true);
             root.gameObject.AddComponent<ShopPointerInput>();
-            var element = root.gameObject.AddComponent<LayoutElement>();
-            element.preferredWidth = 112;
-            element.preferredHeight = 132;
-            element.flexibleWidth = 0;
             var icon = Image(Rect("m_img_RobotIcon", root, new Vector2(94, 88), new Vector2(0, 7)), Color.white);
             icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/Icons/RobotCannonIcon.png");
             icon.type = UnityEngine.UI.Image.Type.Simple;
             icon.preserveAspect = true;
             Image(Rect("m_img_Quality", root, new Vector2(100, 4), new Vector2(0, -40)), new Color(0.37f, 0.67f, 0.42f));
-            Label("m_text_Level", root, "Lv1", 16, new Vector2(42, 24), new Vector2(30, 51), Ink);
             Label("m_text_Price", root, "6", 20, new Vector2(104, 24), new Vector2(0, -54), Ink);
             return root.gameObject;
         }
@@ -121,10 +202,6 @@ namespace FreshGuard.Editor
         private static GameObject BuildGhost()
         {
             var root = Rect("RobotDragGhost", null, new Vector2(100, 100), Vector2.zero);
-            var image = Image(root, Color.white);
-            image.sprite = null;
-            image.type = UnityEngine.UI.Image.Type.Simple;
-            image.preserveAspect = true;
             var group = root.gameObject.AddComponent<CanvasGroup>();
             group.blocksRaycasts = false;
             group.interactable = false;
@@ -165,15 +242,13 @@ namespace FreshGuard.Editor
             var offers = Rect("m_tf_Offers", panel, new Vector2(-246, 142), new Vector2(-1, -4));
             offers.anchorMin = new Vector2(0, 0.5f);
             offers.anchorMax = new Vector2(1, 0.5f);
-            var layout = offers.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.childAlignment = TextAnchor.MiddleCenter;
-            layout.spacing = 12;
-            layout.childControlWidth = layout.childControlHeight = true;
-            layout.childForceExpandWidth = layout.childForceExpandHeight = false;
             for (var i = 0; i < 3; i++)
             {
                 var instance = (GameObject)PrefabUtility.InstantiatePrefab(item, offers);
                 instance.name = "Slot_" + i;
+                var slotRect = (RectTransform)instance.transform;
+                slotRect.sizeDelta = new Vector2(112, 132);
+                slotRect.anchoredPosition = new Vector2((i - 1) * 124, 0);
             }
             var refresh = Rect("m_btn_Refresh", panel, new Vector2(100, 95), Vector2.zero);
             Pin(refresh, new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-64, -3));

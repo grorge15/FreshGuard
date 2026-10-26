@@ -29,7 +29,7 @@ namespace GameLogic
         private bool _ready;
         private bool _dragging;
         private PlaceableDefinition _definition;
-        private BoardCoordinate _grabbedCell;
+        private Vector2 _footprintCenter;
         private PlacementBoardView _previewBoard;
         private BoardCoordinate _anchor;
         private BoardCoordinate _pointerCell;
@@ -68,11 +68,21 @@ namespace GameLogic
             CancelDrag();
             if (!IsReady || definition == null) return false;
             var containsGrabbedCell = false;
+            var minColumn = int.MaxValue;
+            var minRow = int.MaxValue;
+            var maxColumn = int.MinValue;
+            var maxRow = int.MinValue;
             foreach (var cell in definition.Cells)
-                if (cell.Equals(grabbedCell)) { containsGrabbedCell = true; break; }
+            {
+                if (cell.Equals(grabbedCell)) containsGrabbedCell = true;
+                minColumn = Mathf.Min(minColumn, cell.Column);
+                minRow = Mathf.Min(minRow, cell.Row);
+                maxColumn = Mathf.Max(maxColumn, cell.Column);
+                maxRow = Mathf.Max(maxRow, cell.Row);
+            }
             if (!containsGrabbedCell) return false;
             _definition = definition;
-            _grabbedCell = grabbedCell;
+            _footprintCenter = new Vector2((minColumn + maxColumn) * 0.5f, (minRow + maxRow) * 0.5f);
             _dragging = true;
             return true;
         }
@@ -105,15 +115,30 @@ namespace GameLogic
         {
             board = null;
             coordinate = default(BoardCoordinate);
+            Vector3 point;
+            if (!TryGetPointerWorldPosition(position, out point)) return false;
+            if (_playerBoard.TryGetCoordinate(point, out coordinate)) board = _playerBoard;
+            else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) board = _enemyBoard;
+            return board != null;
+        }
+
+        public bool TryGetPointerWorldPosition(Vector2 position, out Vector3 worldPosition)
+        {
+            worldPosition = default(Vector3);
             if (!IsReady || _sceneCamera == null || float.IsNaN(position.x) || float.IsNaN(position.y) ||
                 float.IsInfinity(position.x) || float.IsInfinity(position.y)) return false;
             var ray = _sceneCamera.ScreenPointToRay(position);
             float distance;
             if (!new Plane(Vector3.forward, Vector3.zero).Raycast(ray, out distance)) return false;
-            var point = ray.GetPoint(distance);
-            if (_playerBoard.TryGetCoordinate(point, out coordinate)) board = _playerBoard;
-            else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) board = _enemyBoard;
-            return board != null;
+            worldPosition = ray.GetPoint(distance);
+            return IsFinite(worldPosition);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                !float.IsNaN(value.z) && !float.IsInfinity(value.z);
         }
 
         public bool TryGetDragOccupant(out int instanceId)
@@ -150,7 +175,8 @@ namespace GameLogic
             else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _enemyBoard;
             if (_previewBoard == null) return;
             _pointerCell = coordinate;
-            _anchor = new BoardCoordinate(coordinate.Column - _grabbedCell.Column, coordinate.Row - _grabbedCell.Row);
+            _anchor = MapGridMath.GetCenteredAnchor(_previewBoard.transform.InverseTransformPoint(point),
+                _previewBoard.Columns, _previewBoard.Rows, _previewBoard.CellSize, _footprintCenter);
             var preview = _previewBoard.Model.Evaluate(_anchor, _definition);
             if (!IsAllowedBoard(_previewBoard)) preview = new BoardPlacementResult(false, preview.Cells);
             _previewBoard.ShowPreview(preview);

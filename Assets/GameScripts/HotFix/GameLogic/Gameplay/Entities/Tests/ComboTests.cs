@@ -68,10 +68,11 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void MultipleCellsAndDifferentRobotsUseSeparateContactEpisodes()
+        public void RepeatedPolygonContactAndDifferentRobotsUseSeparateEpisodes()
         {
             Bind(); var first = Robot(); var second = Robot();
-            foreach (var collider in first.GetComponentsInChildren<Collider2D>()) Hit(first, collider);
+            Hit(first, first.GetPhysicalCollider());
+            Hit(first, first.GetPhysicalCollider());
             Hit(second);
             Assert.AreEqual(2, Count);
             // Fixtures are physically separated: reconciliation closes these completed episodes.

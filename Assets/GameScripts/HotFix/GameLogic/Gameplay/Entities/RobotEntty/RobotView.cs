@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using GameConfig;
 using UnityEngine;
 
@@ -13,8 +14,8 @@ namespace GameLogic
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
         private SpriteRenderer[] _cells;
-        private Collider2D[] _colliders;
-        private TextMesh _levelLabel;
+        private SpriteRenderer[] _outline;
+        private PolygonCollider2D _bodyCollider;
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
         private Vector3? _authoredScale;
@@ -58,13 +59,18 @@ namespace GameLogic
             _robot = robot;
             if (_cells == null)
             {
-                _cells = GetComponentsInChildren<SpriteRenderer>(true);
-                _colliders = GetComponentsInChildren<Collider2D>(true);
-                var label = transform.Find("LevelLabel");
-                if (label != null) _levelLabel = label.GetComponent<TextMesh>();
+                var cells = new List<SpriteRenderer>();
+                foreach (Transform child in transform)
+                    if (child.name.StartsWith("Cell_", StringComparison.Ordinal) && child.TryGetComponent<SpriteRenderer>(out var cell))
+                        cells.Add(cell);
+                _cells = cells.ToArray();
+                var outlineRoot = transform.Find("ShapeOutline");
+                _outline = outlineRoot != null ? outlineRoot.GetComponentsInChildren<SpriteRenderer>(true) : Array.Empty<SpriteRenderer>();
             }
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
-            foreach (var collider in _colliders)
+            foreach (var edge in _outline) edge.enabled = visible;
+            var collider = GetPhysicalCollider();
+            if (collider != null)
             {
                 collider.isTrigger = _berserkTrigger;
                 collider.enabled = visible;
@@ -76,18 +82,62 @@ namespace GameLogic
                     Time.unscaledTime < _feedbackUntil ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.white, 0.65f) :
                     RobotLevelStyle.ColorForLevel(robot.Level);
             }
-            if (_levelLabel != null)
-            {
-                _levelLabel.text = "Lv" + robot.Level;
-                _levelLabel.gameObject.SetActive(visible);
-            }
         }
 
         public void SetBerserkTrigger(bool enabled)
         {
             _berserkTrigger = enabled;
-            if (_colliders == null) _colliders = GetComponentsInChildren<Collider2D>(true);
-            foreach (var collider in _colliders) if (collider != null) collider.isTrigger = enabled;
+            var collider = GetPhysicalCollider();
+            if (collider != null) collider.isTrigger = enabled;
+        }
+
+        /// <summary>整体轮廓同时负责实体碰撞、暴走触发和指针命中。</summary>
+        public PolygonCollider2D GetPhysicalCollider()
+        {
+            if (_bodyCollider == null) _bodyCollider = GetComponent<PolygonCollider2D>();
+            return _bodyCollider;
+        }
+
+        /// <summary>按触点选择最近的真实占格，返回配置中的相对坐标。</summary>
+        public bool TryGetNearestOccupiedCell(Vector3 worldPosition, out BoardCoordinate cell)
+        {
+            cell = default(BoardCoordinate);
+            if (_robot == null || _robot.Definition == null || !IsFinite(worldPosition)) return false;
+            var found = false;
+            var bestDistance = float.PositiveInfinity;
+            foreach (var candidate in _robot.Definition.Cells)
+            {
+                var child = transform.Find("Cell_" + candidate.Column + "_" + candidate.Row);
+                if (child == null) continue;
+                var distance = (GetCellWorldCenter(child) - worldPosition).sqrMagnitude;
+                if (!found || distance < bestDistance - 0.000001f ||
+                    (Mathf.Abs(distance - bestDistance) <= 0.000001f && IsEarlier(candidate, cell)))
+                {
+                    found = true;
+                    bestDistance = distance;
+                    cell = candidate;
+                }
+            }
+            return found;
+        }
+
+        private Vector3 GetCellWorldCenter(Transform cell)
+        {
+            var sprite = cell.GetComponent<SpriteRenderer>();
+            return sprite != null && sprite.sprite != null ? cell.TransformPoint(sprite.sprite.bounds.center) : cell.position;
+        }
+
+        private static bool IsEarlier(BoardCoordinate candidate, BoardCoordinate current)
+        {
+            return candidate.Column < current.Column ||
+                (candidate.Column == current.Column && candidate.Row < current.Row);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                !float.IsNaN(value.z) && !float.IsInfinity(value.z);
         }
 
         public void SetMergeCandidate(bool candidate) { _mergeCandidate = candidate; if (_robot != null) Render(_robot); }
