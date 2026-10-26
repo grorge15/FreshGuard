@@ -34,6 +34,7 @@ namespace GameLogic
         public int Trophies { get; private set; }
         public string PlayerName { get; set; } = DefaultPlayerName;
         public TimeSpan RecoveryInterval => _recoveryInterval;
+        public DateTimeOffset LastEnergyUpdateUtc => _lastEnergyUpdateUtc;
         public DateTimeOffset NextEnergyRecoveryUtc =>
             Energy >= _energyCapacity ? _lastEnergyUpdateUtc : _lastEnergyUpdateUtc + _recoveryInterval;
 
