@@ -13,6 +13,7 @@ namespace GameLogic
         private Text _trophies;
         private Text _energy;
         private Text _energyCountdown;
+        private GameObject _energyCool;
         private Text _coins;
         private Button _startButton;
         private Button _energyPlusButton;
@@ -29,6 +30,7 @@ namespace GameLogic
             _trophies = FindText("Trophies", "Cup", "Trophy");
             _energy = FindText("Energy", "Stamina");
             _energyCountdown = FindText("EnergyCountdown", "Countdown", "Recovery");
+            _energyCool = transform.Find("EnergyPanel/energyCool")?.gameObject;
             _coins = FindText("Coins", "Money");
             _startButton = FindButton("StartBattleButton", "StartButton", "BattleButton");
             _energyPlusButton = FindButton("EnergyPlusButton", "EnergyPlus", "EnergyAdd");
@@ -84,6 +86,7 @@ namespace GameLogic
         private void RefreshView()
         {
             if (State == null) return;
+            if (_energyCool != null) _energyCool.SetActive(State.Energy < State.EnergyCapacity);
             if (_playerName != null) _playerName.text = State.PlayerName;
             if (_trophies != null) _trophies.text = State.Trophies.ToString();
             if (_energy != null) _energy.text = $"{State.Energy}/{State.EnergyCapacity}";
