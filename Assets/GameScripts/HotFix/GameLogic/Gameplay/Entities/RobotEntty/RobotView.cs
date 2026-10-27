@@ -12,6 +12,7 @@ namespace GameLogic
         [SerializeField] private int _configId;
         // 预留真实物理间隙，包含 PolygonCollider2D 的边缘厚度。
         private const float CollisionInsetRatio = 0.06f;
+        [SerializeField] private SpriteRenderer _iconRenderer;
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
@@ -71,7 +72,16 @@ namespace GameLogic
                 _outline = outlineRoot != null ? outlineRoot.GetComponentsInChildren<SpriteRenderer>(true) : Array.Empty<SpriteRenderer>();
             }
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
-            foreach (var edge in _outline) edge.enabled = visible;
+            var useIcon = _iconRenderer != null && _iconRenderer.sprite != null;
+            var color = _mergeCandidate ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.cyan, 0.65f) :
+                Time.unscaledTime < _feedbackUntil ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.white, 0.65f) :
+                RobotLevelStyle.ColorForLevel(robot.Level);
+            if (useIcon)
+            {
+                _iconRenderer.enabled = visible;
+                _iconRenderer.color = color;
+            }
+            foreach (var edge in _outline) edge.enabled = visible && !useIcon;
             var collider = GetPhysicalCollider();
             if (collider != null)
             {
@@ -80,10 +90,9 @@ namespace GameLogic
             }
             foreach (var cell in _cells)
             {
-                cell.enabled = visible;
-                cell.color = _mergeCandidate ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.cyan, 0.65f) :
-                    Time.unscaledTime < _feedbackUntil ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.white, 0.65f) :
-                    RobotLevelStyle.ColorForLevel(robot.Level);
+                // 占格节点继续提供攻击原点和拖拽选格；正式外观使用整张 Icon。
+                cell.enabled = visible && !useIcon;
+                cell.color = color;
             }
         }
 

@@ -10,19 +10,19 @@ namespace GameLogic
     public sealed class RobotView : MonoBehaviour
     {
         [SerializeField] private int _configId;
+<<<<<<< HEAD
+        // 预留真实物理间隙，包含 PolygonCollider2D 的边缘厚度。
+        private const float CollisionInsetRatio = 0.06f;
+=======
+        [SerializeField] private SpriteRenderer _iconRenderer;
+>>>>>>> e00969401c0df6bdf9d976b425830fa7329a523f
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
         private SpriteRenderer[] _cells;
         private SpriteRenderer[] _outline;
-        private Collider2D[] _colliders;
-<<<<<<< HEAD
-=======
-        private Collider2D[] _dragHitColliders = Array.Empty<Collider2D>();
-        private Transform _dragHitArea;
-        private bool _dragHitAreaChecked;
-        private TextMesh _levelLabel;
->>>>>>> 08c067b5c6d1c369422af0ec154f37861147fc49
+        private PolygonCollider2D _bodyCollider;
+        private bool _collisionInsetApplied;
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
         private Vector3? _authoredScale;
@@ -73,52 +73,78 @@ namespace GameLogic
                 _cells = cells.ToArray();
                 var outlineRoot = transform.Find("ShapeOutline");
                 _outline = outlineRoot != null ? outlineRoot.GetComponentsInChildren<SpriteRenderer>(true) : Array.Empty<SpriteRenderer>();
-<<<<<<< HEAD
-                _colliders = GetComponentsInChildren<Collider2D>(true);
-=======
-                var label = transform.Find("LevelLabel");
-                if (label != null) _levelLabel = label.GetComponent<TextMesh>();
->>>>>>> 08c067b5c6d1c369422af0ec154f37861147fc49
             }
-            CacheDragHitColliders(robot);
-            CachePhysicalColliders();
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
-            foreach (var edge in _outline) edge.enabled = visible;
-            foreach (var collider in _colliders)
+            var useIcon = _iconRenderer != null && _iconRenderer.sprite != null;
+            var color = _mergeCandidate ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.cyan, 0.65f) :
+                Time.unscaledTime < _feedbackUntil ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.white, 0.65f) :
+                RobotLevelStyle.ColorForLevel(robot.Level);
+            if (useIcon)
             {
-                collider.isTrigger = collider.transform != transform || _berserkTrigger;
+                _iconRenderer.enabled = visible;
+                _iconRenderer.color = color;
+            }
+            foreach (var edge in _outline) edge.enabled = visible && !useIcon;
+            var collider = GetPhysicalCollider();
+            if (collider != null)
+            {
+                collider.isTrigger = _berserkTrigger;
                 collider.enabled = visible;
             }
-            foreach (var collider in _dragHitColliders)
-                if (collider != null) collider.enabled = visible;
             foreach (var cell in _cells)
             {
-                cell.enabled = visible;
-                cell.color = _mergeCandidate ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.cyan, 0.65f) :
-                    Time.unscaledTime < _feedbackUntil ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.white, 0.65f) :
-                    RobotLevelStyle.ColorForLevel(robot.Level);
+                // 占格节点继续提供攻击原点和拖拽选格；正式外观使用整张 Icon。
+                cell.enabled = visible && !useIcon;
+                cell.color = color;
             }
         }
 
         public void SetBerserkTrigger(bool enabled)
         {
             _berserkTrigger = enabled;
-<<<<<<< HEAD
-            if (_colliders == null) _colliders = GetComponentsInChildren<Collider2D>(true);
-            // 格子始终只检测接触；只有根节点的整体轮廓在普通/暴走间切换阻挡。
-            foreach (var collider in _colliders)
-                if (collider != null) collider.isTrigger = collider.transform != transform || enabled;
-=======
-            CachePhysicalColliders();
-            foreach (var collider in _colliders) if (collider != null) collider.isTrigger = enabled;
->>>>>>> 08c067b5c6d1c369422af0ec154f37861147fc49
+            var collider = GetPhysicalCollider();
+            if (collider != null) collider.isTrigger = enabled;
         }
 
-        /// <summary>返回 Cell_* 的实体碰撞体，不包含 Prefab 中的拖拽辅助 Collider。</summary>
-        public Collider2D[] GetPhysicalColliders()
+        /// <summary>整体轮廓同时负责实体碰撞、暴走触发和指针命中。</summary>
+        public PolygonCollider2D GetPhysicalCollider()
         {
-            CachePhysicalColliders();
-            return _colliders;
+            if (_bodyCollider == null) _bodyCollider = GetComponent<PolygonCollider2D>();
+            if (_bodyCollider != null && !_collisionInsetApplied)
+            {
+                _collisionInsetApplied = true;
+                InsetCollisionOutline(_bodyCollider, MapGridMath.REFERENCE_CELL_SIZE * CollisionInsetRatio);
+            }
+            return _bodyCollider;
+        }
+
+        private void Awake() { GetPhysicalCollider(); }
+
+        // 偏移整个多边形的边，不能缩放整体包围盒，也不能分别缩小占格造成内部接缝。
+        private static void InsetCollisionOutline(PolygonCollider2D collider, float inset)
+        {
+            if (inset <= 0f) return;
+            for (var path = 0; path < collider.pathCount; path++)
+            {
+                var points = collider.GetPath(path);
+                var result = new Vector2[points.Length];
+                var area = 0f;
+                for (var i = 0; i < points.Length; i++)
+                {
+                    var next = points[(i + 1) % points.Length];
+                    area += points[i].x * next.y - next.x * points[i].y;
+                }
+                var winding = area >= 0f ? 1f : -1f;
+                for (var i = 0; i < points.Length; i++)
+                {
+                    var before = (points[i] - points[(i + points.Length - 1) % points.Length]).normalized;
+                    var after = (points[(i + 1) % points.Length] - points[i]).normalized;
+                    var first = new Vector2(-before.y, before.x) * winding;
+                    var second = new Vector2(-after.y, after.x) * winding;
+                    result[i] = points[i] + (first + second) * (inset / Mathf.Max(0.001f, 1f + Vector2.Dot(first, second)));
+                }
+                collider.SetPath(path, result);
+            }
         }
 
         /// <summary>按触点选择最近的真实占格，返回配置中的相对坐标。</summary>
@@ -144,49 +170,10 @@ namespace GameLogic
             return found;
         }
 
-        private void CachePhysicalColliders()
-        {
-            if (_colliders != null) return;
-            var all = GetComponentsInChildren<Collider2D>(true);
-            var physical = new List<Collider2D>(all.Length);
-            var drag = new List<Collider2D>();
-            foreach (var collider in all)
-            {
-                if (collider == null) continue;
-                if (collider.GetComponent<RobotDragHitCollider>() != null) drag.Add(collider);
-                else physical.Add(collider);
-            }
-            _colliders = physical.ToArray();
-            if (_dragHitColliders.Length == 0) _dragHitColliders = drag.ToArray();
-        }
-
-        private void CacheDragHitColliders(RobotEntity robot)
-        {
-            if (!_dragHitAreaChecked)
-            {
-                _dragHitAreaChecked = true;
-                _dragHitArea = transform.Find("DragHitArea");
-                if (_dragHitArea == null)
-                {
-                    Debug.LogError("机器人 Prefab 缺少 DragHitArea，无法支持格子缝隙拖拽命中。", this);
-                    return;
-                }
-                var all = _dragHitArea.GetComponentsInChildren<Collider2D>(true);
-                var drag = new List<Collider2D>(all.Length);
-                foreach (var collider in all)
-                    if (collider != null && collider.GetComponent<RobotDragHitCollider>() != null) drag.Add(collider);
-                _dragHitColliders = drag.ToArray();
-            }
-            if (robot.Definition != null && _dragHitColliders.Length != robot.Definition.Cells.Count)
-                Debug.LogError("机器人 DragHitArea 的命中格数量与占格配置不一致。", this);
-        }
-
         private Vector3 GetCellWorldCenter(Transform cell)
         {
-            var collider = cell.GetComponent<BoxCollider2D>();
-            if (collider != null) return collider.bounds.center;
             var sprite = cell.GetComponent<SpriteRenderer>();
-            return sprite != null && sprite.sprite != null ? sprite.bounds.center : cell.position;
+            return sprite != null && sprite.sprite != null ? cell.TransformPoint(sprite.sprite.bounds.center) : cell.position;
         }
 
         private static bool IsEarlier(BoardCoordinate candidate, BoardCoordinate current)
