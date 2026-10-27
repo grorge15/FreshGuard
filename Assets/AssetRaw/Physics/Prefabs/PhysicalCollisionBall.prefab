@@ -90,6 +90,8 @@ MonoBehaviour:
   speed: 5
   radius: 0.2
   launchOnEnable: 0
+  _normalSprite: {fileID: 21300000, guid: 72c25458f00e03c4a877732156db6fb7, type: 3}
+  _berserkSprite: {fileID: 21300000, guid: bc6f580eb2d758f4699f564b6d7b4551, type: 3}
   globalConfig: {fileID: 4900000, guid: dd7d192fb80fcca40a9cd06a02d7ced7, type: 3}
   _comboPopupPrefab: {fileID: 7490383479568946429, guid: 29c6ecd0140019d4d9aaa55a513d4f18, type: 3}
   _comboPopupOffset: 0.35
