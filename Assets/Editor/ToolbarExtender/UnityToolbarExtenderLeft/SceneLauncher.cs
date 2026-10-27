@@ -13,8 +13,8 @@ namespace TEngine
         private const string PreviousSceneKey = "TEngine_PreviousScenePath"; // 用于存储之前场景路径的键
         private const string IsLauncherBtn = "TEngine_IsLauncher"; // 用于存储之前是否按下launcher
 
-        // 项目业务入口是 AssetRaw/Scenes/Main.unity；大小写用于避免误选旧的 Assets/Scenes/main.unity。
-        private static readonly string SceneMain = "Main";
+        // 先从 Assets/Scenes/main.unity 初始化框架和主菜单，再由开始按钮进入业务 Main 场景。
+        private static readonly string SceneMain = "main";
 
         private static readonly string ButtonStyleName = "Tab middle";
         private static GUIStyle _buttonGuiStyle;
