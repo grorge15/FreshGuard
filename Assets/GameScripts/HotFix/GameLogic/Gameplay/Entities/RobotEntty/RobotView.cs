@@ -10,12 +10,15 @@ namespace GameLogic
     public sealed class RobotView : MonoBehaviour
     {
         [SerializeField] private int _configId;
+        // 预留真实物理间隙，包含 PolygonCollider2D 的边缘厚度。
+        private const float CollisionInsetRatio = 0.06f;
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
         private SpriteRenderer[] _cells;
         private SpriteRenderer[] _outline;
         private PolygonCollider2D _bodyCollider;
+        private bool _collisionInsetApplied;
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
         private Vector3? _authoredScale;
@@ -95,7 +98,41 @@ namespace GameLogic
         public PolygonCollider2D GetPhysicalCollider()
         {
             if (_bodyCollider == null) _bodyCollider = GetComponent<PolygonCollider2D>();
+            if (_bodyCollider != null && !_collisionInsetApplied)
+            {
+                _collisionInsetApplied = true;
+                InsetCollisionOutline(_bodyCollider, MapGridMath.REFERENCE_CELL_SIZE * CollisionInsetRatio);
+            }
             return _bodyCollider;
+        }
+
+        private void Awake() { GetPhysicalCollider(); }
+
+        // 偏移整个多边形的边，不能缩放整体包围盒，也不能分别缩小占格造成内部接缝。
+        private static void InsetCollisionOutline(PolygonCollider2D collider, float inset)
+        {
+            if (inset <= 0f) return;
+            for (var path = 0; path < collider.pathCount; path++)
+            {
+                var points = collider.GetPath(path);
+                var result = new Vector2[points.Length];
+                var area = 0f;
+                for (var i = 0; i < points.Length; i++)
+                {
+                    var next = points[(i + 1) % points.Length];
+                    area += points[i].x * next.y - next.x * points[i].y;
+                }
+                var winding = area >= 0f ? 1f : -1f;
+                for (var i = 0; i < points.Length; i++)
+                {
+                    var before = (points[i] - points[(i + points.Length - 1) % points.Length]).normalized;
+                    var after = (points[(i + 1) % points.Length] - points[i]).normalized;
+                    var first = new Vector2(-before.y, before.x) * winding;
+                    var second = new Vector2(-after.y, after.x) * winding;
+                    result[i] = points[i] + (first + second) * (inset / Mathf.Max(0.001f, 1f + Vector2.Dot(first, second)));
+                }
+                collider.SetPath(path, result);
+            }
         }
 
         /// <summary>按触点选择最近的真实占格，返回配置中的相对坐标。</summary>

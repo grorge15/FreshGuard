@@ -49,6 +49,57 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
+        public IEnumerator PlacementAtWallUsesPassThroughProtectionInsteadOfTeleportingOutsideBoard()
+        {
+            var board = NewObject("WallOverlapBoard").AddComponent<PlacementBoardView>();
+            var placed = Robot("I");
+            placed.transform.SetParent(board.transform, false);
+            placed.transform.localPosition = new Vector3(board.Size.x * 0.5f - 0.2f, 0, 0);
+            var main = _bootstrap.PlayerBall;
+            main.LaunchAt(placed.transform.position, 0f);
+            Physics2D.SyncTransforms();
+            var position = main.GetComponent<Rigidbody2D>().position;
+            main.ResolvePlacementOverlap(placed, board);
+            Assert.AreEqual(position, main.GetComponent<Rigidbody2D>().position);
+            Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), placed.GetPhysicalCollider()));
+            Assert.IsTrue(main.IsLaunched);
+            Assert.AreEqual(Vector2.right, main.CurrentDirection);
+            // 模拟墙面反弹后的向内运动：穿出机器人后必须恢复实体碰撞。
+            main.LaunchAt(position, 180f);
+            for (var step = 0; step < 12; step++) Tick();
+            Assert.IsFalse(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
+            Assert.IsFalse(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), placed.GetPhysicalCollider()));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PlacedRobotEjectsBallPastNeighborsAndPhysicsKeepsMovingForward()
+        {
+            var board = NewObject("OverlapBoard").AddComponent<PlacementBoardView>();
+            var placed = Robot("I");
+            var neighbor = Robot("I");
+            placed.transform.SetParent(board.transform, false);
+            neighbor.transform.SetParent(board.transform, false);
+            neighbor.transform.localPosition = new Vector3(0.7f, 0, 0);
+            var main = _bootstrap.PlayerBall;
+            main.LaunchAt(Vector2.zero, 0f);
+            Physics2D.SyncTransforms();
+            Assert.IsTrue(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
+            main.ResolvePlacementOverlap(placed, board);
+            var position = main.GetComponent<Rigidbody2D>().position;
+            Assert.Greater(position.x, neighbor.GetPhysicalCollider().bounds.max.x);
+            Assert.AreEqual(0f, position.y, 0.0001f);
+            for (var step = 0; step < 5; step++) Tick();
+            Assert.Greater(main.GetComponent<Rigidbody2D>().position.x, position.x);
+            Assert.Greater(main.CurrentDirection.x, 0.99f);
+            Assert.IsFalse(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
+            Assert.IsFalse(main.GetComponent<Collider2D>().Distance(neighbor.GetPhysicalCollider()).isOverlapped);
+            Assert.AreEqual(0, main.ComboCount);
+            Assert.AreEqual(0, _contacts, "推出不应伪造机器人攻击接触。");
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator GlobalRulesControlRealTemporaryBallsAndTheirLifetime()
         {
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath,

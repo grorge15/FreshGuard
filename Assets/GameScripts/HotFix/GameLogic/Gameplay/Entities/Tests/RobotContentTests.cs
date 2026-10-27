@@ -164,7 +164,26 @@ namespace GameLogic.Tests
             try
             {
                 Physics2D.SyncTransforms();
-                var polygon = instance.GetComponent<PolygonCollider2D>();
+                var polygon = instance.GetComponent<RobotView>().GetPhysicalCollider();
+                Physics2D.SyncTransforms();
+                var minimumX = cells.Min(c => c[0]) * 0.35f - 0.175f;
+                Assert.Greater(polygon.points.Min(p => p.x), minimumX + 0.001f,
+                    "整体轮廓必须内收，为相邻机器人保留碰撞间隙。");
+                var originalPoints = polygon.points;
+                instance.GetComponent<RobotView>().GetPhysicalCollider();
+                CollectionAssert.AreEqual(originalPoints, polygon.points, "重复刷新不得继续缩小碰撞轮廓。");
+                var neighbor = UnityEngine.Object.Instantiate(prefab, instance.transform.parent);
+                try
+                {
+                    neighbor.transform.position = instance.transform.position + Vector3.right *
+                        ((cells.Max(c => c[0]) - cells.Min(c => c[0]) + 1) * 0.35f);
+                    var neighborCollider = neighbor.GetComponent<RobotView>().GetPhysicalCollider();
+                    Physics2D.SyncTransforms();
+                    var distance = polygon.Distance(neighborCollider);
+                    Assert.IsTrue(distance.isValid);
+                    Assert.Greater(distance.distance, 0.02f, "相邻机器人整体碰撞轮廓之间应留出缝隙。");
+                }
+                finally { UnityEngine.Object.DestroyImmediate(neighbor); }
                 // 格子中心、相邻格接缝均属于实体；形状内的空白格必须保持畅通。
                 for (var x = 0; x <= cells.Max(c => c[0]); x++)
                     for (var y = 0; y <= cells.Max(c => c[1]); y++)

@@ -260,6 +260,67 @@ namespace GameLogic
             _spriteRenderer.sprite = IsBerserk && _berserkSprite != null ? _berserkSprite : normal;
         }
 
+        /// <summary>放置完成后沿原运动方向脱离，跳过不足以容纳整颗球的机器人间隙。</summary>
+        public void ResolvePlacementOverlap(RobotView placed, PlacementBoardView board)
+        {
+            if (!_launched || IsBerserk || _body == null || _collider == null || placed == null || board == null) return;
+            var obstacle = placed.GetPhysicalCollider();
+            if (obstacle == null || !obstacle.enabled || obstacle.isTrigger || !obstacle.gameObject.activeInHierarchy) return;
+            Physics2D.SyncTransforms();
+            if (!_collider.Distance(obstacle).isOverlapped) return;
+            var direction = _direction.normalized;
+            if (direction.sqrMagnitude < 0.5f) return;
+            var center = (Vector2)_collider.bounds.center;
+            var worldRadius = _collider.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
+            var clearance = Mathf.Max(0.001f * _mapScale, Physics2D.defaultContactOffset * 2f);
+            var castRadius = worldRadius + clearance;
+            var boardScale = board.transform.lossyScale;
+            var reach = board.Size.magnitude * Mathf.Max(Mathf.Abs(boardScale.x), Mathf.Abs(boardScale.y)) +
+                Vector2.Distance(center, board.transform.position) + castRadius * 2f;
+            // 从棋盘外向球反向扫圆，得到每个实体在前进方向上的出口；正向从内部扫会给出零距离命中。
+            var physics = gameObject.scene.GetPhysicsScene2D();
+            var filter = new ContactFilter2D { useTriggers = false };
+            var hits = new List<RaycastHit2D>();
+            physics.CircleCast(center + direction * reach, castRadius, -direction, reach, filter, hits);
+            var candidates = new List<float>();
+            foreach (var hit in hits)
+                if (IsPlacementObstacle(hit.collider)) candidates.Add(reach - hit.distance + clearance);
+            candidates.Sort();
+            var overlaps = new List<Collider2D>();
+            foreach (var distance in candidates)
+            {
+                if (distance <= 0f) continue;
+                var destination = center + direction * distance;
+                if (!FitsInsideBoard(destination, castRadius, board)) continue;
+                var blocked = false;
+                physics.OverlapCircle(destination, castRadius, filter, overlaps);
+                foreach (var collider in overlaps)
+                    if (IsPlacementObstacle(collider)) { blocked = true; break; }
+                if (blocked) continue;
+                var position = _body.position + destination - center;
+                _body.position = position;
+                transform.position = new Vector3(position.x, position.y, transform.position.z);
+                Physics2D.SyncTransforms();
+                ReconcileProtectedContacts();
+                ReconcileRobotContacts();
+                ApplyEffectiveVelocity();
+                return;
+            }
+            // 前方直到墙边都无容身位置时，沿用临时穿出保护，不能把球瞬移出棋盘或反转方向。
+            ProtectOverlappingRobots(board.GetComponentsInChildren<RobotView>());
+        }
+
+        private bool IsPlacementObstacle(Collider2D collider) => collider != null && collider != _collider &&
+            !collider.isTrigger && collider.gameObject.scene == gameObject.scene && collider.attachedRigidbody == null;
+
+        private static bool FitsInsideBoard(Vector2 center, float worldRadius, PlacementBoardView board)
+        {
+            var local = board.transform.InverseTransformPoint(center);
+            var scale = board.transform.lossyScale;
+            return Mathf.Abs(local.x) + worldRadius / Mathf.Abs(scale.x) < board.Size.x * 0.5f &&
+                Mathf.Abs(local.y) + worldRadius / Mathf.Abs(scale.y) < board.Size.y * 0.5f;
+        }
+
         public void ProtectOverlappingRobots(IEnumerable<RobotView> views)
         {
             if (_collider == null || _comboRegistry == null) return;
