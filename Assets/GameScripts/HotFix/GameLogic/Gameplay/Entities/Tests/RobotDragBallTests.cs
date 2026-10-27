@@ -344,6 +344,51 @@ namespace GameLogic.Tests
 
         private void RestoreDragProvider() => _ball.GlobalValueProvider = key => key == 17 ? _multiplier : 0f;
 
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(false, false)]
+        public void BallSpritesFollowBerserkAndResetWithOptionalConfiguration(bool configureNormal, bool configureBerserk)
+        {
+            var texture = new Texture2D(3, 1);
+            var original = Sprite.Create(texture, new Rect(0, 0, 1, 1), Vector2.one * 0.5f);
+            var normal = Sprite.Create(texture, new Rect(1, 0, 1, 1), Vector2.one * 0.5f);
+            var berserk = Sprite.Create(texture, new Rect(2, 0, 1, 1), Vector2.one * 0.5f);
+            try
+            {
+                var renderer = _root.AddComponent<SpriteRenderer>();
+                renderer.sprite = original;
+                foreach (var fieldName in new[] { "_normalSprite", "_berserkSprite" })
+                {
+                    var field = typeof(PhysicalCollisionBall).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(field, "必须暴露普通和暴走 Sprite 配置。");
+                    Assert.IsTrue(Attribute.IsDefined(field, typeof(SerializeField)), "Sprite 必须可在 Inspector 配置。");
+                }
+                SetField("_normalSprite", configureNormal ? normal : null);
+                SetField("_berserkSprite", configureBerserk ? berserk : null);
+                InvokePrivate("Awake");
+                var expectedNormal = configureNormal ? normal : original;
+                Assert.AreSame(expectedNormal, renderer.sprite, "初始化使用普通图。");
+                _ball.SetBerserk(true);
+                Assert.AreSame(configureBerserk ? berserk : expectedNormal, renderer.sprite, "暴走使用暴走图，未配时保留普通图。");
+                _ball.SetBerserk(false);
+                Assert.AreSame(expectedNormal, renderer.sprite, "退出暴走恢复普通图。");
+                _ball.SetBerserk(true);
+                _ball.Stop();
+                Assert.AreSame(expectedNormal, renderer.sprite, "停止后恢复普通图。");
+                _ball.SetBerserk(true);
+                _ball.BindBattle(2, BattleSide.Player, () => true);
+                Assert.AreSame(expectedNormal, renderer.sprite, "重新绑定对局后恢复普通图。");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(original);
+                UnityEngine.Object.DestroyImmediate(normal);
+                UnityEngine.Object.DestroyImmediate(berserk);
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
+        }
+
         private static void ExpectProviderError() => LogAssert.Expect(LogType.Error,
             "能源球停止，请检查配置后调用 Launch 重试：Global17 missing");
 

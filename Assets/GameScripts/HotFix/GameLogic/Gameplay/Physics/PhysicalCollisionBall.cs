@@ -14,12 +14,19 @@ namespace GameLogic
         [SerializeField, Min(0.01f)] private float speed = 5f;
         [SerializeField, Min(0.001f)] private float radius = 0.2f;
         [SerializeField] private bool launchOnEnable;
+        [Header("状态外观")]
+        [Tooltip("普通状态使用的 Sprite；未配置时使用 SpriteRenderer 原有图片。")]
+        [SerializeField] private Sprite _normalSprite;
+        [Tooltip("暴走状态使用的 Sprite；未配置时使用普通状态图片。")]
+        [SerializeField] private Sprite _berserkSprite;
         [Tooltip("Luban 生成的 Global 二进制；作为 Prefab 依赖加载，不在碰撞回调中进行 IO。")]
         [SerializeField] private TextAsset globalConfig;
         [SerializeField] private ComboPopupView _comboPopupPrefab;
         [SerializeField, Min(0f)] private float _comboPopupOffset = 0.35f;
         private Rigidbody2D _body;
         private CircleCollider2D _collider;
+        private SpriteRenderer _spriteRenderer;
+        private Sprite _defaultSprite;
         private Vector2 _direction;
         private bool _launched;
         private bool _frozen;
@@ -100,6 +107,9 @@ namespace GameLogic
         {
             _body = GetComponent<Rigidbody2D>();
             _collider = GetComponent<CircleCollider2D>();
+            _spriteRenderer = GetComponent<SpriteRenderer>();
+            if (_spriteRenderer != null) _defaultSprite = _spriteRenderer.sprite;
+            RefreshSprite();
             _body.gravityScale = 0f;
             _body.drag = 0f;
             _body.angularDrag = 0f;
@@ -198,8 +208,16 @@ namespace GameLogic
                 foreach (var contact in _robotContacts.Values) contact.Counted = true;
             }
             IsBerserk = berserk;
+            RefreshSprite();
             _reconcileAfterFreeze = true;
             ApplyEffectiveVelocity();
+        }
+
+        private void RefreshSprite()
+        {
+            if (_spriteRenderer == null) return;
+            var normal = _normalSprite != null ? _normalSprite : _defaultSprite;
+            _spriteRenderer.sprite = IsBerserk && _berserkSprite != null ? _berserkSprite : normal;
         }
 
         public void ProtectOverlappingRobots(IEnumerable<RobotView> views)
@@ -279,6 +297,7 @@ namespace GameLogic
             _launched = false;
             _dragging = false;
             IsBerserk = false;
+            RefreshSprite();
             foreach (var contact in _protectedContacts.Values) IgnoreRobot(contact, false);
             _protectedContacts.Clear();
             _glassHitsThisStep.Clear();
