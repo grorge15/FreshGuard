@@ -229,17 +229,17 @@ namespace FreshGuard.Editor
             rim.anchoredPosition = new Vector2(0, -3);
             Image(rim, new Color(0.72f, 0.47f, 0.21f));
             var balance = Rect("EnergyBalance", panel, new Vector2(146, 36), Vector2.zero);
-            Pin(balance, new Vector2(0, 1), new Vector2(0, 1), new Vector2(14, -12));
+            Pin(balance, Vector2.one, Vector2.one, new Vector2(-36, -12));
             Image(balance, new Color(0.25f, 0.15f, 0.12f));
             var coin = Rect("m_img_EnergyCoin", balance, new Vector2(34, 34), new Vector2(-55, 0));
             Image(coin, new Color(0.74f, 0.8f, 0.81f));
             Label("CoinMark", coin, "E", 22, new Vector2(28, 28), Vector2.zero, new Color(0.28f, 0.34f, 0.36f));
             var coinText = Label("m_text_EnergyCoins", panel, "20", 25, new Vector2(83, 36), Vector2.zero, Color.white);
-            Pin(coinText.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(67, -12));
+            Pin(coinText.rectTransform, Vector2.one, Vector2.one, new Vector2(-46, -12));
             var storageInstance = (GameObject)PrefabUtility.InstantiatePrefab(storage, panel);
             storageInstance.name = "m_item_Storage";
-            Pin((RectTransform)storageInstance.transform, new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(65, -5));
-            var offers = Rect("m_tf_Offers", panel, new Vector2(-246, 142), new Vector2(-1, -4));
+            Pin((RectTransform)storageInstance.transform, new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(90, -24));
+            var offers = Rect("m_tf_Offers", panel, new Vector2(-246, 142), new Vector2(-1, -6));
             offers.anchorMin = new Vector2(0, 0.5f);
             offers.anchorMax = new Vector2(1, 0.5f);
             for (var i = 0; i < 3; i++)
@@ -251,8 +251,10 @@ namespace FreshGuard.Editor
                 slotRect.anchoredPosition = new Vector2((i - 1) * 124, 0);
             }
             var refresh = Rect("m_btn_Refresh", panel, new Vector2(100, 95), Vector2.zero);
-            Pin(refresh, new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-64, -3));
-            var refreshImage = Image(refresh, new Color(1f, 0.77f, 0.16f), true);
+            Pin(refresh, new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-109, -8));
+            var refreshImage = Image(refresh, Color.white, true);
+            refreshImage.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/UISprites/Battle/Battle_refreshButtonpng.png");
+            if (refreshImage.sprite == null) throw new InvalidOperationException("缺少战斗刷新按钮素材。");
             var button = refresh.gameObject.AddComponent<Button>();
             button.targetGraphic = refreshImage;
             button.navigation = new Navigation { mode = Navigation.Mode.None };

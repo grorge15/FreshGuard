@@ -26,7 +26,7 @@ namespace GameLogic
             const string content = "m_rect_Content/";
             _playerCrown = FindChild(content + "m_rect_Player/m_img_Crown").gameObject;
             _opponentCrown = FindChild(content + "m_rect_Opponent/m_img_Crown").gameObject;
-            _victoryVs = FindChild(content + "m_text_VictoryVS").gameObject;
+            _victoryVs = FindChild(content + "m_img_VictoryVS").gameObject;
             _defeatVs = FindChild(content + "m_img_DefeatVS").gameObject;
             _victoryRewards = FindChild(content + "m_rect_Rewards/m_img_VictoryBG").gameObject;
             _defeatRewards = FindChild(content + "m_rect_Rewards/m_img_DefeatBG").gameObject;

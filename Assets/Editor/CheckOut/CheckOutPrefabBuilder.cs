@@ -15,6 +15,7 @@ namespace FreshGuard.Editor
     {
         public const string PrefabPath = "Assets/AssetRaw/UI/CheckOutUI.prefab";
         private const string Sprites = "Assets/AssetRaw/Actor/CheckOutScreen/Sprites/";
+        private const string CommonSprites = "Assets/AssetRaw/Actor/UISprites/General/";
         private static readonly Vector2 DesignSize = new Vector2(750, 1334);
 
         [MenuItem("FreshGuard/CheckOut/Build Prefab")]
@@ -46,11 +47,7 @@ namespace FreshGuard.Editor
             var content = Rect("m_rect_Content", root, DesignSize, Vector2.zero);
             Role(content, "m_rect_Player", "Res_playerBG", "玩家", new Vector2(-210, 72));
             Role(content, "m_rect_Opponent", "Res_enemyBG", "敌方", new Vector2(210, 72));
-            var vs = Label("m_text_VictoryVS", content, "VS", 100, new Vector2(210, 160), new Vector2(0, 60), new Color(1f, 0.71f, 0.05f));
-            vs.fontStyle = FontStyle.BoldAndItalic;
-            var outline = vs.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0.56f, 0.23f, 0.01f);
-            outline.effectDistance = new Vector2(3, -4);
+            CommonImage("m_img_VictoryVS", content, "U_winVS", new Vector2(170, 144), new Vector2(0, 60));
             Image("m_img_DefeatVS", content, "Res_loseVS", new Vector2(190, 160), new Vector2(0, 60)).gameObject.SetActive(false);
             var rewards = Rect("m_rect_Rewards", content, new Vector2(650, 215), new Vector2(0, -292));
             Image("m_img_VictoryBG", rewards, "Res_winResourceBG", new Vector2(650, 215), Vector2.zero);
@@ -64,8 +61,8 @@ namespace FreshGuard.Editor
             Label("m_text_Name", reward, "助力币", 24, new Vector2(155, 40), new Vector2(43, 20), ink);
             Label("m_text_Amount", reward, "—", 30, new Vector2(155, 40), new Vector2(43, -22), ink);
             Label("m_text_EmptyReward", rewards, "—", 30, new Vector2(190, 70), new Vector2(160, -18), ink);
-            BusinessButton(content, "m_btn_DoubleReward", "双倍奖励", new Vector2(-166, -487), new Color(1f, 0.7f, 0.12f));
-            BusinessButton(content, "m_btn_ReturnMain", "返回主界面", new Vector2(166, -487), new Color(0.12f, 0.48f, 0.92f));
+            BusinessButton(content, "m_btn_DoubleReward", "双倍奖励", "U_yellowButton", new Vector2(-166, -487), ink);
+            BusinessButton(content, "m_btn_ReturnMain", "返回主界面", "U_blueButton", new Vector2(166, -487), Color.white);
             return root.gameObject;
         }
 
@@ -94,10 +91,9 @@ namespace FreshGuard.Editor
             crown.gameObject.SetActive(displayName == "玩家");
         }
 
-        private static void BusinessButton(Transform parent, string name, string title, Vector2 position, Color color)
+        private static void BusinessButton(Transform parent, string name, string title, string sprite, Vector2 position, Color textColor)
         {
-            var image = Image(name, parent, null, new Vector2(300, 94), position);
-            image.color = color;
+            var image = CommonImage(name, parent, sprite, new Vector2(300, 120), position);
             image.raycastTarget = true;
             var button = image.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
@@ -106,7 +102,18 @@ namespace FreshGuard.Editor
             var colors = button.colors;
             colors.disabledColor = new Color(0.78f, 0.78f, 0.78f, 1f);
             button.colors = colors;
-            Label("m_text_Title", image.transform, title, 31, new Vector2(280, 76), Vector2.zero, Color.white);
+            Label("m_text_Title", image.transform, title, 31, new Vector2(280, 90), new Vector2(0, 7), textColor);
+        }
+
+        private static Image CommonImage(string name, Transform parent, string sprite, Vector2 size, Vector2 position)
+        {
+            var image = Rect(name, parent, size, position).gameObject.AddComponent<Image>();
+            image.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(CommonSprites + sprite + ".png");
+            if (image.sprite == null) throw new InvalidOperationException("通用UI图片缺失：" + sprite);
+            image.type = UnityEngine.UI.Image.Type.Simple;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            return image;
         }
 
         private static RectTransform Rect(string name, Transform parent, Vector2 size, Vector2 position)
@@ -162,6 +169,7 @@ namespace FreshGuard.Editor
         {
             var scene = EditorSceneManager.NewPreviewScene();
             GameObject root = null;
+            Camera camera = null;
             RenderTexture target = null;
             Texture2D capture = null;
             Font font = null;
@@ -172,7 +180,7 @@ namespace FreshGuard.Editor
                 SceneManager.MoveGameObjectToScene(root, scene);
                 var cameraObject = new GameObject("CheckOutPreviewCamera", typeof(Camera));
                 SceneManager.MoveGameObjectToScene(cameraObject, scene);
-                var camera = cameraObject.GetComponent<Camera>();
+                camera = cameraObject.GetComponent<Camera>();
                 camera.orthographic = true;
                 camera.orthographicSize = DesignSize.y / 2f;
                 camera.transform.position = new Vector3(0, 0, -10);
@@ -202,6 +210,7 @@ namespace FreshGuard.Editor
             finally
             {
                 RenderTexture.active = previous;
+                if (camera != null) camera.targetTexture = null;
                 if (capture != null) Object.DestroyImmediate(capture);
                 if (target != null) { target.Release(); Object.DestroyImmediate(target); }
                 if (font != null) Object.DestroyImmediate(font);
@@ -216,7 +225,7 @@ namespace FreshGuard.Editor
             var content = root.Find("m_rect_Content");
             content.Find("m_rect_Player/m_img_Crown").gameObject.SetActive(victory);
             content.Find("m_rect_Opponent/m_img_Crown").gameObject.SetActive(!victory);
-            content.Find("m_text_VictoryVS").gameObject.SetActive(victory);
+            content.Find("m_img_VictoryVS").gameObject.SetActive(victory);
             content.Find("m_img_DefeatVS").gameObject.SetActive(!victory);
             content.Find("m_rect_Rewards/m_img_VictoryBG").gameObject.SetActive(victory);
             content.Find("m_rect_Rewards/m_img_DefeatBG").gameObject.SetActive(!victory);

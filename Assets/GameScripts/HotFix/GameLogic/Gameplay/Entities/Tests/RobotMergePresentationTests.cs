@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using GameConfig;
 using Luban;
@@ -10,6 +11,64 @@ namespace GameLogic.Tests
 {
     public class RobotMergePresentationTests
     {
+        [TestCase(501)]
+        [TestCase(502)]
+        [TestCase(503)]
+        [TestCase(504)]
+        [TestCase(505)]
+        [TestCase(601)]
+        [TestCase(602)]
+        [TestCase(603)]
+        public void BoardRobotRendersConfiguredIconWithLevelAndDragFeedback(int configId)
+        {
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
+                Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            var config = tables.TbRobot.Get(configId);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab");
+            using (var registry = new BattleEntityRegistry())
+            {
+                var robot = registry.CreateRobotFromConfig(config, BattleSide.Player);
+                robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(1, 1));
+                var instance = Object.Instantiate(prefab);
+                try
+                {
+                    var view = instance.GetComponent<RobotView>();
+                    view.Bind(registry, robot.InstanceId);
+                    var iconNode = instance.transform.Find("RobotIcon");
+                    Assert.IsNotNull(iconNode, "盘面必须实际显示新 Icon，不能只替换商店资源。");
+                    var icon = iconNode.GetComponent<SpriteRenderer>();
+                    Assert.AreSame(AssetDatabase.LoadAssetAtPath<Sprite>(
+                        "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"), icon.sprite);
+                    CollectionAssert.AreEquivalent(new[] { icon },
+                        instance.GetComponentsInChildren<SpriteRenderer>(true).Where(renderer => renderer.enabled));
+                    Assert.AreEqual(Color.white, icon.color);
+                    Assert.IsTrue(robot.TryUpgrade());
+                    view.Render(robot);
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(2), icon.color);
+                    view.SetMergeCandidate(true);
+                    Assert.AreEqual(Color.Lerp(RobotLevelStyle.ColorForLevel(2), Color.cyan, 0.65f), icon.color);
+                    view.SetMergeCandidate(false);
+                    robot.TrySetDragging(true);
+                    view.Render(robot);
+                    Assert.IsFalse(instance.GetComponentsInChildren<SpriteRenderer>(true).Any(renderer => renderer.enabled));
+                    Assert.IsFalse(view.GetPhysicalCollider().enabled);
+                    robot.TrySetDragging(false);
+                    view.Render(robot);
+                    Assert.IsTrue(icon.enabled);
+                    Assert.IsTrue(view.GetPhysicalCollider().enabled);
+                    foreach (var cell in robot.Definition.Cells)
+                    {
+                        var marker = instance.transform.Find("Cell_" + cell.Column + "_" + cell.Row);
+                        BoardCoordinate selected;
+                        Assert.IsTrue(view.TryGetNearestOccupiedCell(marker.position, out selected));
+                        Assert.AreEqual(cell, selected, "新外观不能改变拖拽选格。");
+                    }
+                }
+                finally { Object.DestroyImmediate(instance); }
+            }
+        }
+
         [Test]
         public void RobotLevelUsesColorWithoutWorldOrShopLevelText()
         {
