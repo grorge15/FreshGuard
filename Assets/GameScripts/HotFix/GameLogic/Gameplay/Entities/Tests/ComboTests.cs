@@ -41,6 +41,157 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void ConfiguredThresholdRequestsBerserkAtThreeInsteadOfFifty()
+        {
+            ConfigureGlobals(new Dictionary<int, float> { { 10, 3 } });
+            Bind();
+            var requests = 0;
+            _ball.ComboThresholdReached += ball => { requests++; ball.SetBerserk(true); };
+            Hit(Robot()); Hit(Robot());
+            Assert.AreEqual(0, requests);
+            Hit(Robot());
+            Assert.AreEqual(1, requests);
+        }
+
+        [Test]
+        public void ConfiguredSpeedChangesWithBerserkAndRetainsMapAndDragMultipliers()
+        {
+            ConfigureGlobals(new Dictionary<int, float> { { 2, 3 }, { 3, 9 } });
+            _ball.SetMapScale(2f);
+            _ball.LaunchAt(Vector2.zero, 45f);
+            Assert.AreEqual(6f, _ball.EffectiveSpeed);
+            _ball.SetDragging(true);
+            Assert.AreEqual(4.2f, _ball.EffectiveSpeed, 0.0001f);
+            _ball.SetBerserk(true);
+            Assert.AreEqual(18f, _ball.EffectiveSpeed);
+            _ball.SetBerserk(false);
+            Assert.AreEqual(4.2f, _ball.EffectiveSpeed, 0.0001f);
+        }
+
+        [Test]
+        public void ConfiguredLaunchRangeAndNoInteractionTimeoutAreUsed()
+        {
+            ConfigureGlobals(new Dictionary<int, float> { { 20, 0.03f } }, new[] { 180, 180 });
+            _ball.Launch();
+            Assert.That(_ball.CurrentDirection.x, Is.EqualTo(-1f).Within(0.0001f));
+            _ball.GetComponent<Rigidbody2D>().position = Vector2.one * 5f;
+            Invoke(_ball, "FixedUpdate"); Invoke(_ball, "FixedUpdate");
+            Assert.That(_ball.GetComponent<Rigidbody2D>().position.magnitude, Is.LessThan(0.01f));
+            Assert.Less(_ball.SecondsSinceEffectiveInteraction, 0.03f);
+        }
+
+        [Test]
+        public void ConfiguredLowSpeedTimeoutRelaunchesAndFreezeDoesNotConsumeIt()
+        {
+            ConfigureGlobals(new Dictionary<int, float> { { 19, 0.03f } }, new[] { 90, 90 });
+            _ball.LaunchAt(Vector2.zero, 0f);
+            var body = _ball.GetComponent<Rigidbody2D>();
+            body.position = Vector2.one * 5f;
+            _ball.SetFrozen(true);
+            for (var i = 0; i < 5; i++) Invoke(_ball, "FixedUpdate");
+            Assert.AreEqual(Vector2.one * 5f, body.position);
+            _ball.SetFrozen(false);
+            body.velocity = Vector2.zero; Invoke(_ball, "FixedUpdate");
+            body.velocity = Vector2.zero; Invoke(_ball, "FixedUpdate");
+            Assert.That(body.position.magnitude, Is.LessThan(0.01f));
+            Assert.That(_ball.CurrentDirection.y, Is.EqualTo(1f).Within(0.0001f));
+        }
+
+        private GameConfig.Tables ConfigureGlobals(Dictionary<int, float> overrides, int[] launchRange = null)
+        {
+            var tables = WaveTestData.SingleWaveTables();
+            var buf = new ByteBuf(); buf.WriteSize(tables.TbGlobal.DataList.Count);
+            foreach (var row in tables.TbGlobal.DataList)
+            {
+                buf.WriteInt(row.Id); buf.WriteFloat(overrides.TryGetValue(row.Id, out var value) ? value : row.Value);
+                var array = row.Id == 21 && launchRange != null ? launchRange : row.IntArrVal;
+                buf.WriteSize(array.Length); foreach (var item in array) buf.WriteInt(item);
+            }
+            tables.TbGlobal = new GameConfig.globalcfg.TbGlobal(buf);
+            Invoke(_ball, "ConfigureFromTables", tables);
+            return tables;
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(3)]
+        public void ConfiguredExtraBallCountControlsSpawningAndOwnedClonesAreReleased(int count)
+        {
+            var tables = ConfigureGlobals(new Dictionary<int, float> { { 35, count }, { 10, 1 } });
+            _ball.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+            AssignPopup();
+            var opponentObject = UnityEngine.Object.Instantiate(_ball.gameObject);
+            _objects.Add(opponentObject);
+            var opponent = opponentObject.GetComponent<PhysicalCollisionBall>();
+            opponent.GlobalValueProvider = _ball.GlobalValueProvider;
+            var bootstrap = NewObject("ConfiguredBootstrap").AddComponent<PlacementBoardsBootstrap>();
+            Set(bootstrap, "_ball", _ball); Set(bootstrap, "_opponentBall", opponent);
+            bootstrap.ConfigureFromTables(tables);
+            bootstrap.BindBattle(2, () => _running, _registry, _popups);
+            try
+            {
+                var session = Get(bootstrap, "_player");
+                var extras = (PhysicalCollisionBall[])session.GetType().GetField("Temporary").GetValue(session);
+                foreach (var extra in extras)
+                {
+                    // EditMode does not dispatch Awake for these runtime-only clones.
+                    if (Get(extra, "_body") == null) Invoke(extra, "Awake");
+                    extra.GlobalValueProvider = _ball.GlobalValueProvider;
+                }
+                _ball.LaunchAt(Vector2.zero, 45f); Hit(Robot());
+                Assert.IsTrue(bootstrap.IsBerserk(BattleSide.Player));
+                Assert.AreEqual(count, extras.Length);
+                foreach (var extra in extras)
+                {
+                    Assert.IsTrue(extra.IsLaunched && extra.IsBerserk);
+                    Assert.AreEqual(tables.TbGlobal.Get(3).Value, extra.Speed);
+                }
+                bootstrap.AdvanceBerserk(6.1f);
+                Assert.IsFalse(_ball.IsBerserk);
+                foreach (var extra in extras) Assert.IsFalse(extra.IsLaunched);
+                bootstrap.UnbindBattle();
+                foreach (var extra in extras) Assert.IsTrue(extra == null, "动态创建的临时球必须随本局销毁。");
+            }
+            finally { bootstrap.UnbindBattle(); }
+        }
+
+        [TestCase(2, 0f)]
+        [TestCase(3, -1f)]
+        [TestCase(10, 1.5f)]
+        [TestCase(19, 0f)]
+        [TestCase(35, -1f)]
+        [TestCase(49, -1f)]
+        public void InvalidGlobalMotionRuleFailsBeforeLaunch(int id, float value)
+        {
+            Assert.Throws<TargetInvocationException>(() => ConfigureGlobals(new Dictionary<int, float> { { id, value } }));
+            Assert.IsFalse(_ball.IsLaunched);
+        }
+
+        [Test]
+        public void ConfiguredRageStayIntervalAllowsAnotherRequestWithoutAnotherCombo()
+        {
+            ConfigureGlobals(new Dictionary<int, float> { { 16, 0.4f } });
+            _ball.BindRobotContacts(_registry); _ball.SetBerserk(true); _ball.LaunchAt(Vector2.zero, 45f);
+            var requests = 0; _ball.RobotContactDetected += (ball, id) => requests++;
+            var view = Robot(); Hit(view); Hit(view);
+            Assert.AreEqual(1, requests);
+            Invoke(_ball, "AdvanceContactTime", 0.41f); Hit(view);
+            Assert.AreEqual(2, requests); Assert.AreEqual(0, Count);
+        }
+
+        [Test]
+        public void ConfiguredReentryProtectionBlocksAnotherRageUntilBattleTimeElapses()
+        {
+            ConfigureGlobals(new Dictionary<int, float> { { 10, 2 }, { 49, 0.5f } });
+            Bind(); var requests = 0;
+            _ball.ComboThresholdReached += ball => { requests++; ball.SetBerserk(true); };
+            Hit(Robot()); Hit(Robot()); Assert.AreEqual(1, requests);
+            _ball.SetBerserk(false);
+            Hit(Robot()); Hit(Robot()); Assert.AreEqual(1, requests);
+            Advance(0.51f); Hit(Robot()); Hit(Robot()); Assert.AreEqual(2, requests);
+        }
+
+        [Test]
         public void GeneratedGlobalContainsOnePointFiveSecondComboTimeout()
         {
             var asset = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/AssetRaw/Configs/bytes/globalcfg_tbglobal.bytes");

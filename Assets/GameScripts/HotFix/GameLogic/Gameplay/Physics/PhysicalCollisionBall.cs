@@ -40,6 +40,10 @@ namespace GameLogic
         private float _comboTimeout;
         private double _comboElapsed;
         private bool _reconcileAfterFreeze;
+        private BallGlobalRules _rules;
+        private Vector2 _launchPosition;
+        private float _lowSpeedElapsed;
+        private float _rageReentryRemaining;
         private readonly Dictionary<int, RobotContact> _robotContacts = new Dictionary<int, RobotContact>();
         private readonly HashSet<int> _robotHitsThisStep = new HashSet<int>();
         private readonly List<int> _endedRobotContacts = new List<int>();
@@ -52,6 +56,7 @@ namespace GameLogic
             public Collider2D Collider;
             public bool Counted;
             public bool AttackHandled;
+            public float StayElapsed;
         }
 
         private Vector3? _mapOriginalScale;
@@ -62,12 +67,12 @@ namespace GameLogic
         public int ComboCount { get; private set; }
         public Func<int, float> GlobalValueProvider { get; set; }
         public Vector2 CurrentDirection => _direction;
-        public float Speed => speed;
+        public float Speed => _rules == null ? speed : IsBerserk ? _rules.RageSpeed : _rules.NormalSpeed;
         public float EffectiveSpeed
         {
             get
             {
-                return speed * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
+                return Speed * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
             }
         }
         public int BounceCount { get; private set; }
@@ -79,6 +84,30 @@ namespace GameLogic
         public event Action<PhysicalCollisionBall> EffectiveInteraction;
         public event Action<PhysicalCollisionBall> ComboThresholdReached;
         public event Action<PhysicalCollisionBall, int> RobotContactDetected;
+
+        public void ConfigureFromTables(GameConfig.Tables tables) => Configure(BallGlobalRules.FromTables(tables));
+
+        public void Configure(BallGlobalRules rules)
+        {
+            if (_launched) throw new InvalidOperationException("能源球规则只能在发射前装配。");
+            _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        }
+
+        internal PhysicalCollisionBall CreateTemporary()
+        {
+            var ball = Instantiate(this, transform.parent);
+            ball.gameObject.SetActive(false);
+            if (ball.gameObject.scene != gameObject.scene)
+                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(ball.gameObject, gameObject.scene);
+            ball._mapScale = _mapScale;
+            ball._mapOriginalScale = _mapOriginalScale;
+            ball.GlobalValueProvider = GlobalValueProvider;
+            return ball;
+        }
+
+        public float SampleLaunchAngle() => _rules == null
+            ? UnityEngine.Random.Range(Mathf.Min(initialAngleMin, initialAngleMax), Mathf.Max(initialAngleMin, initialAngleMax))
+            : UnityEngine.Random.Range((float)_rules.LaunchAngleMin, _rules.LaunchAngleMax);
 
         public void SetMapScale(float scale)
         {
@@ -140,8 +169,17 @@ namespace GameLogic
                 {
                     ReconcileProtectedContacts();
                     ReconcileRobotContacts();
+                    AdvanceContactTime(Time.fixedDeltaTime);
                     AdvanceComboTime(Time.fixedDeltaTime);
                     SecondsSinceEffectiveInteraction += Time.fixedDeltaTime;
+                    if (_rules != null)
+                    {
+                        _lowSpeedElapsed = _body.velocity.magnitude < _rules.LowSpeedThreshold * _mapScale
+                            ? _lowSpeedElapsed + Time.fixedDeltaTime : 0f;
+                        if (_lowSpeedElapsed >= _rules.LowSpeedDuration ||
+                            SecondsSinceEffectiveInteraction >= _rules.NoInteractionDuration)
+                            LaunchAt(_launchPosition, SampleLaunchAngle());
+                    }
                     _body.velocity = _direction * EffectiveSpeed;
                 }
             }
@@ -162,6 +200,7 @@ namespace GameLogic
             IsBerserk = false;
             _frozen = false;
             SecondsSinceEffectiveInteraction = 0f;
+            _rageReentryRemaining = 0f;
         }
 
         public void BindCombo(BattleEntityRegistry registry, Transform popupRoot)
@@ -202,6 +241,7 @@ namespace GameLogic
 
         public void SetBerserk(bool berserk)
         {
+            if (!berserk && IsBerserk) _rageReentryRemaining = _rules?.ReentryBlockSeconds ?? 0f;
             if (berserk && !IsBerserk)
             {
                 ResetComboCount();
@@ -297,6 +337,7 @@ namespace GameLogic
             _launched = false;
             _dragging = false;
             IsBerserk = false;
+            _rageReentryRemaining = 0f;
             RefreshSprite();
             foreach (var contact in _protectedContacts.Values) IgnoreRobot(contact, false);
             _protectedContacts.Clear();
@@ -307,8 +348,7 @@ namespace GameLogic
 
         public void Launch()
         {
-            float angle = UnityEngine.Random.Range(Mathf.Min(initialAngleMin, initialAngleMax), Mathf.Max(initialAngleMin, initialAngleMax));
-            LaunchAt(spawnPosition, angle);
+            LaunchAt(spawnPosition, SampleLaunchAngle());
         }
 
         public void LaunchAt(Vector2 position, float angle)
@@ -317,7 +357,7 @@ namespace GameLogic
             try
             {
                 ValidateConfig();
-                if (float.IsNaN(speed) || float.IsInfinity(speed) || speed <= 0f || radius <= 0f)
+                if (float.IsNaN(Speed) || float.IsInfinity(Speed) || Speed <= 0f || radius <= 0f)
                     throw new InvalidOperationException("速度与半径必须为正数。");
                 if (float.IsNaN(initialAngleMin) || float.IsNaN(initialAngleMax) ||
                     float.IsInfinity(initialAngleMin) || float.IsInfinity(initialAngleMax))
@@ -329,6 +369,8 @@ namespace GameLogic
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
                 _body.simulated = true;
                 _body.position = position;
+                _launchPosition = position;
+                _lowSpeedElapsed = 0f;
                 _body.velocity = _direction * EffectiveSpeed;
                 BounceCount = 0;
                 SecondsSinceEffectiveInteraction = 0f;
@@ -399,9 +441,11 @@ namespace GameLogic
                 _robotContacts.Add(robot.InstanceId, contact);
             }
             if (_protectedContacts.ContainsKey(robot.InstanceId)) return;
-            if (!contact.AttackHandled)
+            if (!contact.AttackHandled || IsBerserk && _rules != null && contact.StayElapsed >= _rules.RageStayInterval)
             {
                 contact.AttackHandled = true;
+                contact.StayElapsed = 0f;
+                SecondsSinceEffectiveInteraction = 0f;
                 RobotContactDetected?.Invoke(this, robot.InstanceId);
                 // A contact notification can synchronously settle and dispose the battle.
                 if (!IsContactRunning) return;
@@ -409,15 +453,23 @@ namespace GameLogic
             if (IsBerserk) { contact.Counted = true; return; }
             if (!IsComboRunning || !bounced || contact.Counted || !_robotHitsThisStep.Add(robot.InstanceId)) return;
             contact.Counted = true;
+            if (_rageReentryRemaining > 0f) return;
             ComboCount++;
             _comboElapsed = 0d;
             if (ComboCount <= 50 && ComboCount % 10 == 0) ShowComboPopup();
-            if (ComboCount == 50) ComboThresholdReached?.Invoke(this);
+            if (ComboCount == (_rules?.ComboTriggerCount ?? 50)) ComboThresholdReached?.Invoke(this);
+        }
+
+        private void AdvanceContactTime(float deltaTime)
+        {
+            foreach (var contact in _robotContacts.Values) contact.StayElapsed += deltaTime;
         }
 
         private void AdvanceComboTime(float deltaTime)
         {
-            if (!IsComboRunning || IsBerserk || ComboCount == 0) return;
+            if (!IsComboRunning || IsBerserk) return;
+            _rageReentryRemaining = Mathf.Max(0f, _rageReentryRemaining - deltaTime);
+            if (ComboCount == 0) return;
             _comboElapsed += deltaTime;
             if (_comboElapsed > _comboTimeout) ResetComboCount();
         }

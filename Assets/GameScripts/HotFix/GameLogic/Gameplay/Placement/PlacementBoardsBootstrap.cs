@@ -16,6 +16,7 @@ namespace GameLogic
         private Func<bool> _runningGate;
         private long _battleId;
         private float _berserkDuration;
+        private BallGlobalRules _rules;
         private BallSession _player;
         private BallSession _opponent;
 
@@ -23,6 +24,7 @@ namespace GameLogic
         {
             public PhysicalCollisionBall Main;
             public PhysicalCollisionBall[] Temporary;
+            public int AuthoredCount;
             public bool Berserk;
             public float Remaining;
         }
@@ -35,6 +37,14 @@ namespace GameLogic
         public bool IsBerserk(BattleSide side) => Session(side)?.Berserk == true;
         public float BerserkRemaining(BattleSide side) => Session(side)?.Remaining ?? 0f;
         private BallSession Session(BattleSide side) => side == BattleSide.Player ? _player : _opponent;
+
+        public void ConfigureFromTables(GameConfig.Tables tables)
+        {
+            if (_launched) throw new InvalidOperationException("发射后不能修改能源球规则。");
+            _rules = BallGlobalRules.FromTables(tables);
+            _ball.Configure(_rules);
+            _opponentBall.Configure(_rules);
+        }
 
         public void BindBattle(long battleId, System.Func<bool> runningGate,
             BattleEntityRegistry registry, Transform popupRoot)
@@ -55,16 +65,31 @@ namespace GameLogic
 
         private BallSession BindSession(PhysicalCollisionBall main, PhysicalCollisionBall[] temporary, BattleEntityRegistry registry)
         {
-            if (temporary == null || temporary.Length != 2 || temporary[0] == null || temporary[1] == null ||
-                temporary[0] == temporary[1] || temporary[0] == main || temporary[1] == main)
-                throw new InvalidOperationException("每方必须装配两颗不同的临时暴走球。");
-            var session = new BallSession { Main = main, Temporary = temporary };
-            foreach (var ball in temporary)
+            var count = _rules?.ExtraBallCount ?? 2;
+            var authoredCount = Mathf.Min(temporary?.Length ?? 0, count);
+            for (var i = 0; i < authoredCount; i++)
             {
-                ball.gameObject.SetActive(false);
-                ball.BindBattle(_battleId, main.Side, _runningGate);
-                ball.BindRobotContacts(registry);
-                ball.RobotContactDetected += ForwardContact;
+                if (temporary[i] == null || temporary[i] == main || Array.IndexOf(temporary, temporary[i]) != i)
+                    throw new InvalidOperationException("临时暴走球引用必须有效且不能重复。");
+            }
+            var session = new BallSession { Main = main, Temporary = new PhysicalCollisionBall[count], AuthoredCount = authoredCount };
+            try
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    var ball = i < authoredCount ? temporary[i] : main.CreateTemporary();
+                    session.Temporary[i] = ball;
+                    ball.gameObject.SetActive(false);
+                    if (_rules != null) ball.Configure(_rules);
+                    ball.BindBattle(_battleId, main.Side, _runningGate);
+                    ball.BindRobotContacts(registry);
+                    ball.RobotContactDetected += ForwardContact;
+                }
+            }
+            catch
+            {
+                DetachSession(session);
+                throw;
             }
             main.RobotContactDetected += ForwardContact;
             main.ComboThresholdReached += EnterBerserk;
@@ -98,7 +123,7 @@ namespace GameLogic
                 IgnoreSessionBalls(session);
                 foreach (var ball in session.Temporary)
                 {
-                    ball.LaunchAt(position, UnityEngine.Random.Range(0f, 360f));
+                    ball.LaunchAt(position, ball.SampleLaunchAngle());
                     if (!ball.IsLaunched) throw new InvalidOperationException("临时暴走球发射失败。");
                 }
                 IgnoreSessionBalls(session);
@@ -112,12 +137,14 @@ namespace GameLogic
 
         private static void IgnoreSessionBalls(BallSession session)
         {
-            var first = session.Main.GetComponent<Collider2D>();
-            var second = session.Temporary[0].GetComponent<Collider2D>();
-            var third = session.Temporary[1].GetComponent<Collider2D>();
-            Physics2D.IgnoreCollision(first, second, true);
-            Physics2D.IgnoreCollision(first, third, true);
-            Physics2D.IgnoreCollision(second, third, true);
+            var main = session.Main.GetComponent<Collider2D>();
+            for (var i = 0; i < session.Temporary.Length; i++)
+            {
+                var current = session.Temporary[i].GetComponent<Collider2D>();
+                Physics2D.IgnoreCollision(main, current, true);
+                for (var j = 0; j < i; j++)
+                    Physics2D.IgnoreCollision(current, session.Temporary[j].GetComponent<Collider2D>(), true);
+            }
         }
 
         public void AdvanceBerserk(float deltaTime)
@@ -131,9 +158,9 @@ namespace GameLogic
         private void AdvanceSession(BallSession session, float deltaTime)
         {
             if (session == null || !session.Berserk) return;
-            if (!session.Main.IsLaunched || session.Temporary[0] == null || session.Temporary[1] == null ||
-                !session.Temporary[0].IsLaunched || !session.Temporary[1].IsLaunched)
-            { EndBerserk(session); return; }
+            if (!session.Main.IsLaunched) { EndBerserk(session); return; }
+            foreach (var ball in session.Temporary)
+                if (ball == null || !ball.IsLaunched) { EndBerserk(session); return; }
             session.Remaining = Mathf.Max(0f, session.Remaining - deltaTime);
             if (session.Remaining <= 0f) EndBerserk(session);
         }
@@ -172,14 +199,22 @@ namespace GameLogic
                 session.Main.RobotContactDetected -= ForwardContact;
                 session.Main.ComboThresholdReached -= EnterBerserk;
             }
-            foreach (var ball in session.Temporary) if (ball != null) ball.RobotContactDetected -= ForwardContact;
+            for (var i = 0; i < session.Temporary.Length; i++)
+            {
+                var ball = session.Temporary[i];
+                if (ball == null) continue;
+                ball.RobotContactDetected -= ForwardContact;
+                if (i < session.AuthoredCount) continue;
+                if (Application.isPlaying) Destroy(ball.gameObject);
+                else DestroyImmediate(ball.gameObject);
+            }
         }
 
         public bool LaunchBoth(PlacementBoardView player, PlacementBoardView opponent)
         {
             if (_launched) return true;
             if (_ball == null || _opponentBall == null) return false;
-            var angle = UnityEngine.Random.Range(20f, 70f);
+            var angle = _ball.SampleLaunchAngle();
             _ball.LaunchAt(player.transform.position, angle);
             _opponentBall.LaunchAt(opponent.transform.position, angle);
             _launched = _ball.IsLaunched && _opponentBall.IsLaunched;

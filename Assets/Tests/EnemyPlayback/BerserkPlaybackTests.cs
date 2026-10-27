@@ -2,8 +2,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using GameConfig;
+using Luban;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -43,6 +46,45 @@ namespace GameLogic.Tests
         {
             _bootstrap.UnbindBattle(); _registry.Dispose(); _balls.Clear(); _robots.Clear();
             yield return SceneManager.UnloadSceneAsync(_scene);
+        }
+
+        [UnityTest]
+        public IEnumerator GlobalRulesControlRealTemporaryBallsAndTheirLifetime()
+        {
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath,
+                "AssetRaw/Configs/bytes", name + ".bytes"))));
+            var buf = new ByteBuf(); buf.WriteSize(tables.TbGlobal.DataList.Count);
+            foreach (var row in tables.TbGlobal.DataList)
+            {
+                buf.WriteInt(row.Id);
+                buf.WriteFloat(row.Id == 35 ? 3f : row.Id == 10 ? 2f : row.Id == 15 ? 0.2f : row.Value);
+                var range = row.Id == 21 ? new[] { 270, 270 } : row.IntArrVal;
+                buf.WriteSize(range.Length); foreach (var value in range) buf.WriteInt(value);
+            }
+            tables.TbGlobal = new GameConfig.globalcfg.TbGlobal(buf);
+            _bootstrap.UnbindBattle();
+            _bootstrap.PlayerBall.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+            _bootstrap.OpponentBall.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+            _bootstrap.ConfigureFromTables(tables);
+            _bootstrap.BindBattle(100, () => _running, _registry, NewObject("ConfiguredPopups").transform);
+            var robot = Robot("I"); var main = _bootstrap.PlayerBall;
+            Approach(main, robot);
+            typeof(PhysicalCollisionBall).GetProperty("ComboCount").SetValue(main, 1);
+            TickUntil(() => main.IsBerserk);
+            var active = _scene.GetRootGameObjects().SelectMany(go => go.GetComponentsInChildren<PhysicalCollisionBall>(true))
+                .Where(ball => ball.Side == BattleSide.Player && ball.IsLaunched).ToArray();
+            Assert.AreEqual(4, active.Length, "配置3颗额外球时应有主球加3颗临时球。");
+            foreach (var ball in active)
+            {
+                Assert.AreEqual(tables.TbGlobal.Get(3).Value, ball.Speed);
+                Assert.AreEqual(_scene, ball.gameObject.scene);
+                if (ball != main) Assert.That(ball.CurrentDirection.y, Is.EqualTo(-1f).Within(0.0001f));
+            }
+            _bootstrap.AdvanceBerserk(0.21f);
+            Assert.IsFalse(main.IsBerserk);
+            Assert.AreEqual(tables.TbGlobal.Get(2).Value, main.Speed);
+            Assert.IsTrue(active.Where(ball => ball != main).All(ball => !ball.IsLaunched && !ball.gameObject.activeSelf));
+            yield return null;
         }
 
         [UnityTest]
@@ -188,7 +230,7 @@ namespace GameLogic.Tests
             var go = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab"));
             SceneManager.MoveGameObjectToScene(go, _scene); go.name = name;
             var ball = go.GetComponent<PhysicalCollisionBall>(); ball.Stop(); go.transform.localScale = Vector3.one;
-            ball.GlobalValueProvider = key => key == 41 ? 6f : key == 34 ? 1.5f : 0f;
+            ball.GlobalValueProvider = key => key == 15 ? 6f : key == 34 ? 1.5f : 0f;
             _balls.Add(ball); return ball;
         }
         private RobotView Robot(string shape, BattleSide side = BattleSide.Player)

@@ -158,6 +158,7 @@ namespace GameLogic
                 var popupRoot = new GameObject("ComboPopups");
                 popupRoot.transform.SetParent(transform, false);
                 _comboPopupRoot = popupRoot.transform;
+                _bootstrap.ConfigureFromTables(tables);
                 _bootstrap.BindBattle(context.BattleId, () => IsCombatRunning && Context == context,
                     context.Registry, _comboPopupRoot);
                 _bootstrap.RobotContactDetected += OnRobotContact;

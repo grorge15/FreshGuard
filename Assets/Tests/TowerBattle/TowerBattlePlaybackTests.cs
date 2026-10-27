@@ -35,7 +35,7 @@ namespace GameLogic.Tests
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             var context = new BattleShopContext(ShopRules.FromTables(tables),
                 new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, tables.TbRobot.Get);
-            var session = new TowerBattleSession(context.BattleId, context.Registry, 100);
+            var session = new TowerBattleSession(context.BattleId, context.Registry, 5);
             var root = new GameObject("TowerBattlePlayback");
             var controller = root.AddComponent<BattleShopSceneController>();
             SetField(controller, "<Context>k__BackingField", context);

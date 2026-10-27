@@ -8,6 +8,19 @@ namespace GameLogic.Tests
 {
     public sealed class TowerEntityTests
     {
+        [Test]
+        public void SessionUsesConfiguredMaxHpInsteadOfConstantFive()
+        {
+            using (var registry = new BattleEntityRegistry())
+            using (var session = new TowerBattleSession(1, registry, 17))
+            {
+                Assert.AreEqual(17, session.PlayerTower.MaxHp);
+                Assert.AreEqual(17, session.OpponentTower.CurrentHp);
+                Assert.AreEqual(DamageResult.Damaged, session.ApplyDamage(1, BattleSide.Player, 5));
+                Assert.AreEqual(12, session.PlayerTower.CurrentHp);
+            }
+        }
+
         [TestCase(BattleSide.Player)]
         [TestCase(BattleSide.Opponent)]
         public void DamageCommitsHealthAndPublishesDeathExactlyOnce(BattleSide side)
@@ -108,7 +121,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(1, notifications);
                 var other = side == BattleSide.Player ? session.OpponentTower : session.PlayerTower;
                 Assert.AreEqual(DamageResult.Ignored, registry.ApplyTowerDamage(other.InstanceId, 100));
-                Assert.AreEqual(5, other.CurrentHp);
+                Assert.AreEqual(100, other.CurrentHp);
                 session.Dispose();
                 Assert.AreEqual(1, notifications);
             }
@@ -131,7 +144,7 @@ namespace GameLogic.Tests
             using (var session = new TowerBattleSession(2, registry, 100))
             {
                 Assert.AreEqual(DamageResult.Ignored, session.ApplyDamage(1, BattleSide.Player, 100));
-                Assert.AreEqual(5, session.PlayerTower.CurrentHp);
+                Assert.AreEqual(100, session.PlayerTower.CurrentHp);
             }
         }
 
