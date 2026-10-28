@@ -49,12 +49,14 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
-        public IEnumerator PlacementAtWallUsesPassThroughProtectionInsteadOfTeleportingOutsideBoard()
+        public IEnumerator PlacementAtWallEscapesInsideBoardWithoutTeleporting()
         {
-            var board = NewObject("WallOverlapBoard").AddComponent<PlacementBoardView>();
+            var board = RecoveryBoard("WallOverlapBoard");
             var placed = Robot("I");
             placed.transform.SetParent(board.transform, false);
-            placed.transform.localPosition = new Vector3(board.Size.x * 0.5f - 0.2f, 0, 0);
+            placed.transform.position = board.GetCellWorldPosition(new BoardCoordinate(4, 2));
+            Assert.IsTrue(board.Model.TryPlace(new BoardCoordinate(4, 1),
+                new PlaceableDefinition(placed.InstanceId.ToString(), 1, 3)));
             var main = _bootstrap.PlayerBall;
             main.LaunchAt(placed.transform.position, 0f);
             Physics2D.SyncTransforms();
@@ -63,40 +65,114 @@ namespace GameLogic.Tests
             Assert.AreEqual(position, main.GetComponent<Rigidbody2D>().position);
             Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), placed.GetPhysicalCollider()));
             Assert.IsTrue(main.IsLaunched);
-            Assert.AreEqual(Vector2.right, main.CurrentDirection);
-            // 模拟墙面反弹后的向内运动：穿出机器人后必须恢复实体碰撞。
-            main.LaunchAt(position, 180f);
-            for (var step = 0; step < 12; step++) Tick();
+            Assert.AreEqual(PlacementRecoveryState.Escaping, main.RecoveryState);
+            for (var step = 0; step < 100 && main.RecoveryState != PlacementRecoveryState.None; step++)
+            {
+                Tick();
+                var p = board.transform.InverseTransformPoint(main.GetComponent<Rigidbody2D>().position);
+                Assert.Less(Mathf.Abs(p.x) + main.WorldRadius, board.Size.x * 0.5f);
+                Assert.Less(Mathf.Abs(p.y) + main.WorldRadius, board.Size.y * 0.5f);
+            }
+            Assert.AreEqual(PlacementRecoveryState.None, main.RecoveryState);
             Assert.IsFalse(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
             Assert.IsFalse(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), placed.GetPhysicalCollider()));
+            Assert.AreEqual(1, _contacts, "放置接触只请求一次攻击。");
             yield return null;
         }
 
         [UnityTest]
-        public IEnumerator PlacedRobotEjectsBallPastNeighborsAndPhysicsKeepsMovingForward()
+        public IEnumerator PlacedRobotEscapesGraduallyWithoutCrossingOccupiedNeighbor()
         {
-            var board = NewObject("OverlapBoard").AddComponent<PlacementBoardView>();
+            var board = RecoveryBoard("OverlapBoard");
             var placed = Robot("I");
             var neighbor = Robot("I");
             placed.transform.SetParent(board.transform, false);
             neighbor.transform.SetParent(board.transform, false);
-            neighbor.transform.localPosition = new Vector3(0.7f, 0, 0);
+            neighbor.transform.position = board.GetCellWorldPosition(new BoardCoordinate(3, 2));
+            Assert.IsTrue(board.Model.TryPlace(new BoardCoordinate(2, 1),
+                new PlaceableDefinition(placed.InstanceId.ToString(), 1, 3)));
+            Assert.IsTrue(board.Model.TryPlace(new BoardCoordinate(3, 1),
+                new PlaceableDefinition(neighbor.InstanceId.ToString(), 1, 3)));
             var main = _bootstrap.PlayerBall;
             main.LaunchAt(Vector2.zero, 0f);
             Physics2D.SyncTransforms();
             Assert.IsTrue(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
+            var start = main.GetComponent<Rigidbody2D>().position;
             main.ResolvePlacementOverlap(placed, board);
+            Assert.AreEqual(start, main.GetComponent<Rigidbody2D>().position, "有空格时只能逐步脱离，不能瞬移。");
+            Assert.AreEqual(PlacementRecoveryState.Escaping, main.RecoveryState);
+            Assert.Less(main.CurrentDirection.x, -0.99f, "右侧被占用，应向左侧空格脱离。");
+            for (var step = 0; step < 100 && main.RecoveryState != PlacementRecoveryState.None; step++) Tick();
+            Assert.AreEqual(PlacementRecoveryState.None, main.RecoveryState);
             var position = main.GetComponent<Rigidbody2D>().position;
-            Assert.Greater(position.x, neighbor.GetPhysicalCollider().bounds.max.x);
-            Assert.AreEqual(0f, position.y, 0.0001f);
+            Assert.Less(position.x, placed.GetPhysicalCollider().bounds.min.x);
             for (var step = 0; step < 5; step++) Tick();
-            Assert.Greater(main.GetComponent<Rigidbody2D>().position.x, position.x);
-            Assert.Greater(main.CurrentDirection.x, 0.99f);
+            Assert.Less(main.GetComponent<Rigidbody2D>().position.x, position.x);
+            Assert.Less(main.CurrentDirection.x, -0.99f);
             Assert.IsFalse(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
             Assert.IsFalse(main.GetComponent<Collider2D>().Distance(neighbor.GetPhysicalCollider()).isOverlapped);
-            Assert.AreEqual(0, main.ComboCount);
-            Assert.AreEqual(0, _contacts, "推出不应伪造机器人攻击接触。");
+            Assert.AreEqual(1, main.ComboCount, "提交放置计一次Combo，逐步脱离不重复累计。");
+            Assert.AreEqual(1, _contacts, "放置只请求一次攻击，脱离过程不重复请求。");
             yield return null;
+        }
+
+        private PlacementBoardView RecoveryBoard(string name)
+        {
+            var board = NewObject(name).AddComponent<PlacementBoardView>();
+            Set(board, "_columns", 5); Set(board, "_rows", 5); Set(board, "_cellSize", 1f);
+            Set(board, "_model", new BoardModel(5, 5)); Set(board, "_initialized", true);
+            return board;
+        }
+
+        [UnityTest]
+        public IEnumerator ParticleTrailFollowsBerserkFreezeRelaunchAndDisable()
+        {
+            var ball = _bootstrap.PlayerBall;
+            var trail = ball.GetComponentInChildren<ParticleSystem>(true);
+            Assert.IsNotNull(trail, "实际球预制体必须装配原生粒子拖尾。");
+            Assert.AreEqual(ParticleSystemSimulationSpace.Local, trail.main.simulationSpace);
+            Assert.IsTrue(trail.trails.enabled);
+            Assert.AreEqual(ParticleSystemTrailMode.PerParticle, trail.trails.mode);
+            Assert.IsTrue(trail.trails.worldSpace, "球心粒子随球运动，轨迹应留在世界空间。");
+            Assert.AreEqual(1, trail.main.maxParticles, "由一个球心粒子生成连续轨迹，不显示离散光点。");
+            var trailRenderer = trail.GetComponent<ParticleSystemRenderer>();
+            Assert.AreEqual(ParticleSystemRenderMode.None, trailRenderer.renderMode);
+            Assert.IsNotNull(trailRenderer.trailMaterial);
+            Assert.IsFalse(trail.main.playOnAwake);
+            Assert.IsFalse(trail.isPlaying);
+            ball.LaunchAt(Vector2.zero, 45f);
+            Assert.IsFalse(trail.isEmitting, "普通球不应发射粒子。");
+            ball.SetBerserk(true);
+            Assert.IsTrue(trail.isEmitting);
+            trail.Emit(4);
+            var count = trail.particleCount;
+            ball.SetFrozen(true);
+            Assert.IsTrue(trail.isPaused);
+            yield return null;
+            Assert.AreEqual(count, trail.particleCount, "暂停时粒子应随球冻结。");
+            ball.SetFrozen(false);
+            Assert.IsTrue(trail.isEmitting);
+            ball.LaunchAt(new Vector2(30f, 30f), 90f);
+            Assert.AreEqual(0, trail.particleCount, "重新发射不能保留旧位置的拖尾。");
+            Assert.IsTrue(trail.isEmitting);
+            trail.Emit(4);
+            ball.SetBerserk(false);
+            Assert.IsFalse(trail.isPlaying);
+            Assert.AreEqual(0, trail.particleCount);
+            ball.SetBerserk(true);
+            ball.Stop();
+            Assert.IsFalse(trail.isPlaying);
+            Assert.AreEqual(0, trail.particleCount);
+            ball.SetBerserk(true);
+            Assert.IsFalse(trail.isPlaying, "未发射的额外球不能提前播放拖尾。");
+            ball.LaunchAt(Vector2.zero, 45f);
+            trail.Emit(4);
+            ball.gameObject.SetActive(false);
+            Assert.IsFalse(trail.isPlaying);
+            Assert.AreEqual(0, trail.particleCount);
+            ball.gameObject.SetActive(true);
+            ball.LaunchAt(Vector2.zero, 45f);
+            Assert.IsFalse(trail.isEmitting, "复用后必须恢复普通球外观。");
         }
 
         [UnityTest]
@@ -129,6 +205,8 @@ namespace GameLogic.Tests
             {
                 Assert.AreEqual(tables.TbGlobal.Get(3).Value, ball.Speed);
                 Assert.AreEqual(_scene, ball.gameObject.scene);
+                Assert.IsTrue(ball.GetComponentInChildren<ParticleSystem>(true).isEmitting,
+                    "配置额外数量后动态克隆的球也必须带拖尾。");
                 if (ball != main) Assert.That(ball.CurrentDirection.y, Is.EqualTo(-1f).Within(0.0001f));
             }
             _bootstrap.AdvanceBerserk(0.21f);
@@ -151,6 +229,7 @@ namespace GameLogic.Tests
             foreach (var extra in extras)
             {
                 Assert.IsTrue(extra.IsBerserk);
+                Assert.IsTrue(extra.GetComponentInChildren<ParticleSystem>(true).isEmitting);
                 Assert.That(Vector2.Distance(main.GetComponent<Rigidbody2D>().position, extra.GetComponent<Rigidbody2D>().position), Is.LessThan(0.01f));
                 Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), extra.GetComponent<Collider2D>()));
             }
@@ -164,6 +243,8 @@ namespace GameLogic.Tests
             Assert.IsTrue(main.IsLaunched);
             Assert.AreEqual(1, _balls.Count(b => b.Side == BattleSide.Player && b.IsLaunched));
             Assert.IsTrue(extras.All(b => !b.gameObject.activeSelf));
+            Assert.IsFalse(main.GetComponentInChildren<ParticleSystem>(true).isPlaying);
+            Assert.IsTrue(extras.All(b => b.GetComponentInChildren<ParticleSystem>(true).particleCount == 0));
             AssertRobotCollisionMode(robot, false);
             Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), body));
             var contactCount = _contacts;
