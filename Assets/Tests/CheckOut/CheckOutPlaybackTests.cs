@@ -12,6 +12,7 @@ using TEngine;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace GameLogic.Tests
@@ -22,11 +23,23 @@ namespace GameLogic.Tests
         private EditorUiLoader _loader;
         private object _presenter;
         private Type _presenterType;
+        private string _saveDirectory;
+        private MatchPlayerStore _store;
+        private readonly System.Collections.Generic.Dictionary<FieldInfo, object> _savedFields = new System.Collections.Generic.Dictionary<FieldInfo, object>();
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
             Assert.IsTrue(Application.isPlaying);
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            ReplaceField(typeof(ConfigSystem), ConfigSystem.Instance, "_tables", tables);
+            ReplaceField(typeof(ConfigSystem), ConfigSystem.Instance, "_init", true);
+            _saveDirectory = Path.Combine(Path.GetTempPath(), "FreshGuard-checkout-" + Guid.NewGuid().ToString("N"));
+            _store = new MatchPlayerStore(Path.Combine(_saveDirectory, "player.json"));
+            var state = new MainMenuPlayerState(30, TimeSpan.FromMinutes(5), 30, 100, 2500, DateTimeOffset.UtcNow);
+            ReplaceField(typeof(GameApp), null, "_playerState", state);
+            ReplaceField(typeof(GameApp), null, "_playerStore", _store);
+            ReplaceField(typeof(GameApp), null, "_playerRecord", new MatchPlayerRecord());
             _presenterType = typeof(TowerBattleSession).Assembly.GetType("GameLogic.BattleSettlementPresenter");
             Assert.IsNotNull(_presenterType, "缺少清理后打开结算页的展示入口");
             // GameModule 缓存不会随 Singleton.Release 自动清除；隔离各用例的 UI 模块。
@@ -49,6 +62,86 @@ namespace GameLogic.Tests
             typeof(GameModule).GetField("_ui", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, null);
             if (_uiRoot != null) Object.Destroy(_uiRoot);
             yield return null;
+            foreach (var pair in _savedFields)
+                pair.Key.SetValue(pair.Key.IsStatic ? null : ConfigSystem.Instance, pair.Value);
+            _savedFields.Clear();
+            if (Directory.Exists(_saveDirectory)) Directory.Delete(_saveDirectory, true);
+        }
+
+        [UnityTest]
+        public IEnumerator VictoryDoubleButtonGrantsTwiceOnceAndReturnPersists() => RewardButtonsAsync(true, true).ToCoroutine();
+
+        [UnityTest]
+        public IEnumerator DefeatReturnButtonGrantsBaseRewardAndOpensMainMenu() => RewardButtonsAsync(false, false).ToCoroutine();
+
+        [UnityTest]
+        public IEnumerator DefeatDoubleButtonUsesLoseAward() => RewardButtonsAsync(false, true).ToCoroutine();
+
+        [UnityTest]
+        public IEnumerator VictoryReturnButtonUsesWinAward() => RewardButtonsAsync(true, false).ToCoroutine();
+
+        [UnityTest]
+        public IEnumerator FailedSaveCanRetryWithoutGrantingAgain() => RewardButtonsAsync(true, true, true).ToCoroutine();
+
+        private async UniTask RewardButtonsAsync(bool victory, bool doubled, bool failFirstSave = false)
+        {
+            var snapshot = Snapshot(201, victory ? BattleSide.Opponent : BattleSide.Player);
+            var baseAmount = victory ? 110 : 35;
+            var expectedCoins = 100 + baseAmount * (doubled ? 2 : 1);
+            Begin(201);
+            GameEvent.Send(BattleSettlementEvents.Requested, snapshot);
+            for (var frame = 0; frame < 12 && GameModule.UI.GetUI<CheckOutUI>() == null; frame++) await UniTask.Yield();
+            var window = GameModule.UI.GetUI<CheckOutUI>();
+            Assert.IsNotNull(window);
+            var doubleButton = window.transform.Find("m_rect_Content/m_btn_DoubleReward").GetComponent<Button>();
+            var returnButton = window.transform.Find("m_rect_Content/m_btn_ReturnMain").GetComponent<Button>();
+            var amount = window.transform.Find("m_rect_Content/m_rect_Rewards/m_item_Reward/m_text_Amount").GetComponent<Text>();
+            Assert.IsTrue(doubleButton.interactable, "结算后必须启用双倍按钮");
+            Assert.IsTrue(returnButton.interactable, "结算后必须启用返回按钮");
+            Assert.AreEqual(baseAmount.ToString(), amount.text);
+            if (doubled)
+            {
+                var blockedPath = Path.Combine(_saveDirectory, "player.json.tmp");
+                if (failFirstSave)
+                {
+                    Directory.CreateDirectory(blockedPath);
+                    LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("结算奖励保存或返回失败："));
+                }
+                doubleButton.onClick.Invoke();
+                doubleButton.onClick.Invoke();
+                for (var frame = 0; frame < 300 && !returnButton.interactable; frame++) await UniTask.Yield();
+                Assert.IsTrue(returnButton.interactable, "保存完成后应允许返回");
+                if (failFirstSave)
+                {
+                    Assert.IsTrue(doubleButton.interactable, "保存失败后应允许重试");
+                    Assert.AreEqual(expectedCoins, GameApp.PlayerState.Coins);
+                    Assert.IsNull(await _store.LoadAsync(), "失败保存不能伪装为成功");
+                    Directory.Delete(blockedPath);
+                    doubleButton.onClick.Invoke();
+                    for (var frame = 0; frame < 300 && !returnButton.interactable; frame++) await UniTask.Yield();
+                    Assert.IsTrue(returnButton.interactable);
+                }
+                Assert.IsFalse(doubleButton.interactable, "本局只能领取一次双倍");
+                Assert.AreEqual((baseAmount * 2).ToString(), amount.text);
+                Assert.AreEqual(expectedCoins, GameApp.PlayerState.Coins);
+            }
+            returnButton.onClick.Invoke();
+            returnButton.onClick.Invoke();
+            for (var frame = 0; frame < 300 && GameModule.UI.GetUI<CheckOutUI>() != null; frame++) await UniTask.Yield();
+            Assert.IsNull(GameModule.UI.GetUI<CheckOutUI>(), "返回应关闭结算页");
+            Assert.IsNotNull(GameModule.UI.GetUI<MainMenuUI>(), "返回应打开主菜单");
+            Assert.AreEqual(expectedCoins, GameApp.PlayerState.Coins);
+            Assert.AreEqual(GameApp.PlayerState.Coins, (await _store.LoadAsync()).Coins, "奖励必须保存到玩家存档");
+            GameEvent.Send(BattleSettlementEvents.Requested, snapshot);
+            await UniTask.Yield();
+            Assert.IsNull(GameModule.UI.GetUI<CheckOutUI>(), "返回后旧结算通知不能重新开窗");
+        }
+
+        private void ReplaceField(Type type, object target, string name, object value)
+        {
+            var field = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
+            _savedFields.Add(field, field.GetValue(target));
+            field.SetValue(target, value);
         }
 
         [UnityTest]

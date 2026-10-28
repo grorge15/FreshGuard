@@ -10,7 +10,7 @@ namespace GameLogic.Tests
     public sealed class CheckOutUIContractTests
     {
         [Test]
-        public void WindowPrefabHasBothThemesAndDisabledBusinessButtons()
+        public void WindowPrefabHasBothThemesAndButtonsDisabledUntilBound()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/CheckOutUI.prefab");
             Assert.IsNotNull(prefab, "结算窗口必须有可加载的 Prefab");
@@ -21,7 +21,7 @@ namespace GameLogic.Tests
             foreach (var name in new[] { "m_btn_DoubleReward", "m_btn_ReturnMain" })
             {
                 var button = prefab.transform.Find("m_rect_Content/" + name).GetComponent<Button>();
-                Assert.IsFalse(button.interactable, "未接业务的按钮不能产生操作");
+                Assert.IsFalse(button.interactable, "窗口绑定本局奖励前，按钮默认不可操作");
                 Assert.AreEqual(0, button.onClick.GetPersistentEventCount());
             }
             Assert.IsTrue(prefab.transform.Find("m_img_InputBlocker").GetComponent<Image>().raycastTarget);

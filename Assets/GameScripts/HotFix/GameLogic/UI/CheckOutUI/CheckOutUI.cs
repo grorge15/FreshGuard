@@ -1,3 +1,5 @@
+using System;
+using Cysharp.Threading.Tasks;
 using TEngine;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,6 +20,13 @@ namespace GameLogic
         private GameObject _defeatRewards;
         private Text _rewardTitle;
         private Font _font;
+        private Button _doubleReward;
+        private Button _returnMain;
+        private Text _rewardAmount;
+        private Text _rewardName;
+        private BattleSettlementReward _reward;
+        private Func<UniTask> _returnToMain;
+        private bool _busy;
 
         protected override void ScriptGenerator()
         {
@@ -31,17 +40,74 @@ namespace GameLogic
             _victoryRewards = FindChild(content + "m_rect_Rewards/m_img_VictoryBG").gameObject;
             _defeatRewards = FindChild(content + "m_rect_Rewards/m_img_DefeatBG").gameObject;
             _rewardTitle = FindChildComponent<Text>(content + "m_rect_Rewards/m_text_Title");
+            _rewardAmount = FindChildComponent<Text>(content + "m_rect_Rewards/m_item_Reward/m_text_Amount");
+            _rewardName = FindChildComponent<Text>(content + "m_rect_Rewards/m_item_Reward/m_text_Name");
+            _doubleReward = FindChildComponent<Button>(content + "m_btn_DoubleReward");
+            _returnMain = FindChildComponent<Button>(content + "m_btn_ReturnMain");
         }
 
         protected override void OnCreate()
         {
             _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "SimHei", "Arial" }, 28);
             foreach (var text in gameObject.GetComponentsInChildren<Text>(true)) text.font = _font;
+            _doubleReward.onClick.AddListener(OnDoubleReward);
+            _returnMain.onClick.AddListener(OnReturnMain);
         }
 
         protected override void OnRefresh()
         {
+            _reward = null;
+            _returnToMain = null;
+            _busy = false;
+            _doubleReward.interactable = _returnMain.interactable = false;
             Render(UserData is BattleSettlementSnapshot snapshot && snapshot.Result == BattleSettlementResult.Victory);
+        }
+
+        public void BindReward(BattleSettlementReward reward, Func<UniTask> returnToMain)
+        {
+            _reward = reward;
+            _returnToMain = returnToMain;
+            RefreshReward();
+        }
+
+        private void RefreshReward()
+        {
+            _rewardAmount.text = _reward.DisplayAmount.ToString();
+            _rewardName.text = _reward.ItemName;
+            _doubleReward.interactable = !_busy && (!_reward.IsDoubled || !_reward.IsSaved);
+            _returnMain.interactable = !_busy;
+        }
+
+        private void OnDoubleReward() => ClaimAsync(true).Forget();
+        private void OnReturnMain() => ClaimAsync(false).Forget();
+
+        private async UniTask ClaimAsync(bool doubleReward)
+        {
+            if (_busy || _reward == null || IsDestroyed) return;
+            _busy = true;
+            var reward = _reward;
+            var returnToMain = _returnToMain;
+            RefreshReward();
+            try
+            {
+                await reward.ClaimAsync(doubleReward);
+                if (IsDestroyed || reward != _reward) return;
+                _rewardTitle.text = "获得奖励";
+                if (!doubleReward) await returnToMain();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError("结算奖励保存或返回失败：" + exception.Message);
+                if (!IsDestroyed && reward == _reward) _rewardTitle.text = "操作失败，请点击重试";
+            }
+            finally
+            {
+                if (!IsDestroyed && reward == _reward)
+                {
+                    _busy = false;
+                    RefreshReward();
+                }
+            }
         }
 
         public void Render(bool victory)
@@ -59,7 +125,9 @@ namespace GameLogic
 
         protected override void OnDestroy()
         {
-            if (_font != null) Object.Destroy(_font);
+            if (_doubleReward != null) _doubleReward.onClick.RemoveListener(OnDoubleReward);
+            if (_returnMain != null) _returnMain.onClick.RemoveListener(OnReturnMain);
+            if (_font != null) UnityEngine.Object.Destroy(_font);
         }
     }
 }

@@ -53,6 +53,8 @@ namespace GameLogic
                 }
                 if (window == null || !window.IsPrepare || window.IsDestroyed)
                     throw new InvalidOperationException("CheckOutUI 加载失败。");
+                window.BindReward(new BattleSettlementReward(ConfigSystem.Instance.Tables, GameApp.PlayerState,
+                    snapshot.Result, GameApp.SavePlayerStateAsync), () => ReturnMainAsync(snapshot.BattleId, generation));
             }
             catch (OperationCanceledException) { }
             catch (Exception exception)
@@ -60,6 +62,18 @@ namespace GameLogic
                 CloseOwnedWindow(snapshot.BattleId);
                 Debug.LogError("结算窗口加载失败，对局保持结束状态：" + exception.Message);
             }
+        }
+
+        private async UniTask ReturnMainAsync(long battleId, int generation)
+        {
+            if (_released || _activeBattleId != battleId || _generation != generation) return;
+            var menu = await GameModule.UI.ShowUIAsyncAwait<MainMenuUI>();
+            if (_released || _activeBattleId != battleId || _generation != generation) return;
+            if (menu == null || menu.IsDestroyed) throw new InvalidOperationException("主菜单加载失败，请重试。");
+            _activeBattleId = 0;
+            _generation++;
+            CancelPending();
+            CloseOwnedWindow(battleId);
         }
 
         private static void CloseOwnedWindow(long battleId)
