@@ -36,7 +36,7 @@ namespace GameLogic.EditorTools
                 scaler.matchWidthOrHeight = 0;
                 AddRegion(info, root.transform, "BattleInfoUI", new Vector2(1040, 156),
                     Vector2.one * 0.5f, Vector2.one * 0.5f, Vector2.zero, "m_rect_BattleInfo");
-                AddRegion(shop, root.transform, "BattleShopUI", new Vector2(1056, 218),
+                AddRegion(shop, root.transform, "BattleShopUI", new Vector2(1056, 246),
                     new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 12), "m_rect_ShopPanel");
                 PrefabUtility.SaveAsPrefabAsset(root, PATH);
                 AssetDatabase.SaveAssets();

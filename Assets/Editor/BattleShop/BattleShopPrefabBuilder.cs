@@ -11,6 +11,7 @@ namespace FreshGuard.Editor
     public static class BattleShopPrefabBuilder
     {
         private const string FOLDER = "Assets/AssetRaw/UI/Shop";
+        private const string EnergyCoinSpritePath = "Assets/AssetRaw/Actor/UISprites/Battle/energyCoin.png";
         private static readonly Color Ink = new Color(0.25f, 0.17f, 0.12f);
 
         [MenuItem("FreshGuard/Shop/Build Prefabs And Attach Main")]
@@ -93,14 +94,14 @@ namespace FreshGuard.Editor
                 {
                     var slot = offers.Find("Slot_" + i) as RectTransform;
                     if (slot == null) continue;
-                    var position = new Vector2((i - 1) * 124, 0);
+                    var position = new Vector2((i - 1) * 204, 0);
                     if (slot.anchorMin != new Vector2(0.5f, 0.5f) || slot.anchorMax != new Vector2(0.5f, 0.5f) ||
                         slot.anchoredPosition != position || slot.sizeDelta.x <= 0 || slot.sizeDelta.y <= 0)
                     {
                         changed = true;
                         slot.anchorMin = slot.anchorMax = new Vector2(0.5f, 0.5f);
                         if (slot.sizeDelta.x <= 0 || slot.sizeDelta.y <= 0)
-                            slot.sizeDelta = new Vector2(112, 132);
+                            slot.sizeDelta = new Vector2(184, 184);
                         slot.anchoredPosition = position;
                     }
                 }
@@ -175,16 +176,31 @@ namespace FreshGuard.Editor
         }
         private static GameObject BuildItem()
         {
-            var root = Rect("ShopRobotItem", null, new Vector2(112, 132), Vector2.zero);
-            Image(root, new Color(1f, 0.98f, 0.91f, 0.72f), true);
+            var root = Rect("ShopRobotItem", null, new Vector2(184, 184), Vector2.zero);
+            Image(root, Color.clear, true);
             root.gameObject.AddComponent<ShopPointerInput>();
-            var icon = Image(Rect("m_img_RobotIcon", root, new Vector2(94, 88), new Vector2(0, 7)), Color.white);
+            var icon = Image(Rect("m_img_RobotIcon", root, new Vector2(148, 148), new Vector2(0, 42)), Color.white);
             icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/Icons/RobotCannonIcon.png");
             icon.type = UnityEngine.UI.Image.Type.Simple;
             icon.preserveAspect = true;
-            Image(Rect("m_img_Quality", root, new Vector2(100, 4), new Vector2(0, -40)), new Color(0.37f, 0.67f, 0.42f));
-            Label("m_text_Price", root, "6", 20, new Vector2(104, 24), new Vector2(0, -54), Ink);
+            Image(Rect("m_img_Quality", root, new Vector2(100, 4), new Vector2(0, -40)), new Color(0.37f, 0.67f, 0.42f)).gameObject.SetActive(false);
+            EnergyCoin(Rect("m_img_PriceCoin", root, new Vector2(60, 60), new Vector2(-44, -43)));
+            var price = Label("m_text_Price", root, "6", 48, new Vector2(100, 62), new Vector2(38, -43), Color.white);
+            price.fontStyle = FontStyle.Bold;
+            var outline = price.gameObject.AddComponent<Outline>();
+            outline.effectColor = Color.black;
+            outline.effectDistance = new Vector2(3, -3);
             return root.gameObject;
+        }
+
+        private static Image EnergyCoin(RectTransform rect)
+        {
+            var image = Image(rect, Color.white);
+            image.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(EnergyCoinSpritePath);
+            if (image.sprite == null) throw new InvalidOperationException("缺少能源币图标素材。");
+            image.type = UnityEngine.UI.Image.Type.Simple;
+            image.preserveAspect = true;
+            return image;
         }
         private static GameObject BuildStorage()
         {
@@ -218,7 +234,7 @@ namespace FreshGuard.Editor
             canvas.overrideSorting = true;
             root.gameObject.AddComponent<GraphicRaycaster>();
             root.gameObject.AddComponent<RobotDragController>();
-            var panel = Rect("m_rect_ShopPanel", root, new Vector2(-24, 218), new Vector2(0, 12));
+            var panel = Rect("m_rect_ShopPanel", root, new Vector2(-24, 246), new Vector2(0, 12));
             panel.anchorMin = new Vector2(0, 0);
             panel.anchorMax = new Vector2(1, 0);
             panel.pivot = new Vector2(0.5f, 0);
@@ -231,15 +247,13 @@ namespace FreshGuard.Editor
             var balance = Rect("EnergyBalance", panel, new Vector2(146, 36), Vector2.zero);
             Pin(balance, Vector2.one, Vector2.one, new Vector2(-36, -12));
             Image(balance, new Color(0.25f, 0.15f, 0.12f));
-            var coin = Rect("m_img_EnergyCoin", balance, new Vector2(34, 34), new Vector2(-55, 0));
-            Image(coin, new Color(0.74f, 0.8f, 0.81f));
-            Label("CoinMark", coin, "E", 22, new Vector2(28, 28), Vector2.zero, new Color(0.28f, 0.34f, 0.36f));
+            EnergyCoin(Rect("m_img_EnergyCoin", balance, new Vector2(64, 64), new Vector2(-55, 0)));
             var coinText = Label("m_text_EnergyCoins", panel, "20", 25, new Vector2(83, 36), Vector2.zero, Color.white);
             Pin(coinText.rectTransform, Vector2.one, Vector2.one, new Vector2(-46, -12));
             var storageInstance = (GameObject)PrefabUtility.InstantiatePrefab(storage, panel);
             storageInstance.name = "m_item_Storage";
-            Pin((RectTransform)storageInstance.transform, new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(90, -24));
-            var offers = Rect("m_tf_Offers", panel, new Vector2(-246, 142), new Vector2(-1, -6));
+            Pin((RectTransform)storageInstance.transform, new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(90, -18));
+            var offers = Rect("m_tf_Offers", panel, new Vector2(-246, 184), new Vector2(4, 0));
             offers.anchorMin = new Vector2(0, 0.5f);
             offers.anchorMax = new Vector2(1, 0.5f);
             for (var i = 0; i < 3; i++)
@@ -247,11 +261,11 @@ namespace FreshGuard.Editor
                 var instance = (GameObject)PrefabUtility.InstantiatePrefab(item, offers);
                 instance.name = "Slot_" + i;
                 var slotRect = (RectTransform)instance.transform;
-                slotRect.sizeDelta = new Vector2(112, 132);
-                slotRect.anchoredPosition = new Vector2((i - 1) * 124, 0);
+                slotRect.sizeDelta = new Vector2(184, 184);
+                slotRect.anchoredPosition = new Vector2((i - 1) * 204, 0);
             }
             var refresh = Rect("m_btn_Refresh", panel, new Vector2(100, 95), Vector2.zero);
-            Pin(refresh, new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-109, -8));
+            Pin(refresh, new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-109, -2));
             var refreshImage = Image(refresh, Color.white, true);
             refreshImage.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/UISprites/Battle/Battle_refreshButtonpng.png");
             if (refreshImage.sprite == null) throw new InvalidOperationException("缺少战斗刷新按钮素材。");
@@ -260,11 +274,6 @@ namespace FreshGuard.Editor
             button.navigation = new Navigation { mode = Navigation.Mode.None };
             Label("Title", refresh, "刷新", 24, new Vector2(96, 30), new Vector2(0, 20), Ink);
             Label("m_text_Price", refresh, "5", 23, new Vector2(92, 30), new Vector2(0, -16), Ink);
-            var hint = Label("RefreshWarning", panel, "刷新清除商品区内已购买机器人，不退款", 16,
-                new Vector2(-20, 26), Vector2.zero, new Color(0.45f, 0.33f, 0.24f));
-            hint.rectTransform.anchorMin = new Vector2(0, 0);
-            hint.rectTransform.anchorMax = new Vector2(1, 0);
-            hint.rectTransform.anchoredPosition = new Vector2(0, 17);
             var message = Label("m_text_Message", panel, "", 20, new Vector2(-20, 30), Vector2.zero,
                 new Color(0.8f, 0.15f, 0.1f));
             message.rectTransform.anchorMin = new Vector2(0, 1);

@@ -10,6 +10,7 @@ namespace GameLogic
         private Image _icon;
         private Image _quality;
         private Image _background;
+        private Image _priceCoin;
         private Text _price;
         private ShopPointerInput _input;
         private BattleShopUI _owner;
@@ -24,6 +25,7 @@ namespace GameLogic
             _price = FindChildComponent<Text>("m_text_Price");
             _input = gameObject.GetComponent<ShopPointerInput>();
             _background = gameObject.GetComponent<Image>();
+            _priceCoin = FindChildComponent<Image>("m_img_PriceCoin");
         }
         protected override void OnCreate()
         {
@@ -49,6 +51,7 @@ namespace GameLogic
                 }
                 _price.text = "已购买";
                 _price.color = new Color(0.16f, 0.43f, 0.28f);
+                _price.fontSize = 24;
             }
             else if (content.Offer != null)
             {
@@ -56,21 +59,23 @@ namespace GameLogic
                 level = content.Offer.Level;
                 hidden = owner.Drag.DraggedOfferId == content.Offer.OfferId;
                 _price.text = content.Offer.Price.ToString();
-                _price.color = balance >= content.Offer.Price ? new Color(0.22f, 0.13f, 0.09f) : new Color(0.8f, 0.12f, 0.1f);
+                _price.color = balance >= content.Offer.Price ? Color.white : new Color(0.8f, 0.12f, 0.1f);
+                _price.fontSize = 48;
             }
             // Slot 的位置由 BattleShopUI Prefab 保存；运行时只更新内容和可见状态。
             Visible = true;
             if (_background != null)
             {
                 _background.enabled = config != null;
-                _baseBackgroundColor = RobotLevelStyle.ColorForLevel(level);
+                _baseBackgroundColor = Color.clear;
                 _background.color = _baseBackgroundColor;
             }
             _icon.enabled = config != null && !hidden;
-            _quality.enabled = config != null;
+            _quality.enabled = false;
             _price.enabled = config != null;
+            _priceCoin.enabled = config != null && !content.IsPurchased;
             if (config == null) return;
-            _quality.color = QualityColor(config.QualityId);
+            _icon.color = RobotLevelStyle.ColorForLevel(level);
             _icon.enabled = !hidden;
             if (_iconLocation != config.RobotIcon)
             {
@@ -81,8 +86,8 @@ namespace GameLogic
         public void SetMergeCandidate(bool eligible, bool hovered)
         {
             if (_background == null) return;
-            _background.color = hovered ? Color.cyan : eligible
-                ? Color.Lerp(_baseBackgroundColor, Color.cyan, 0.45f) : _baseBackgroundColor;
+            _background.color = hovered ? new Color(0f, 1f, 1f, 0.4f) : eligible
+                ? new Color(0f, 1f, 1f, 0.18f) : _baseBackgroundColor;
         }
         internal static Color QualityColor(int id)
         {
