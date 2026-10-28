@@ -19,6 +19,8 @@ namespace GameLogic
         [SerializeField] private Sprite _normalSprite;
         [Tooltip("暴走状态使用的 Sprite；未配置时使用普通状态图片。")]
         [SerializeField] private Sprite _berserkSprite;
+        [Tooltip("暴走移动时播放的世界空间粒子拖尾；暂停时冻结，结束或重新发射时清理。")]
+        [SerializeField] private ParticleSystem _berserkTrail;
         [Tooltip("Luban 生成的 Global 二进制；作为 Prefab 依赖加载，不在碰撞回调中进行 IO。")]
         [SerializeField] private TextAsset globalConfig;
         [SerializeField] private ComboPopupView _comboPopupPrefab;
@@ -139,6 +141,7 @@ namespace GameLogic
             _spriteRenderer = GetComponent<SpriteRenderer>();
             if (_spriteRenderer != null) _defaultSprite = _spriteRenderer.sprite;
             RefreshSprite();
+            ClearBerserkTrail();
             _body.gravityScale = 0f;
             _body.drag = 0f;
             _body.angularDrag = 0f;
@@ -258,6 +261,30 @@ namespace GameLogic
             if (_spriteRenderer == null) return;
             var normal = _normalSprite != null ? _normalSprite : _defaultSprite;
             _spriteRenderer.sprite = IsBerserk && _berserkSprite != null ? _berserkSprite : normal;
+        }
+
+        private void ClearBerserkTrail()
+        {
+            if (_berserkTrail != null)
+                _berserkTrail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        private void RefreshBerserkTrail(bool moving)
+        {
+            if (_berserkTrail == null) return;
+            if (!IsBerserk || !_launched || !isActiveAndEnabled)
+            {
+                ClearBerserkTrail();
+            }
+            else if (moving)
+            {
+                if (!_berserkTrail.isPlaying) _berserkTrail.Play(true);
+            }
+            else if (_frozen)
+            {
+                if (_berserkTrail.isPlaying) _berserkTrail.Pause(true);
+            }
+            else ClearBerserkTrail();
         }
 
         /// <summary>放置完成后沿原运动方向脱离，跳过不足以容纳整颗球的机器人间隙。</summary>
@@ -389,6 +416,7 @@ namespace GameLogic
                 Vector2 velocity = moving ? _direction * EffectiveSpeed : Vector2.zero;
                 _body.simulated = moving;
                 _body.velocity = velocity;
+                RefreshBerserkTrail(moving);
             }
             catch (Exception e) { StopWithError(e); }
         }
@@ -400,6 +428,7 @@ namespace GameLogic
             IsBerserk = false;
             _rageReentryRemaining = 0f;
             RefreshSprite();
+            ClearBerserkTrail();
             foreach (var contact in _protectedContacts.Values) IgnoreRobot(contact, false);
             _protectedContacts.Clear();
             _glassHitsThisStep.Clear();
@@ -428,6 +457,7 @@ namespace GameLogic
                     throw new InvalidOperationException("发射位置和角度必须有限。");
                 float rad = angle * Mathf.Deg2Rad;
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
+                ClearBerserkTrail();
                 _body.simulated = true;
                 _body.position = position;
                 _launchPosition = position;
@@ -438,6 +468,7 @@ namespace GameLogic
                 _glassHitsThisStep.Clear();
                 ClearCombo();
                 _launched = true;
+                RefreshBerserkTrail(true);
             }
             catch (Exception e) { StopWithError(e); }
         }

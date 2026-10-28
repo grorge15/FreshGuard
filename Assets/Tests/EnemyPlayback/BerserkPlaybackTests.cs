@@ -100,6 +100,57 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
+        public IEnumerator ParticleTrailFollowsBerserkFreezeRelaunchAndDisable()
+        {
+            var ball = _bootstrap.PlayerBall;
+            var trail = ball.GetComponentInChildren<ParticleSystem>(true);
+            Assert.IsNotNull(trail, "实际球预制体必须装配原生粒子拖尾。");
+            Assert.AreEqual(ParticleSystemSimulationSpace.Local, trail.main.simulationSpace);
+            Assert.IsTrue(trail.trails.enabled);
+            Assert.AreEqual(ParticleSystemTrailMode.PerParticle, trail.trails.mode);
+            Assert.IsTrue(trail.trails.worldSpace, "球心粒子随球运动，轨迹应留在世界空间。");
+            Assert.AreEqual(1, trail.main.maxParticles, "由一个球心粒子生成连续轨迹，不显示离散光点。");
+            var trailRenderer = trail.GetComponent<ParticleSystemRenderer>();
+            Assert.AreEqual(ParticleSystemRenderMode.None, trailRenderer.renderMode);
+            Assert.IsNotNull(trailRenderer.trailMaterial);
+            Assert.IsFalse(trail.main.playOnAwake);
+            Assert.IsFalse(trail.isPlaying);
+            ball.LaunchAt(Vector2.zero, 45f);
+            Assert.IsFalse(trail.isEmitting, "普通球不应发射粒子。");
+            ball.SetBerserk(true);
+            Assert.IsTrue(trail.isEmitting);
+            trail.Emit(4);
+            var count = trail.particleCount;
+            ball.SetFrozen(true);
+            Assert.IsTrue(trail.isPaused);
+            yield return null;
+            Assert.AreEqual(count, trail.particleCount, "暂停时粒子应随球冻结。");
+            ball.SetFrozen(false);
+            Assert.IsTrue(trail.isEmitting);
+            ball.LaunchAt(new Vector2(30f, 30f), 90f);
+            Assert.AreEqual(0, trail.particleCount, "重新发射不能保留旧位置的拖尾。");
+            Assert.IsTrue(trail.isEmitting);
+            trail.Emit(4);
+            ball.SetBerserk(false);
+            Assert.IsFalse(trail.isPlaying);
+            Assert.AreEqual(0, trail.particleCount);
+            ball.SetBerserk(true);
+            ball.Stop();
+            Assert.IsFalse(trail.isPlaying);
+            Assert.AreEqual(0, trail.particleCount);
+            ball.SetBerserk(true);
+            Assert.IsFalse(trail.isPlaying, "未发射的额外球不能提前播放拖尾。");
+            ball.LaunchAt(Vector2.zero, 45f);
+            trail.Emit(4);
+            ball.gameObject.SetActive(false);
+            Assert.IsFalse(trail.isPlaying);
+            Assert.AreEqual(0, trail.particleCount);
+            ball.gameObject.SetActive(true);
+            ball.LaunchAt(Vector2.zero, 45f);
+            Assert.IsFalse(trail.isEmitting, "复用后必须恢复普通球外观。");
+        }
+
+        [UnityTest]
         public IEnumerator GlobalRulesControlRealTemporaryBallsAndTheirLifetime()
         {
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath,
@@ -129,6 +180,8 @@ namespace GameLogic.Tests
             {
                 Assert.AreEqual(tables.TbGlobal.Get(3).Value, ball.Speed);
                 Assert.AreEqual(_scene, ball.gameObject.scene);
+                Assert.IsTrue(ball.GetComponentInChildren<ParticleSystem>(true).isEmitting,
+                    "配置额外数量后动态克隆的球也必须带拖尾。");
                 if (ball != main) Assert.That(ball.CurrentDirection.y, Is.EqualTo(-1f).Within(0.0001f));
             }
             _bootstrap.AdvanceBerserk(0.21f);
@@ -151,6 +204,7 @@ namespace GameLogic.Tests
             foreach (var extra in extras)
             {
                 Assert.IsTrue(extra.IsBerserk);
+                Assert.IsTrue(extra.GetComponentInChildren<ParticleSystem>(true).isEmitting);
                 Assert.That(Vector2.Distance(main.GetComponent<Rigidbody2D>().position, extra.GetComponent<Rigidbody2D>().position), Is.LessThan(0.01f));
                 Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), extra.GetComponent<Collider2D>()));
             }
@@ -164,6 +218,8 @@ namespace GameLogic.Tests
             Assert.IsTrue(main.IsLaunched);
             Assert.AreEqual(1, _balls.Count(b => b.Side == BattleSide.Player && b.IsLaunched));
             Assert.IsTrue(extras.All(b => !b.gameObject.activeSelf));
+            Assert.IsFalse(main.GetComponentInChildren<ParticleSystem>(true).isPlaying);
+            Assert.IsTrue(extras.All(b => b.GetComponentInChildren<ParticleSystem>(true).particleCount == 0));
             AssertRobotCollisionMode(robot, false);
             Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), body));
             var contactCount = _contacts;
