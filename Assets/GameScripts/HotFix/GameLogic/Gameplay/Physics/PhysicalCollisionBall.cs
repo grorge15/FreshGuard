@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace GameLogic
@@ -49,6 +50,12 @@ namespace GameLogic
         private readonly List<int> _endedRobotContacts = new List<int>();
         private readonly List<ComboPopupView> _comboPopups = new List<ComboPopupView>();
         private readonly Dictionary<int, RobotContact> _protectedContacts = new Dictionary<int, RobotContact>();
+        private readonly BallPlacementRecovery _placementRecovery = new BallPlacementRecovery();
+        private readonly List<Collider2D> _placementOverlaps = new List<Collider2D>();
+        private readonly List<RaycastHit2D> _placementHits = new List<RaycastHit2D>();
+        private readonly Dictionary<int, GlassView> _recoveryGlassContacts = new Dictionary<int, GlassView>();
+        private readonly List<int> _endedGlassContacts = new List<int>();
+        private int _recoveryVersion;
 
         private sealed class RobotContact
         {
@@ -80,6 +87,7 @@ namespace GameLogic
         public long BattleId { get; private set; }
         public bool IsBerserk { get; private set; }
         public bool IsLaunched => _launched;
+        public PlacementRecoveryState RecoveryState => _placementRecovery.State;
         public float SecondsSinceEffectiveInteraction { get; private set; }
         public event Action<PhysicalCollisionBall> EffectiveInteraction;
         public event Action<PhysicalCollisionBall> ComboThresholdReached;
@@ -172,6 +180,11 @@ namespace GameLogic
                     AdvanceContactTime(Time.fixedDeltaTime);
                     AdvanceComboTime(Time.fixedDeltaTime);
                     SecondsSinceEffectiveInteraction += Time.fixedDeltaTime;
+                    if (RecoveryState != PlacementRecoveryState.None)
+                    {
+                        AdvancePlacementRecovery(Time.fixedDeltaTime);
+                        return;
+                    }
                     if (_rules != null)
                     {
                         _lowSpeedElapsed = _body.velocity.magnitude < _rules.LowSpeedThreshold * _mapScale
@@ -244,6 +257,8 @@ namespace GameLogic
             if (!berserk && IsBerserk) _rageReentryRemaining = _rules?.ReentryBlockSeconds ?? 0f;
             if (berserk && !IsBerserk)
             {
+                ClearPlacementRecovery();
+                ReleaseProtectedContacts();
                 ResetComboCount();
                 foreach (var contact in _robotContacts.Values) contact.Counted = true;
             }
@@ -260,54 +275,227 @@ namespace GameLogic
             _spriteRenderer.sprite = IsBerserk && _berserkSprite != null ? _berserkSprite : normal;
         }
 
-        /// <summary>放置完成后沿原运动方向脱离，跳过不足以容纳整颗球的机器人间隙。</summary>
+        /// <summary>提交占格后开始恢复；有相邻空位匀速脱离，否则在原格真实边线上往返。</summary>
         public void ResolvePlacementOverlap(RobotView placed, PlacementBoardView board)
         {
             if (!_launched || IsBerserk || _body == null || _collider == null || placed == null || board == null) return;
-            var obstacle = placed.GetPhysicalCollider();
-            if (obstacle == null || !obstacle.enabled || obstacle.isTrigger || !obstacle.gameObject.activeInHierarchy) return;
-            Physics2D.SyncTransforms();
-            if (!_collider.Distance(obstacle).isOverlapped) return;
-            var direction = _direction.normalized;
-            if (direction.sqrMagnitude < 0.5f) return;
-            var center = (Vector2)_collider.bounds.center;
-            var worldRadius = _collider.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
-            var clearance = Mathf.Max(0.001f * _mapScale, Physics2D.defaultContactOffset * 2f);
-            var castRadius = worldRadius + clearance;
-            var boardScale = board.transform.lossyScale;
-            var reach = board.Size.magnitude * Mathf.Max(Mathf.Abs(boardScale.x), Mathf.Abs(boardScale.y)) +
-                Vector2.Distance(center, board.transform.position) + castRadius * 2f;
-            // 从棋盘外向球反向扫圆，得到每个实体在前进方向上的出口；正向从内部扫会给出零距离命中。
-            var physics = gameObject.scene.GetPhysicsScene2D();
-            var filter = new ContactFilter2D { useTriggers = false };
-            var hits = new List<RaycastHit2D>();
-            physics.CircleCast(center + direction * reach, castRadius, -direction, reach, filter, hits);
-            var candidates = new List<float>();
-            foreach (var hit in hits)
-                if (IsPlacementObstacle(hit.collider)) candidates.Add(reach - hit.distance + clearance);
-            candidates.Sort();
-            var overlaps = new List<Collider2D>();
-            foreach (var distance in candidates)
+            try
             {
-                if (distance <= 0f) continue;
-                var destination = center + direction * distance;
-                if (!FitsInsideBoard(destination, castRadius, board)) continue;
-                var blocked = false;
-                physics.OverlapCircle(destination, castRadius, filter, overlaps);
-                foreach (var collider in overlaps)
-                    if (IsPlacementObstacle(collider)) { blocked = true; break; }
-                if (blocked) continue;
-                var position = _body.position + destination - center;
-                _body.position = position;
-                transform.position = new Vector3(position.x, position.y, transform.position.z);
+                if (_runningGate != null && !_runningGate()) return;
+                var obstacle = placed.GetPhysicalCollider();
+                if (obstacle == null || !obstacle.enabled || obstacle.isTrigger || !obstacle.gameObject.activeInHierarchy) return;
                 Physics2D.SyncTransforms();
-                ReconcileProtectedContacts();
-                ReconcileRobotContacts();
+                if (!_collider.Distance(obstacle).isOverlapped) return;
+                var center = (Vector2)_collider.bounds.center;
+                _placementRecovery.Begin(board, center);
+                if (!_placementRecovery.RegisterPlacement(obstacle.GetInstanceID())) return;
+                ProtectOverlappingRobots(board.GetComponentsInChildren<RobotView>());
+                SelectPlacementRoute(ref center);
+                BounceCount++;
+                // 放置本身只算一次接触；保护接触不能通过普通回调再次攻击或累计。
+                if (IsContactRunning && placed.TryGetComboRobot(_comboRegistry, Side, out var robot))
+                    RobotContactDetected?.Invoke(this, robot.InstanceId);
+                if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
+                SecondsSinceEffectiveInteraction = 0f;
+                AddCombo();
+                if (!_launched || IsBerserk || RecoveryState == PlacementRecoveryState.None) return;
                 ApplyEffectiveVelocity();
+            }
+            catch (Exception e) { StopWithError(e); }
+        }
+
+        private float PlacementClearance => Mathf.Max(0.001f * _mapScale, Physics2D.defaultContactOffset * 2f);
+
+        private void SelectPlacementRoute(ref Vector2 center)
+        {
+            var start = center;
+            if (_placementRecovery.TrySelectTarget(center, destination => CanUsePlacementTarget(start, destination)))
+            {
+                _direction = (_placementRecovery.TargetPosition - center).normalized;
                 return;
             }
-            // 前方直到墙边都无容身位置时，沿用临时穿出保护，不能把球瞬移出棋盘或反转方向。
-            ProtectOverlappingRobots(board.GetComponentsInChildren<RobotView>());
+            if (RecoveryState != PlacementRecoveryState.Trapped)
+            {
+                var midpoint = _placementRecovery.EnterTrapped(UnityEngine.Random.Range(0, 4), UnityEngine.Random.value < 0.5f);
+                SetBallCenter(midpoint);
+                center = midpoint;
+                // 中点与边另一侧的机器人也可能相交，仅本次实际接触者加入保护。
+                ProtectOverlappingRobots(_placementRecovery.Board.GetComponentsInChildren<RobotView>());
+            }
+            _direction = (_placementRecovery.Destination - center).normalized;
+        }
+
+        private bool CanUsePlacementTarget(Vector2 center, Vector2 destination)
+        {
+            if (!IsPlacementPositionFree(destination)) return false;
+            var delta = destination - center;
+            return !CastPlacementObstacle(center, delta.normalized, delta.magnitude, out _);
+        }
+
+        private bool IsPlacementPositionFree(Vector2 center)
+        {
+            float castRadius = WorldRadius + PlacementClearance;
+            if (!FitsInsideBoard(center, castRadius, _placementRecovery.Board)) return false;
+            gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, castRadius,
+                new ContactFilter2D { useTriggers = false }, _placementOverlaps);
+            foreach (var collider in _placementOverlaps) if (IsPlacementObstacle(collider)) return false;
+            return true;
+        }
+
+        private bool CastPlacementObstacle(Vector2 center, Vector2 direction, float distance, out RaycastHit2D closest)
+        {
+            closest = default;
+            gameObject.scene.GetPhysicsScene2D().CircleCast(center, WorldRadius, direction,
+                distance + PlacementClearance, new ContactFilter2D { useTriggers = false }, _placementHits);
+            float best = float.PositiveInfinity;
+            foreach (var hit in _placementHits)
+            {
+                if (!IsPlacementObstacle(hit.collider) || Vector2.Dot(direction, hit.normal) >= -0.00001f) continue;
+                var robot = hit.collider.GetComponentInParent<RobotView>();
+                if (robot != null && _protectedContacts.TryGetValue(robot.InstanceId, out var contact) && contact.Collider == hit.collider) continue;
+                if (hit.distance > best) continue;
+                best = hit.distance; closest = hit;
+            }
+            return closest.collider != null;
+        }
+
+        private void SetBallCenter(Vector2 center)
+        {
+            var position = _body.position + center - (Vector2)_collider.bounds.center;
+            _body.position = position;
+            transform.position = new Vector3(position.x, position.y, transform.position.z);
+            Physics2D.SyncTransforms();
+        }
+
+        private void AdvancePlacementRecovery(float deltaTime)
+        {
+            if (_placementRecovery.Board == null || !_placementRecovery.Board.IsInitialized)
+                throw new InvalidOperationException("重叠恢复的棋盘已失效。");
+            Physics2D.SyncTransforms();
+            var center = (Vector2)_collider.bounds.center;
+            if (RecoveryState == PlacementRecoveryState.Escaping && TryFinishPlacementRecovery(center)) return;
+            SelectPlacementRoute(ref center);
+            float remaining = EffectiveSpeed * deltaTime;
+            int turns = 0;
+            while (remaining > 0.000001f && RecoveryState != PlacementRecoveryState.None && _launched && !IsBerserk)
+            {
+                var delta = _placementRecovery.Destination - center;
+                float endDistance = delta.magnitude;
+                if (endDistance <= 0.000001f)
+                {
+                    if (RecoveryState == PlacementRecoveryState.Escaping) break;
+                    _placementRecovery.Turn(PlacementClearance);
+                    if (++turns > 64) break;
+                    continue;
+                }
+                _direction = delta / endDistance;
+                var hit = default(RaycastHit2D);
+                if (CastPlacementObstacle(center, _direction, Mathf.Min(remaining, endDistance), out hit))
+                    endDistance = Mathf.Min(endDistance, Mathf.Max(0f, hit.distance - PlacementClearance));
+                float travel = Mathf.Min(remaining, endDistance);
+                center += _direction * travel;
+                remaining -= travel;
+                _placementRecovery.Travel(travel);
+                ReleaseEndedRecoveryGlassContacts(center);
+                if (travel + 0.000001f < endDistance) break;
+                if (RecoveryState == PlacementRecoveryState.Escaping)
+                {
+                    if (hit.collider != null) SelectPlacementRoute(ref center);
+                    else break;
+                    if (++turns > 64) break;
+                    continue;
+                }
+                bool count = _placementRecovery.Turn(PlacementClearance);
+                _direction = (_placementRecovery.Destination - center).normalized;
+                if (count) ProcessRecoveryEndpoint(center, hit.collider);
+                // 零长度夹缝不能逐帧刷Combo，也不能在同一步内无限反向。
+                if (++turns > 64 || travel <= 0.000001f) break;
+            }
+            if (!_launched || IsBerserk || RecoveryState == PlacementRecoveryState.None) return;
+            var destination = _body.position + center - (Vector2)_collider.bounds.center;
+            _body.MovePosition(destination);
+            _body.velocity = _direction * EffectiveSpeed;
+            if (Application.isPlaying) RestoreRecoveryVelocityAfterPhysics(_recoveryVersion).Forget();
+        }
+
+        private bool TryFinishPlacementRecovery(Vector2 center)
+        {
+            if (!IsPlacementPositionFree(center)) return false;
+            float angle = Mathf.Atan2(_direction.y, _direction.x) * Mathf.Rad2Deg;
+            angle = BallBounceMath.ClampAxis(angle, GlobalValueProvider(6), UnityEngine.Random.value < 0.5f);
+            var direction = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
+            // 已脱离即可交还普通碰撞；前方下一步有障碍时由正常反弹处理。
+            // 否则可能在空格中心反复选中当前位置，归一化零向量后永久停住。
+            _direction = direction;
+            ClearPlacementRecovery();
+            _lowSpeedElapsed = SecondsSinceEffectiveInteraction = 0f;
+            ApplyEffectiveVelocity();
+            return true;
+        }
+
+        private async UniTaskVoid RestoreRecoveryVelocityAfterPhysics(int version)
+        {
+            await UniTask.Yield(PlayerLoopTiming.LastFixedUpdate);
+            if (this == null || version != _recoveryVersion || !_launched || _frozen || _body == null ||
+                (_runningGate != null && !_runningGate())) return;
+            // MovePosition 在端点往返步中的净位移小于实际路程；求解后恢复真实方向速度。
+            ApplyEffectiveVelocity();
+        }
+
+        private void ProcessRecoveryEndpoint(Vector2 center, Collider2D obstacle)
+        {
+            // Combo可同步进入狂暴并在主球位置生成临时球，通知前必须先提交实际端点。
+            SetBallCenter(center);
+            BounceCount++;
+            SecondsSinceEffectiveInteraction = 0f;
+            var glass = obstacle != null ? obstacle.GetComponent<GlassView>() : null;
+            if (glass != null) ProcessRecoveryGlass(glass);
+            if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
+            gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, WorldRadius + PlacementClearance * 1.5f,
+                new ContactFilter2D { useTriggers = false }, _placementOverlaps);
+            // 几何端点也可能同时接触玻璃；先收集，避免奖励同步回调覆盖查询缓冲区。
+            var glasses = new List<GlassView>();
+            foreach (var collider in _placementOverlaps)
+                if (collider != null && collider.TryGetComponent<GlassView>(out var adjacent)) glasses.Add(adjacent);
+            foreach (var adjacent in glasses)
+            {
+                ProcessRecoveryGlass(adjacent);
+                if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
+            }
+            AddCombo();
+        }
+
+        private void ProcessRecoveryGlass(GlassView glass)
+        {
+            if (glass == null || glass.IsBroken || _recoveryGlassContacts.ContainsKey(glass.InstanceId)) return;
+            _recoveryGlassContacts.Add(glass.InstanceId, glass);
+            ApplyGlassCollision(glass);
+        }
+
+        private void ReleaseEndedRecoveryGlassContacts(Vector2 center)
+        {
+            _endedGlassContacts.Clear();
+            foreach (var pair in _recoveryGlassContacts)
+            {
+                var collider = pair.Value != null ? pair.Value.GetComponent<Collider2D>() : null;
+                if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy ||
+                    Vector2.Distance(collider.ClosestPoint(center), center) > WorldRadius + PlacementClearance * 1.5f)
+                    _endedGlassContacts.Add(pair.Key);
+            }
+            foreach (int id in _endedGlassContacts) _recoveryGlassContacts.Remove(id);
+        }
+
+        private void ClearPlacementRecovery()
+        {
+            _placementRecovery.Clear();
+            _recoveryGlassContacts.Clear();
+            _recoveryVersion++;
+        }
+
+        private void ReleaseProtectedContacts()
+        {
+            foreach (var contact in _protectedContacts.Values) IgnoreRobot(contact, false);
+            _protectedContacts.Clear();
         }
 
         private bool IsPlacementObstacle(Collider2D collider) => collider != null && collider != _collider &&
@@ -395,13 +583,13 @@ namespace GameLogic
 
         public void Stop()
         {
+            ClearPlacementRecovery();
             _launched = false;
             _dragging = false;
             IsBerserk = false;
             _rageReentryRemaining = 0f;
             RefreshSprite();
-            foreach (var contact in _protectedContacts.Values) IgnoreRobot(contact, false);
-            _protectedContacts.Clear();
+            ReleaseProtectedContacts();
             _glassHitsThisStep.Clear();
             ClearCombo();
             if (_body != null) { _body.velocity = Vector2.zero; _body.simulated = false; }
@@ -427,9 +615,12 @@ namespace GameLogic
                     float.IsNaN(position.y) || float.IsInfinity(position.x) || float.IsInfinity(position.y))
                     throw new InvalidOperationException("发射位置和角度必须有限。");
                 float rad = angle * Mathf.Deg2Rad;
+                ClearPlacementRecovery();
+                ReleaseProtectedContacts();
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
                 _body.simulated = true;
                 _body.position = position;
+                transform.position = new Vector3(position.x, position.y, transform.position.z);
                 _launchPosition = position;
                 _lowSpeedElapsed = 0f;
                 _body.velocity = _direction * EffectiveSpeed;
@@ -448,12 +639,14 @@ namespace GameLogic
         private void OnTriggerStay2D(Collider2D collider) { ProcessRobotTrigger(collider); }
         private void ProcessRobotTrigger(Collider2D collider)
         {
+            if (RecoveryState != PlacementRecoveryState.None) return;
             try { ProcessRobotCombo(collider.GetComponentInParent<RobotView>(), collider, false); }
             catch (Exception e) { StopWithError(e); }
         }
         private void Bounce(Collision2D collision)
         {
             if (!_launched || _frozen || (_runningGate != null && !_runningGate())) return;
+            if (RecoveryState != PlacementRecoveryState.None) return;
             try
             {
                 var glass = collision.collider.GetComponent<GlassView>();
@@ -475,15 +668,7 @@ namespace GameLogic
                 _body.velocity = _direction * EffectiveSpeed;
                 var robot = collision.collider.GetComponentInParent<RobotView>();
                 if (robot != null) ProcessRobotCombo(robot, collision.collider, bounced);
-                if (bounced && glass != null && _glassHitsThisStep.Add(glass.InstanceId))
-                {
-                    var result = glass.Collide(this);
-                    if (result != GlassCollisionResult.Ignored)
-                    {
-                        SecondsSinceEffectiveInteraction = 0f;
-                        EffectiveInteraction?.Invoke(this);
-                    }
-                }
+                if (bounced && glass != null) ApplyGlassCollision(glass);
             }
             catch (Exception e) { StopWithError(e); }
         }
@@ -514,11 +699,27 @@ namespace GameLogic
             if (IsBerserk) { contact.Counted = true; return; }
             if (!IsComboRunning || !bounced || contact.Counted || !_robotHitsThisStep.Add(robot.InstanceId)) return;
             contact.Counted = true;
+            AddCombo();
+        }
+
+        private void AddCombo()
+        {
+            if (!IsComboRunning || IsBerserk) return;
             if (_rageReentryRemaining > 0f) return;
             ComboCount++;
             _comboElapsed = 0d;
             if (ComboCount <= 50 && ComboCount % 10 == 0) ShowComboPopup();
             if (ComboCount == (_rules?.ComboTriggerCount ?? 50)) ComboThresholdReached?.Invoke(this);
+        }
+
+        private void ApplyGlassCollision(GlassView glass)
+        {
+            if (glass == null || glass.Owner == null || !glass.Owner.IsRunning || glass.Owner.Side != Side ||
+                glass.Owner.BattleId != BattleId || !_glassHitsThisStep.Add(glass.InstanceId)) return;
+            var result = glass.Collide(this);
+            if (result == GlassCollisionResult.Ignored) return;
+            SecondsSinceEffectiveInteraction = 0f;
+            EffectiveInteraction?.Invoke(this);
         }
 
         private void AdvanceContactTime(float deltaTime)

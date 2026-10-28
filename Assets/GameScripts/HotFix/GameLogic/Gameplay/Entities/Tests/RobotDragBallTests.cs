@@ -389,50 +389,6 @@ namespace GameLogic.Tests
             }
         }
 
-        [TestCase(0f, false)]
-        [TestCase(45f, false)]
-        [TestCase(180f, false)]
-        [TestCase(270f, false)]
-        [TestCase(0f, true)]
-        public void PlacementEjectsBallForwardWithoutLandingInsideAdjacentRobot(float angle, bool neighbor)
-        {
-            var boardRoot = new GameObject("OverlapBoard");
-            boardRoot.transform.position = new Vector3(100, 100, 0);
-            try
-            {
-                var board = boardRoot.AddComponent<PlacementBoardView>();
-                var robotRoot = new GameObject("PlacedRobot");
-                robotRoot.transform.SetParent(boardRoot.transform, false);
-                var polygon = robotRoot.AddComponent<PolygonCollider2D>();
-                polygon.points = new[] { new Vector2(-0.3f, -0.3f), new Vector2(0.3f, -0.3f),
-                    new Vector2(0.3f, 0.3f), new Vector2(-0.3f, 0.3f) };
-                var view = robotRoot.AddComponent<RobotView>();
-                if (neighbor)
-                {
-                    var next = UnityEngine.Object.Instantiate(robotRoot, boardRoot.transform);
-                    next.transform.localPosition = new Vector3(0.62f, 0, 0);
-                }
-                _ball.LaunchAt(new Vector2(100, 100), angle);
-                var before = _body.position;
-                var direction = _ball.CurrentDirection;
-                var method = typeof(PhysicalCollisionBall).GetMethod("ResolvePlacementOverlap");
-                Assert.IsNotNull(method, "放下机器人必须即时解决与球的重叠。");
-                method.Invoke(_ball, new object[] { view, board });
-                Physics2D.SyncTransforms();
-                var displacement = _body.position - before;
-                Assert.Greater(Vector2.Dot(displacement, direction), 0f);
-                Assert.AreEqual(0f, displacement.x * direction.y - displacement.y * direction.x, 0.0001f);
-                foreach (var collider in boardRoot.GetComponentsInChildren<Collider2D>())
-                    Assert.IsFalse(_root.GetComponent<CircleCollider2D>().Distance(collider).isOverlapped,
-                        "落点必须脱离所有相邻机器人。");
-                Assert.AreEqual(direction, _ball.CurrentDirection);
-                AssertSpeed(7f);
-                Assert.AreEqual(0, _ball.ComboCount);
-                Assert.AreEqual(0, _ball.BounceCount);
-            }
-            finally { UnityEngine.Object.DestroyImmediate(boardRoot); }
-        }
-
         private static void ExpectProviderError() => LogAssert.Expect(LogType.Error,
             "能源球停止，请检查配置后调用 Launch 重试：Global17 missing");
 
