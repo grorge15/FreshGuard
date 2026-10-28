@@ -24,6 +24,10 @@ namespace GameLogic
         private bool _initialized;
         private float _boundaryThicknessScale = 1f;
         private readonly Dictionary<BoardCoordinate, BoardSlotState> _previewStates = new Dictionary<BoardCoordinate, BoardSlotState>();
+        private readonly List<SpriteRenderer> _previewCells = new List<SpriteRenderer>();
+        private Transform _previewRoot;
+        // 机器人外观为 0/1，能源球为 10；预览覆盖机器人，同时保留球的可见性。
+        private const int PreviewSortingOrder = 5;
 
         private static readonly Color TrackTint = new Color(0.60f, 0.55f, 0.40f, 1f);
         private static readonly Color OccupiedColor = new Color(0.30f, 0.45f, 0.65f, 0.98f);
@@ -160,6 +164,7 @@ namespace GameLogic
         /// <summary>恢复作者缩放前隐藏旧局内容，下一局重新生成/显示。</summary>
         public void SetBattleContentVisible(bool visible)
         {
+            if (!visible) ClearPreview();
             var slots = transform.Find("Slots");
             if (slots != null) slots.gameObject.SetActive(visible);
             var glasses = transform.Find("Glasses");
@@ -190,18 +195,51 @@ namespace GameLogic
         {
             ClearPreview();
             if (!_initialized || result == null) return;
+            var index = 0;
             foreach (var coordinate in result.Cells)
             {
                 if (!_model.IsInside(coordinate)) continue;
                 _previewStates[coordinate] = result.IsValid ? BoardSlotState.Valid : BoardSlotState.Invalid;
                 Refresh(coordinate);
+                ShowPreviewCell(index++, coordinate, result.IsValid ? ValidColor : InvalidColor);
             }
+        }
+
+        private void ShowPreviewCell(int index, BoardCoordinate coordinate, Color color)
+        {
+            if (_previewRoot == null)
+            {
+                _previewRoot = new GameObject("PlacementPreview").transform;
+                _previewRoot.SetParent(transform, false);
+            }
+            _previewRoot.gameObject.SetActive(true);
+            if (index == _previewCells.Count)
+            {
+                // 只创建渲染组件，不克隆格子的行为或任何碰撞组件。
+                var cell = new GameObject("PreviewCell_" + index, typeof(SpriteRenderer));
+                cell.transform.SetParent(_previewRoot, false);
+                _previewCells.Add(cell.GetComponent<SpriteRenderer>());
+            }
+            var renderer = _previewCells[index];
+            var slot = _slots[coordinate.Column, coordinate.Row];
+            renderer.gameObject.layer = gameObject.layer;
+            renderer.sprite = slot.sprite;
+            renderer.sharedMaterial = slot.sharedMaterial;
+            renderer.color = color;
+            renderer.sortingLayerID = slot.sortingLayerID;
+            renderer.sortingOrder = Mathf.Max(PreviewSortingOrder, slot.sortingOrder + 1);
+            renderer.transform.localPosition = GetLocalPosition(coordinate);
+            renderer.transform.localScale = slot.transform.localScale;
+            renderer.enabled = true;
         }
 
         public void ClearPreview()
         {
             foreach (var coordinate in _previewStates.Keys) RefreshBase(coordinate);
             _previewStates.Clear();
+            foreach (var renderer in _previewCells)
+                if (renderer != null) renderer.enabled = false;
+            if (_previewRoot != null) _previewRoot.gameObject.SetActive(false);
         }
 
         public void RefreshOccupied(IReadOnlyList<BoardCoordinate> cells)

@@ -382,9 +382,11 @@ namespace GameLogic.Tests
                 Assert.AreNotEqual(normal, fixture.Player.Slot(0, 0).color);
                 fixture.UpdateAt(fixture.Enemy, 0, 0);
                 Assert.AreEqual(normal, fixture.Player.Slot(0, 0).color);
+                Assert.IsFalse(fixture.Player.Root.transform.Find("PlacementPreview").gameObject.activeSelf);
                 Assert.AreNotEqual(normal, fixture.Enemy.Slot(0, 0).color);
                 fixture.Controller.UpdateDrag(fixture.Camera.WorldToScreenPoint(new Vector3(10f, 10f, 0f)));
                 Assert.AreEqual(normal, fixture.Enemy.Slot(0, 0).color);
+                Assert.IsFalse(fixture.Enemy.Root.transform.Find("PlacementPreview").gameObject.activeSelf);
                 Assert.IsTrue(fixture.Controller.IsDragging);
                 fixture.Controller.CancelDrag();
                 Assert.IsFalse(fixture.Controller.IsDragging);
@@ -505,6 +507,103 @@ namespace GameLogic.Tests
                 fixture.Player.Root.SetActive(true);
                 Assert.IsTrue(fixture.Controller.Initialize());
                 Assert.IsTrue(fixture.Controller.IsReady);
+            }
+        }
+
+        [Test]
+        public void InvalidPreviewRendersCompleteShapeAboveOccupiedRobotAndClearsWithoutResidue()
+        {
+            using (var fixture = new BoardFixture(new Vector3(100f, 100f, 0f)))
+            {
+                var anchor = new BoardCoordinate(3, 3);
+                Assert.IsTrue(fixture.View.Model.TryPlace(anchor, new PlaceableDefinition("Existing", 1, 1)));
+                var blocker = new GameObject("ExistingRobot", typeof(SpriteRenderer));
+                blocker.transform.SetParent(fixture.Root.transform, false);
+                blocker.transform.position = fixture.View.GetCellWorldPosition(anchor);
+                var renderer = blocker.GetComponent<SpriteRenderer>();
+                renderer.sprite = fixture.Slot(3, 3).sprite;
+                renderer.sortingOrder = 1;
+                blocker.transform.localScale = Vector3.one * fixture.View.CellSize;
+                foreach (var child in fixture.Root.GetComponentsInChildren<Transform>()) child.gameObject.layer = 31;
+                var cameraRoot = new GameObject("PreviewVerificationCamera", typeof(Camera));
+                var camera = cameraRoot.GetComponent<Camera>();
+                camera.transform.position = fixture.Root.transform.position + new Vector3(0, 0, -10);
+                camera.orthographic = true;
+                camera.orthographicSize = 2f;
+                camera.cullingMask = 1 << 31;
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Color.black;
+                var target = new RenderTexture(256, 256, 16);
+                var pixels = new Texture2D(256, 256, TextureFormat.RGB24, false);
+                var previous = RenderTexture.active;
+                try
+                {
+                    camera.targetTexture = target;
+                    fixture.View.ShowPreview(fixture.View.Model.Evaluate(anchor, LShape()));
+                    camera.Render();
+                    RenderTexture.active = target;
+                    pixels.ReadPixels(new Rect(0, 0, 256, 256), 0, 0);
+                    pixels.Apply();
+                    foreach (var cell in new[] { anchor, new BoardCoordinate(3, 4), new BoardCoordinate(4, 3) })
+                    {
+                        var point = camera.WorldToScreenPoint(fixture.View.GetCellWorldPosition(cell));
+                        var color = pixels.GetPixel((int)point.x, (int)point.y);
+                        Assert.Greater(color.r, color.g + 0.2f, "完整红色投影必须覆盖已有机器人的重叠区域。");
+                    }
+                    var hole = camera.WorldToScreenPoint(fixture.View.GetCellWorldPosition(new BoardCoordinate(4, 4)));
+                    var holeColor = pixels.GetPixel((int)hole.x, (int)hole.y);
+                    Assert.AreEqual(holeColor.r, holeColor.g, 0.05f, "L形空格不能被包围盒填满。");
+                    fixture.View.ClearPreview();
+                    camera.Render();
+                    pixels.ReadPixels(new Rect(0, 0, 256, 256), 0, 0);
+                    pixels.Apply();
+                    var occupied = camera.WorldToScreenPoint(fixture.View.GetCellWorldPosition(anchor));
+                    var restored = pixels.GetPixel((int)occupied.x, (int)occupied.y);
+                    Assert.AreEqual(restored.r, restored.g, 0.05f, "清除预览后必须恢复已有机器人外观。");
+                    Assert.AreEqual("Existing", fixture.View.Model.GetOccupant(anchor));
+                }
+                finally
+                {
+                    RenderTexture.active = previous;
+                    camera.targetTexture = null;
+                    UnityEngine.Object.DestroyImmediate(cameraRoot);
+                    UnityEngine.Object.DestroyImmediate(target);
+                    UnityEngine.Object.DestroyImmediate(pixels);
+                }
+            }
+        }
+
+        [Test]
+        public void PreviewPoolShrinksAndHidesWithBoardWithoutChangingPhysicsOrOccupancy()
+        {
+            using (var fixture = new BoardFixture(Vector3.zero))
+            {
+                var anchor = new BoardCoordinate(3, 3);
+                var preview = fixture.View.Model.Evaluate(anchor, LShape());
+                var colliders = fixture.Root.GetComponentsInChildren<Collider2D>(true).Length;
+                for (var i = 0; i < 20; i++) fixture.View.ShowPreview(preview);
+                var root = fixture.Root.transform.Find("PlacementPreview");
+                Assert.AreEqual(3, root.childCount, "反复移动预览必须复用对象。");
+                var reused = root.GetChild(0);
+                fixture.View.ShowPreview(fixture.View.Model.Evaluate(anchor, new PlaceableDefinition("One", 1, 1)));
+                Assert.AreSame(reused, root.GetChild(0));
+                var visibleCount = 0;
+                foreach (var renderer in root.GetComponentsInChildren<SpriteRenderer>(true))
+                    if (renderer.enabled) visibleCount++;
+                Assert.AreEqual(1, visibleCount, "小形状不能残留上一形状的预览格。");
+                Assert.AreEqual(colliders, fixture.Root.GetComponentsInChildren<Collider2D>(true).Length);
+                Assert.IsFalse(fixture.View.Model.IsOccupied(anchor));
+                fixture.View.SetBattleContentVisible(false);
+                Assert.IsFalse(root.gameObject.activeSelf);
+                Assert.IsTrue(fixture.View.Initialize());
+                Assert.IsFalse(root.gameObject.activeSelf, "重开棋盘不能恢复旧预览。");
+                fixture.View.ShowPreview(preview);
+                Assert.AreSame(root, fixture.Root.transform.Find("PlacementPreview"));
+                fixture.Root.SetActive(false);
+                // EditMode 不自动派发普通 MonoBehaviour 的生命周期，显式执行停用回调。
+                typeof(PlacementBoardView).GetMethod("OnDisable", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(fixture.View, null);
+                Assert.IsFalse(root.gameObject.activeSelf, "停用棋盘必须清理预览。");
             }
         }
 
