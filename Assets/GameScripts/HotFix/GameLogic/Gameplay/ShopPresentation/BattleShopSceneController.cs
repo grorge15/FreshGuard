@@ -158,6 +158,7 @@ namespace GameLogic
                 var popupRoot = new GameObject("ComboPopups");
                 popupRoot.transform.SetParent(transform, false);
                 _comboPopupRoot = popupRoot.transform;
+                _bootstrap.ConfigureFromTables(tables);
                 _bootstrap.BindBattle(context.BattleId, () => IsCombatRunning && Context == context,
                     context.Registry, _comboPopupRoot);
                 _bootstrap.RobotContactDetected += OnRobotContact;
@@ -337,6 +338,13 @@ namespace GameLogic
             if (main != null) main.RefreshProtectedRobot(view);
         }
 
+        private void ResolveRobotPlacementOverlap(RobotView view, BattleSide side)
+        {
+            if (_bootstrap == null) return;
+            var main = side == BattleSide.Player ? _bootstrap.PlayerBall : _bootstrap.OpponentBall;
+            if (main != null) main.ResolvePlacementOverlap(view, side == BattleSide.Player ? _playerBoard : _opponentBoard);
+        }
+
         public void UpdateMergeCandidates(RobotDragSource source)
         {
             if (Context == null) return;
@@ -415,6 +423,7 @@ namespace GameLogic
             instance.SetActive(true);
             view.Render(robot);
             SyncRobotCollisionMode(view, robot.Side);
+            ResolveRobotPlacementOverlap(view, robot.Side);
             _combat?.SyncRobots();
             target.Board.RefreshAllCells();
         }
@@ -458,6 +467,7 @@ namespace GameLogic
                 _views.Add(instanceId, prepared);
                 prepared.SetActive(true);
                 SyncRobotCollisionMode(view, robot.Side);
+                ResolveRobotPlacementOverlap(view, robot.Side);
                 _combat?.SyncRobots();
                 prepared = null;
                 target.Board.RefreshOccupied(target.Board.Model.Evaluate(target.Anchor, robot.Definition).Cells);
@@ -546,6 +556,10 @@ namespace GameLogic
                     var instance = _views[id];
                     if (instance != null)
                     {
+                        var view = instance.GetComponent<RobotView>();
+                        var previousPosition = instance.transform.position;
+                        var collider = view != null ? view.GetPhysicalCollider() : null;
+                        var previouslyEnabled = collider != null && collider.enabled;
                         if (robot.Location == RobotLocation.Board && robot.Anchor.HasValue)
                         {
                             var board = robot.Side == BattleSide.Player ? _playerBoard : _opponentBoard;
@@ -553,10 +567,11 @@ namespace GameLogic
                             instance.transform.position = board.GetCellWorldPosition(robot.Anchor.Value);
                             instance.GetComponent<RobotView>()?.ApplyBoardScale(board);
                         }
-                        var view = instance.GetComponent<RobotView>();
                         SyncRobotCollisionMode(view, robot.Side);
                         view?.Render(robot);
                         SyncRobotCollisionMode(view, robot.Side);
+                        if (!previouslyEnabled || previousPosition != instance.transform.position)
+                            ResolveRobotPlacementOverlap(view, robot.Side);
                     }
                     continue;
                 }

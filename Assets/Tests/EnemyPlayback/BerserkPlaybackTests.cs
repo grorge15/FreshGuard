@@ -2,8 +2,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using GameConfig;
+using Luban;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -43,6 +46,96 @@ namespace GameLogic.Tests
         {
             _bootstrap.UnbindBattle(); _registry.Dispose(); _balls.Clear(); _robots.Clear();
             yield return SceneManager.UnloadSceneAsync(_scene);
+        }
+
+        [UnityTest]
+        public IEnumerator PlacementAtWallUsesPassThroughProtectionInsteadOfTeleportingOutsideBoard()
+        {
+            var board = NewObject("WallOverlapBoard").AddComponent<PlacementBoardView>();
+            var placed = Robot("I");
+            placed.transform.SetParent(board.transform, false);
+            placed.transform.localPosition = new Vector3(board.Size.x * 0.5f - 0.2f, 0, 0);
+            var main = _bootstrap.PlayerBall;
+            main.LaunchAt(placed.transform.position, 0f);
+            Physics2D.SyncTransforms();
+            var position = main.GetComponent<Rigidbody2D>().position;
+            main.ResolvePlacementOverlap(placed, board);
+            Assert.AreEqual(position, main.GetComponent<Rigidbody2D>().position);
+            Assert.IsTrue(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), placed.GetPhysicalCollider()));
+            Assert.IsTrue(main.IsLaunched);
+            Assert.AreEqual(Vector2.right, main.CurrentDirection);
+            // 模拟墙面反弹后的向内运动：穿出机器人后必须恢复实体碰撞。
+            main.LaunchAt(position, 180f);
+            for (var step = 0; step < 12; step++) Tick();
+            Assert.IsFalse(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
+            Assert.IsFalse(Physics2D.GetIgnoreCollision(main.GetComponent<Collider2D>(), placed.GetPhysicalCollider()));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PlacedRobotEjectsBallPastNeighborsAndPhysicsKeepsMovingForward()
+        {
+            var board = NewObject("OverlapBoard").AddComponent<PlacementBoardView>();
+            var placed = Robot("I");
+            var neighbor = Robot("I");
+            placed.transform.SetParent(board.transform, false);
+            neighbor.transform.SetParent(board.transform, false);
+            neighbor.transform.localPosition = new Vector3(0.7f, 0, 0);
+            var main = _bootstrap.PlayerBall;
+            main.LaunchAt(Vector2.zero, 0f);
+            Physics2D.SyncTransforms();
+            Assert.IsTrue(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
+            main.ResolvePlacementOverlap(placed, board);
+            var position = main.GetComponent<Rigidbody2D>().position;
+            Assert.Greater(position.x, neighbor.GetPhysicalCollider().bounds.max.x);
+            Assert.AreEqual(0f, position.y, 0.0001f);
+            for (var step = 0; step < 5; step++) Tick();
+            Assert.Greater(main.GetComponent<Rigidbody2D>().position.x, position.x);
+            Assert.Greater(main.CurrentDirection.x, 0.99f);
+            Assert.IsFalse(main.GetComponent<Collider2D>().Distance(placed.GetPhysicalCollider()).isOverlapped);
+            Assert.IsFalse(main.GetComponent<Collider2D>().Distance(neighbor.GetPhysicalCollider()).isOverlapped);
+            Assert.AreEqual(0, main.ComboCount);
+            Assert.AreEqual(0, _contacts, "推出不应伪造机器人攻击接触。");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator GlobalRulesControlRealTemporaryBallsAndTheirLifetime()
+        {
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath,
+                "AssetRaw/Configs/bytes", name + ".bytes"))));
+            var buf = new ByteBuf(); buf.WriteSize(tables.TbGlobal.DataList.Count);
+            foreach (var row in tables.TbGlobal.DataList)
+            {
+                buf.WriteInt(row.Id);
+                buf.WriteFloat(row.Id == 35 ? 3f : row.Id == 10 ? 2f : row.Id == 15 ? 0.2f : row.Value);
+                var range = row.Id == 21 ? new[] { 270, 270 } : row.IntArrVal;
+                buf.WriteSize(range.Length); foreach (var value in range) buf.WriteInt(value);
+            }
+            tables.TbGlobal = new GameConfig.globalcfg.TbGlobal(buf);
+            _bootstrap.UnbindBattle();
+            _bootstrap.PlayerBall.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+            _bootstrap.OpponentBall.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+            _bootstrap.ConfigureFromTables(tables);
+            _bootstrap.BindBattle(100, () => _running, _registry, NewObject("ConfiguredPopups").transform);
+            var robot = Robot("I"); var main = _bootstrap.PlayerBall;
+            Approach(main, robot);
+            typeof(PhysicalCollisionBall).GetProperty("ComboCount").SetValue(main, 1);
+            TickUntil(() => main.IsBerserk);
+            var active = _scene.GetRootGameObjects().SelectMany(go => go.GetComponentsInChildren<PhysicalCollisionBall>(true))
+                .Where(ball => ball.Side == BattleSide.Player && ball.IsLaunched).ToArray();
+            Assert.AreEqual(4, active.Length, "配置3颗额外球时应有主球加3颗临时球。");
+            foreach (var ball in active)
+            {
+                Assert.AreEqual(tables.TbGlobal.Get(3).Value, ball.Speed);
+                Assert.AreEqual(_scene, ball.gameObject.scene);
+                if (ball != main) Assert.That(ball.CurrentDirection.y, Is.EqualTo(-1f).Within(0.0001f));
+            }
+            _bootstrap.AdvanceBerserk(0.21f);
+            Assert.IsFalse(main.IsBerserk);
+            Assert.AreEqual(tables.TbGlobal.Get(2).Value, main.Speed);
+            Assert.IsTrue(active.Where(ball => ball != main).All(ball => !ball.IsLaunched && !ball.gameObject.activeSelf));
+            yield return null;
         }
 
         [UnityTest]
@@ -188,7 +281,7 @@ namespace GameLogic.Tests
             var go = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab"));
             SceneManager.MoveGameObjectToScene(go, _scene); go.name = name;
             var ball = go.GetComponent<PhysicalCollisionBall>(); ball.Stop(); go.transform.localScale = Vector3.one;
-            ball.GlobalValueProvider = key => key == 41 ? 6f : key == 34 ? 1.5f : 0f;
+            ball.GlobalValueProvider = key => key == 15 ? 6f : key == 34 ? 1.5f : 0f;
             _balls.Add(ball); return ball;
         }
         private RobotView Robot(string shape, BattleSide side = BattleSide.Player)

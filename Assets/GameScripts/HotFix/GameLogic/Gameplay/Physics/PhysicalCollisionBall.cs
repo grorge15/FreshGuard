@@ -14,12 +14,19 @@ namespace GameLogic
         [SerializeField, Min(0.01f)] private float speed = 5f;
         [SerializeField, Min(0.001f)] private float radius = 0.2f;
         [SerializeField] private bool launchOnEnable;
+        [Header("状态外观")]
+        [Tooltip("普通状态使用的 Sprite；未配置时使用 SpriteRenderer 原有图片。")]
+        [SerializeField] private Sprite _normalSprite;
+        [Tooltip("暴走状态使用的 Sprite；未配置时使用普通状态图片。")]
+        [SerializeField] private Sprite _berserkSprite;
         [Tooltip("Luban 生成的 Global 二进制；作为 Prefab 依赖加载，不在碰撞回调中进行 IO。")]
         [SerializeField] private TextAsset globalConfig;
         [SerializeField] private ComboPopupView _comboPopupPrefab;
         [SerializeField, Min(0f)] private float _comboPopupOffset = 0.35f;
         private Rigidbody2D _body;
         private CircleCollider2D _collider;
+        private SpriteRenderer _spriteRenderer;
+        private Sprite _defaultSprite;
         private Vector2 _direction;
         private bool _launched;
         private bool _frozen;
@@ -33,6 +40,10 @@ namespace GameLogic
         private float _comboTimeout;
         private double _comboElapsed;
         private bool _reconcileAfterFreeze;
+        private BallGlobalRules _rules;
+        private Vector2 _launchPosition;
+        private float _lowSpeedElapsed;
+        private float _rageReentryRemaining;
         private readonly Dictionary<int, RobotContact> _robotContacts = new Dictionary<int, RobotContact>();
         private readonly HashSet<int> _robotHitsThisStep = new HashSet<int>();
         private readonly List<int> _endedRobotContacts = new List<int>();
@@ -45,6 +56,7 @@ namespace GameLogic
             public Collider2D Collider;
             public bool Counted;
             public bool AttackHandled;
+            public float StayElapsed;
         }
 
         private Vector3? _mapOriginalScale;
@@ -55,12 +67,12 @@ namespace GameLogic
         public int ComboCount { get; private set; }
         public Func<int, float> GlobalValueProvider { get; set; }
         public Vector2 CurrentDirection => _direction;
-        public float Speed => speed;
+        public float Speed => _rules == null ? speed : IsBerserk ? _rules.RageSpeed : _rules.NormalSpeed;
         public float EffectiveSpeed
         {
             get
             {
-                return speed * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
+                return Speed * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
             }
         }
         public int BounceCount { get; private set; }
@@ -72,6 +84,30 @@ namespace GameLogic
         public event Action<PhysicalCollisionBall> EffectiveInteraction;
         public event Action<PhysicalCollisionBall> ComboThresholdReached;
         public event Action<PhysicalCollisionBall, int> RobotContactDetected;
+
+        public void ConfigureFromTables(GameConfig.Tables tables) => Configure(BallGlobalRules.FromTables(tables));
+
+        public void Configure(BallGlobalRules rules)
+        {
+            if (_launched) throw new InvalidOperationException("能源球规则只能在发射前装配。");
+            _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        }
+
+        internal PhysicalCollisionBall CreateTemporary()
+        {
+            var ball = Instantiate(this, transform.parent);
+            ball.gameObject.SetActive(false);
+            if (ball.gameObject.scene != gameObject.scene)
+                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(ball.gameObject, gameObject.scene);
+            ball._mapScale = _mapScale;
+            ball._mapOriginalScale = _mapOriginalScale;
+            ball.GlobalValueProvider = GlobalValueProvider;
+            return ball;
+        }
+
+        public float SampleLaunchAngle() => _rules == null
+            ? UnityEngine.Random.Range(Mathf.Min(initialAngleMin, initialAngleMax), Mathf.Max(initialAngleMin, initialAngleMax))
+            : UnityEngine.Random.Range((float)_rules.LaunchAngleMin, _rules.LaunchAngleMax);
 
         public void SetMapScale(float scale)
         {
@@ -100,6 +136,9 @@ namespace GameLogic
         {
             _body = GetComponent<Rigidbody2D>();
             _collider = GetComponent<CircleCollider2D>();
+            _spriteRenderer = GetComponent<SpriteRenderer>();
+            if (_spriteRenderer != null) _defaultSprite = _spriteRenderer.sprite;
+            RefreshSprite();
             _body.gravityScale = 0f;
             _body.drag = 0f;
             _body.angularDrag = 0f;
@@ -130,8 +169,17 @@ namespace GameLogic
                 {
                     ReconcileProtectedContacts();
                     ReconcileRobotContacts();
+                    AdvanceContactTime(Time.fixedDeltaTime);
                     AdvanceComboTime(Time.fixedDeltaTime);
                     SecondsSinceEffectiveInteraction += Time.fixedDeltaTime;
+                    if (_rules != null)
+                    {
+                        _lowSpeedElapsed = _body.velocity.magnitude < _rules.LowSpeedThreshold * _mapScale
+                            ? _lowSpeedElapsed + Time.fixedDeltaTime : 0f;
+                        if (_lowSpeedElapsed >= _rules.LowSpeedDuration ||
+                            SecondsSinceEffectiveInteraction >= _rules.NoInteractionDuration)
+                            LaunchAt(_launchPosition, SampleLaunchAngle());
+                    }
                     _body.velocity = _direction * EffectiveSpeed;
                 }
             }
@@ -152,6 +200,7 @@ namespace GameLogic
             IsBerserk = false;
             _frozen = false;
             SecondsSinceEffectiveInteraction = 0f;
+            _rageReentryRemaining = 0f;
         }
 
         public void BindCombo(BattleEntityRegistry registry, Transform popupRoot)
@@ -192,14 +241,84 @@ namespace GameLogic
 
         public void SetBerserk(bool berserk)
         {
+            if (!berserk && IsBerserk) _rageReentryRemaining = _rules?.ReentryBlockSeconds ?? 0f;
             if (berserk && !IsBerserk)
             {
                 ResetComboCount();
                 foreach (var contact in _robotContacts.Values) contact.Counted = true;
             }
             IsBerserk = berserk;
+            RefreshSprite();
             _reconcileAfterFreeze = true;
             ApplyEffectiveVelocity();
+        }
+
+        private void RefreshSprite()
+        {
+            if (_spriteRenderer == null) return;
+            var normal = _normalSprite != null ? _normalSprite : _defaultSprite;
+            _spriteRenderer.sprite = IsBerserk && _berserkSprite != null ? _berserkSprite : normal;
+        }
+
+        /// <summary>放置完成后沿原运动方向脱离，跳过不足以容纳整颗球的机器人间隙。</summary>
+        public void ResolvePlacementOverlap(RobotView placed, PlacementBoardView board)
+        {
+            if (!_launched || IsBerserk || _body == null || _collider == null || placed == null || board == null) return;
+            var obstacle = placed.GetPhysicalCollider();
+            if (obstacle == null || !obstacle.enabled || obstacle.isTrigger || !obstacle.gameObject.activeInHierarchy) return;
+            Physics2D.SyncTransforms();
+            if (!_collider.Distance(obstacle).isOverlapped) return;
+            var direction = _direction.normalized;
+            if (direction.sqrMagnitude < 0.5f) return;
+            var center = (Vector2)_collider.bounds.center;
+            var worldRadius = _collider.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
+            var clearance = Mathf.Max(0.001f * _mapScale, Physics2D.defaultContactOffset * 2f);
+            var castRadius = worldRadius + clearance;
+            var boardScale = board.transform.lossyScale;
+            var reach = board.Size.magnitude * Mathf.Max(Mathf.Abs(boardScale.x), Mathf.Abs(boardScale.y)) +
+                Vector2.Distance(center, board.transform.position) + castRadius * 2f;
+            // 从棋盘外向球反向扫圆，得到每个实体在前进方向上的出口；正向从内部扫会给出零距离命中。
+            var physics = gameObject.scene.GetPhysicsScene2D();
+            var filter = new ContactFilter2D { useTriggers = false };
+            var hits = new List<RaycastHit2D>();
+            physics.CircleCast(center + direction * reach, castRadius, -direction, reach, filter, hits);
+            var candidates = new List<float>();
+            foreach (var hit in hits)
+                if (IsPlacementObstacle(hit.collider)) candidates.Add(reach - hit.distance + clearance);
+            candidates.Sort();
+            var overlaps = new List<Collider2D>();
+            foreach (var distance in candidates)
+            {
+                if (distance <= 0f) continue;
+                var destination = center + direction * distance;
+                if (!FitsInsideBoard(destination, castRadius, board)) continue;
+                var blocked = false;
+                physics.OverlapCircle(destination, castRadius, filter, overlaps);
+                foreach (var collider in overlaps)
+                    if (IsPlacementObstacle(collider)) { blocked = true; break; }
+                if (blocked) continue;
+                var position = _body.position + destination - center;
+                _body.position = position;
+                transform.position = new Vector3(position.x, position.y, transform.position.z);
+                Physics2D.SyncTransforms();
+                ReconcileProtectedContacts();
+                ReconcileRobotContacts();
+                ApplyEffectiveVelocity();
+                return;
+            }
+            // 前方直到墙边都无容身位置时，沿用临时穿出保护，不能把球瞬移出棋盘或反转方向。
+            ProtectOverlappingRobots(board.GetComponentsInChildren<RobotView>());
+        }
+
+        private bool IsPlacementObstacle(Collider2D collider) => collider != null && collider != _collider &&
+            !collider.isTrigger && collider.gameObject.scene == gameObject.scene && collider.attachedRigidbody == null;
+
+        private static bool FitsInsideBoard(Vector2 center, float worldRadius, PlacementBoardView board)
+        {
+            var local = board.transform.InverseTransformPoint(center);
+            var scale = board.transform.lossyScale;
+            return Mathf.Abs(local.x) + worldRadius / Mathf.Abs(scale.x) < board.Size.x * 0.5f &&
+                Mathf.Abs(local.y) + worldRadius / Mathf.Abs(scale.y) < board.Size.y * 0.5f;
         }
 
         public void ProtectOverlappingRobots(IEnumerable<RobotView> views)
@@ -279,6 +398,8 @@ namespace GameLogic
             _launched = false;
             _dragging = false;
             IsBerserk = false;
+            _rageReentryRemaining = 0f;
+            RefreshSprite();
             foreach (var contact in _protectedContacts.Values) IgnoreRobot(contact, false);
             _protectedContacts.Clear();
             _glassHitsThisStep.Clear();
@@ -288,8 +409,7 @@ namespace GameLogic
 
         public void Launch()
         {
-            float angle = UnityEngine.Random.Range(Mathf.Min(initialAngleMin, initialAngleMax), Mathf.Max(initialAngleMin, initialAngleMax));
-            LaunchAt(spawnPosition, angle);
+            LaunchAt(spawnPosition, SampleLaunchAngle());
         }
 
         public void LaunchAt(Vector2 position, float angle)
@@ -298,7 +418,7 @@ namespace GameLogic
             try
             {
                 ValidateConfig();
-                if (float.IsNaN(speed) || float.IsInfinity(speed) || speed <= 0f || radius <= 0f)
+                if (float.IsNaN(Speed) || float.IsInfinity(Speed) || Speed <= 0f || radius <= 0f)
                     throw new InvalidOperationException("速度与半径必须为正数。");
                 if (float.IsNaN(initialAngleMin) || float.IsNaN(initialAngleMax) ||
                     float.IsInfinity(initialAngleMin) || float.IsInfinity(initialAngleMax))
@@ -310,6 +430,8 @@ namespace GameLogic
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
                 _body.simulated = true;
                 _body.position = position;
+                _launchPosition = position;
+                _lowSpeedElapsed = 0f;
                 _body.velocity = _direction * EffectiveSpeed;
                 BounceCount = 0;
                 SecondsSinceEffectiveInteraction = 0f;
@@ -380,9 +502,11 @@ namespace GameLogic
                 _robotContacts.Add(robot.InstanceId, contact);
             }
             if (_protectedContacts.ContainsKey(robot.InstanceId)) return;
-            if (!contact.AttackHandled)
+            if (!contact.AttackHandled || IsBerserk && _rules != null && contact.StayElapsed >= _rules.RageStayInterval)
             {
                 contact.AttackHandled = true;
+                contact.StayElapsed = 0f;
+                SecondsSinceEffectiveInteraction = 0f;
                 RobotContactDetected?.Invoke(this, robot.InstanceId);
                 // A contact notification can synchronously settle and dispose the battle.
                 if (!IsContactRunning) return;
@@ -390,15 +514,23 @@ namespace GameLogic
             if (IsBerserk) { contact.Counted = true; return; }
             if (!IsComboRunning || !bounced || contact.Counted || !_robotHitsThisStep.Add(robot.InstanceId)) return;
             contact.Counted = true;
+            if (_rageReentryRemaining > 0f) return;
             ComboCount++;
             _comboElapsed = 0d;
             if (ComboCount <= 50 && ComboCount % 10 == 0) ShowComboPopup();
-            if (ComboCount == 50) ComboThresholdReached?.Invoke(this);
+            if (ComboCount == (_rules?.ComboTriggerCount ?? 50)) ComboThresholdReached?.Invoke(this);
+        }
+
+        private void AdvanceContactTime(float deltaTime)
+        {
+            foreach (var contact in _robotContacts.Values) contact.StayElapsed += deltaTime;
         }
 
         private void AdvanceComboTime(float deltaTime)
         {
-            if (!IsComboRunning || IsBerserk || ComboCount == 0) return;
+            if (!IsComboRunning || IsBerserk) return;
+            _rageReentryRemaining = Mathf.Max(0f, _rageReentryRemaining - deltaTime);
+            if (ComboCount == 0) return;
             _comboElapsed += deltaTime;
             if (_comboElapsed > _comboTimeout) ResetComboCount();
         }
