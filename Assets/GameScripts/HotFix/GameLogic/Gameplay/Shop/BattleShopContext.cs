@@ -275,7 +275,7 @@ namespace GameLogic
                 foreach (var state in _states)
                 {
                     state.StorageInstanceId = null;
-                    foreach (var slot in state.Slots) { slot.InstanceId = null; slot.Offer = null; }
+                    state.ClearSlots();
                 }
                 clean(Battle.Dispose);
                 _owned.Clear();
@@ -318,9 +318,7 @@ namespace GameLogic
         {
             if (IsEnded || _endRequested) return ShopOperationResult.BattleEnded;
             if (!IsValidSide(side)) return ShopOperationResult.InvalidArgument;
-            if (_committing || (!allowInteraction && ActiveInteraction != null &&
-                (ActiveInteraction.Source.Kind != RobotDragSourceKind.OwnedRobot ||
-                 ActiveInteraction.Source.InstanceId != instanceId || ActiveInteraction.Side != side))) return ShopOperationResult.Busy;
+            if (_committing || (!allowInteraction && ActiveInteraction != null)) return ShopOperationResult.Busy;
             return ShopOperationResult.Success;
         }
 
@@ -358,11 +356,11 @@ namespace GameLogic
             return null;
         }
 
-        private void DetachSource(RobotEntity robot)
+        private void DetachSource(RobotEntity robot, bool keepSlot = false)
         {
             var state = GetState(robot.Side);
             var slot = FindSlot(state, robot.InstanceId);
-            if (slot != null) slot.InstanceId = null;
+            if (slot != null) { slot.InstanceId = null; if (!keepSlot) state.RemoveSlot(slot); }
             if (state.StorageInstanceId == robot.InstanceId) state.StorageInstanceId = null;
             BoardModel board;
             if (_boards.TryGetValue(robot.InstanceId, out board))
@@ -490,10 +488,11 @@ namespace GameLogic
 
         private void ApplyBatch(BattleShopState state, ShopOffer[] offers)
         {
+            state.ClearSlots();
             var ids = new List<int>(offers.Length);
             for (var index = 0; index < offers.Length; index++)
             {
-                state.Slots[index].Offer = offers[index];
+                state.AddSlot().Offer = offers[index];
                 ids.Add(offers[index].RobotId);
             }
             state.LastBatchRobotIds = ids.AsReadOnly();

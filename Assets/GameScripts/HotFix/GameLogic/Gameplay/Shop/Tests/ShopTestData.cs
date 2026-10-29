@@ -100,7 +100,7 @@ namespace GameLogic.Tests
         internal static RobotEntity Purchase(BattleShopContext context, int slot = 0,
             BattleSide side = BattleSide.Player)
         {
-            var offer = context.GetState(side).Slots[slot].Offer;
+            var offer = context.GetState(side).FindSlot(slot).Offer;
             RobotEntity robot;
             NUnit.Framework.Assert.AreEqual(ShopOperationResult.Success,
                 context.TryPurchase(side, slot, offer.OfferId, out robot));

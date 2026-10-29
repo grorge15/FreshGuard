@@ -9,7 +9,7 @@ namespace GameLogic.Tests
     public class ShopOfferMergeTests
     {
         private static ShopOffer OfferAt(BattleShopContext context, int slot) =>
-            context.GetState(BattleSide.Player).Slots[slot].Offer;
+            context.GetState(BattleSide.Player).FindSlot(slot)?.Offer;
 
         private static RobotDragSource Source(BattleShopContext context, int slot = 0) =>
             RobotDragSource.Offer(slot, OfferAt(context, slot).OfferId);
@@ -30,7 +30,7 @@ namespace GameLogic.Tests
             var current = OfferAt(context, slot);
             var offer = (ShopOffer)Activator.CreateInstance(typeof(ShopOffer), BindingFlags.Instance | BindingFlags.NonPublic,
                 null, new object[] { current.OfferId, robotId, level, context.Rules.GetPrice(2, level) }, null);
-            typeof(ShopSlot).GetProperty("Offer").SetValue(context.GetState(BattleSide.Player).Slots[slot], offer);
+            typeof(ShopSlot).GetProperty("Offer").SetValue(context.GetState(BattleSide.Player).FindSlot(slot), offer);
         }
 
         [TestCase(1)] [TestCase(2)] [TestCase(3)] [TestCase(4)]
@@ -55,7 +55,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(6 * (level + 1), merged.Price);
                 Assert.AreNotEqual(source.OfferId, merged.OfferId);
                 Assert.AreNotEqual(target.OfferId, merged.OfferId);
-                Assert.IsFalse(context.GetState(BattleSide.Player).Slots[1].IsPurchased);
+                Assert.IsFalse(context.GetState(BattleSide.Player).FindSlot(1).IsPurchased);
                 Assert.AreEqual(0, context.GetState(BattleSide.Player).EnergyCoins);
                 Assert.IsFalse(context.IsBusy);
                 Assert.AreEqual(ShopOperationResult.InvalidSource,
@@ -144,9 +144,6 @@ namespace GameLogic.Tests
                     BattleSide.Player, board, new BoardCoordinate(0, 0)));
                 SetCoins(context, 0);
                 var source = OfferAt(context, 0);
-                RobotDragSession rejected;
-                Assert.AreEqual(ShopOperationResult.InsufficientCoins,
-                    context.TryBeginDrag(BattleSide.Player, Source(context), out rejected));
                 var session = Begin(context);
                 RobotEntity created;
                 Assert.AreEqual(ShopOperationResult.InsufficientCoins,
@@ -219,7 +216,7 @@ namespace GameLogic.Tests
                 RobotDragSession stale;
                 Assert.AreEqual(ShopOperationResult.StaleOffer,
                     context.TryBeginDrag(BattleSide.Player, merged, out stale, allowUnaffordableOffer: true));
-                session = Begin(context);
+                session = Begin(context, context.GetState(BattleSide.Player).Slots[0].SlotId);
                 var nextSession = Begin(next);
                 Assert.AreEqual(ShopOperationResult.InvalidSource,
                     next.TryCommitOfferMerge(session.InteractionId, 1, OfferAt(next, 1).OfferId));
