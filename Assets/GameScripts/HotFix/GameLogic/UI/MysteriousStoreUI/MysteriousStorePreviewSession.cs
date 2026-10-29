@@ -48,20 +48,20 @@ namespace GameLogic
         }
     }
 
-    /// <summary>只改变内存演示数据；不引用玩家余额、战斗 BUFF 或存档服务。</summary>
+    /// <summary>商品和助力仍为内存演示数据；助力币直接使用主菜单玩家状态，由宿主负责保存。</summary>
     public sealed class MysteriousStorePreviewSession
     {
         public const int SlotCount = 6;
         private readonly List<MysteriousStoreHeldBuffData> _held;
-        public int Balance { get; private set; }
+        public MainMenuPlayerState PlayerState { get; }
         public IReadOnlyList<MysteriousStoreOfferData> Offers { get; }
         public IReadOnlyList<MysteriousStoreHeldBuffData> HeldBuffs { get; }
         public bool HasPurchased { get; private set; }
 
-        public MysteriousStorePreviewSession(int balance, IEnumerable<MysteriousStoreOfferData> offers,
+        public MysteriousStorePreviewSession(MainMenuPlayerState playerState, IEnumerable<MysteriousStoreOfferData> offers,
             IEnumerable<MysteriousStoreHeldBuffData> heldBuffs = null)
         {
-            if (balance < 0) throw new ArgumentOutOfRangeException(nameof(balance));
+            PlayerState = playerState ?? throw new ArgumentNullException(nameof(playerState));
             var offerList = new List<MysteriousStoreOfferData>(offers ?? throw new ArgumentNullException(nameof(offers)));
             if (offerList.Count > 3 || offerList.Any(item => item == null) ||
                 offerList.Select(item => item.BuffId).Distinct().Count() != offerList.Count)
@@ -71,20 +71,16 @@ namespace GameLogic
             if (_held.Count > SlotCount || _held.Select(item => item.Slot).Distinct().Count() != _held.Count ||
                 _held.Select(item => item.BuffId).Distinct().Count() != _held.Count)
                 throw new ArgumentException("持有助力的 ID 和槽位不能重复。", nameof(heldBuffs));
-            Balance = balance;
             Offers = offerList.AsReadOnly();
             HeldBuffs = _held.AsReadOnly();
         }
 
-        public static MysteriousStorePreviewSession CreateDefault()
+        public static MysteriousStorePreviewSession CreateDefault(MainMenuPlayerState playerState)
         {
             var purple = new MysteriousStoreOfferData(1800, "紫色示例助力", "提升守护力量，\n为下一场战斗提供\n额外助力。", MysteriousStoreQuality.Purple, 40, 60, 80);
             var orange = new MysteriousStoreOfferData(1801, "橙色示例助力", "强化战斗表现，\n助力效果随持有\n层数逐步提升。", MysteriousStoreQuality.Orange, 40, 60, 80);
             var blue = new MysteriousStoreOfferData(1802, "蓝色示例助力", "获得全新的助力，\n购买后加入下方\n当前助力栏。", MysteriousStoreQuality.Blue, 160, 180, 200);
-            return new MysteriousStorePreviewSession(120, new[] { purple, orange, blue }, new[]
-            {
-                new MysteriousStoreHeldBuffData(purple, 1, 0), new MysteriousStoreHeldBuffData(orange, 2, 1)
-            });
+            return new MysteriousStorePreviewSession(playerState, new[] { purple, orange, blue });
         }
 
         public MysteriousStoreHeldBuffData FindHeld(int buffId) => _held.Find(item => item.BuffId == buffId);
@@ -100,16 +96,16 @@ namespace GameLogic
             var level = GetTargetLevel(index);
             if (level > offer.MaxLevel) return MysteriousStorePurchaseResult.Unavailable;
             var price = GetPrice(index);
-            if (Balance < price) return MysteriousStorePurchaseResult.InsufficientBalance;
+            if (PlayerState.Coins < price) return MysteriousStorePurchaseResult.InsufficientBalance;
             var held = FindHeld(offer.BuffId);
             if (held == null && _held.Count == SlotCount) return MysteriousStorePurchaseResult.SlotsFull;
+            if (!PlayerState.TrySpendCoins(price)) return MysteriousStorePurchaseResult.InsufficientBalance;
             if (held == null)
             {
                 var slot = Enumerable.Range(0, SlotCount).First(value => _held.All(item => item.Slot != value));
                 _held.Add(new MysteriousStoreHeldBuffData(offer, 1, slot));
             }
             else held.Level = level;
-            Balance -= price;
             HasPurchased = true;
             return MysteriousStorePurchaseResult.Success;
         }

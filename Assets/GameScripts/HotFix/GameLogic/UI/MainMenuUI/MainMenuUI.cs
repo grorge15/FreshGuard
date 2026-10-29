@@ -89,9 +89,9 @@ namespace GameLogic
         }
 
         public UniTask ShowMysteriousStorePreviewAsync(long battleId) =>
-            ShowMysteriousStorePreviewAsync(battleId, MysteriousStorePreviewSession.CreateDefault());
+            ShowMysteriousStorePreviewAsync(battleId, MysteriousStorePreviewSession.CreateDefault(State));
 
-        /// <summary>允许传入独立预览数据；不读取或写入真实玩家商店状态。</summary>
+        /// <summary>商品和助力可传入演示数据；购买扣除会话引用的玩家助力币并保存。</summary>
         public async UniTask ShowMysteriousStorePreviewAsync(long battleId, MysteriousStorePreviewSession session)
         {
             if (_disposed || IsDestroyed || battleId <= 0 || battleId == _lastMysteriousStoreBattleId ||
@@ -111,7 +111,7 @@ namespace GameLogic
                 instance.SetActive(false);
                 widget = new MysteriousStoreWidget();
                 if (!widget.Create(this, instance, false)) throw new InvalidOperationException("神秘商店节点初始化失败。");
-                widget.Bind(session, CloseMysteriousStore);
+                widget.Bind(session, CloseMysteriousStore, OnMysteriousStorePurchased);
                 widget.transform.SetAsLastSibling();
                 _mysteriousStore = widget;
                 widget.Visible = true;
@@ -135,6 +135,12 @@ namespace GameLogic
                 _openingMysteriousStore = false;
                 if (!_disposed && !IsDestroyed) RefreshView();
             }
+        }
+
+        private void OnMysteriousStorePurchased()
+        {
+            GameApp.SavePlayerStateAsync().Forget();
+            RefreshView();
         }
 
         private void CloseMysteriousStore()

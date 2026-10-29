@@ -19,6 +19,10 @@ namespace FreshGuard.Editor
         private const string FontPath = "Assets/AssetRaw/Fonts/NotoSansSC-Regular.otf";
         private const float Scale = 1.5f;
 
+        private static MysteriousStorePreviewSession CreatePreviewSession() =>
+            MysteriousStorePreviewSession.CreateDefault(new MainMenuPlayerState(30,
+                TimeSpan.FromMinutes(5), 30, 0, 2500, DateTimeOffset.UtcNow));
+
         [MenuItem("FreshGuard/Mysterious Store/Build Prefab")]
         public static void Build()
         {
@@ -32,7 +36,7 @@ namespace FreshGuard.Editor
                 SceneManager.MoveGameObjectToScene(root, scene);
                 var widget = new MysteriousStoreWidget();
                 widget.Create(new UIBase(), root);
-                widget.Bind(MysteriousStorePreviewSession.CreateDefault(), null);
+                widget.Bind(CreatePreviewSession(), null);
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
                 AssetDatabase.SaveAssets();
                 Debug.Log("[MysteriousStore] Prefab 已保存：" + PrefabPath);
@@ -57,11 +61,9 @@ namespace FreshGuard.Editor
             AtText("QualityOrange", content, "黄", 27, 65, 40, 501, 287);
             AtButton("m_btn_Close", content, "MysteryShop_closeButton", 80, 80, 623, 234);
             // 余额置于标题上方，不挤占商品的描述和价格区域。
-            var wallet = AtImage("Wallet", content, null, 206, 43, 360, 145);
-            wallet.color = new Color(0.19f, 0.12f, 0.08f, 0.9f);
-            var coin = Picture("WalletCoin", wallet.transform, null, 29, 29, -76, 0);
+            var coin = AtImage("m_img_BalanceCoin", content, null, 29, 29, 284, 145);
             coin.sprite = RequiredSprite(CoinPath);
-            AtText("m_text_Balance", content, "助力币  120", 22, 170, 38, 380, 145);
+            AtText("m_text_Balance", content, "助力币  0", 22, 170, 38, 380, 145);
             for (var i = 0; i < 3; i++) Offer(content, i, 395 + i * 156);
             AtText("CurrentTitle", content, "当前助力", 29, 400, 45, 360, 816);
             for (var i = 0; i < MysteriousStorePreviewSession.SlotCount; i++) Held(content, i);
@@ -93,7 +95,7 @@ namespace FreshGuard.Editor
             var root = At("m_item_Held" + index, parent, 72, 76, 161 + index * 80, 895);
             var content = Rect("m_go_Content", root, 72, 76, 0, 0);
             Icon(Rect("m_rect_Icon", content, 68, 68, 0, 0));
-            Label("m_text_Level", content, "1级", 18, 65, 28, 4, 24, Color.white, 1.3f, TextAnchor.MiddleRight);
+            Label("m_text_Level", content, "", 18, 65, 28, 4, 24, Color.white, 1.3f, TextAnchor.MiddleRight);
             Button("m_btn_Remove", content, "Shop_removeIcon", 28, 28, 28, -28);
         }
 
@@ -230,7 +232,7 @@ namespace FreshGuard.Editor
                 var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath), canvasObject.transform, false);
                 var widget = new MysteriousStoreWidget();
                 widget.Create(new UIBase(), root);
-                widget.Bind(MysteriousStorePreviewSession.CreateDefault(), null);
+                widget.Bind(CreatePreviewSession(), null);
                 if (removal) root.transform.Find("m_rect_Content/m_item_Held1/m_go_Content/m_btn_Remove").GetComponent<Button>().onClick.Invoke();
                 target = new RenderTexture(width, height, 24);
                 camera.targetTexture = target;
