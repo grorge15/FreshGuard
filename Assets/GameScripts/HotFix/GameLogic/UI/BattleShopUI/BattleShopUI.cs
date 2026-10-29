@@ -14,6 +14,7 @@ namespace GameLogic
         private ShopRobotItemWidget[] _items;
         private StorageRobotSlotWidget _storage;
         private RobotDragGhostWidget _ghost;
+        private BerserkBarWidget _berserkBar;
         private BattleShopSceneController _host;
         private float _flashUntil;
         private float _messageUntil;
@@ -58,6 +59,7 @@ namespace GameLogic
                 _items[i] = CreateWidget<ShopRobotItemWidget>("m_rect_ShopPanel/m_tf_Offers/Slot_" + i);
             _storage = CreateWidget<StorageRobotSlotWidget>("m_rect_ShopPanel/m_item_Storage");
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
+            _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: false);
         }
         protected override void OnRefresh()
         {
@@ -72,6 +74,15 @@ namespace GameLogic
                 Drag.Initialize(this, host);
             }
             RefreshView();
+            RefreshBerserkBar();
+        }
+        public void RefreshBerserkBar()
+        {
+            var bootstrap = _host != null && Context != null && !Context.IsEnded && !Context.IsEndRequested
+                ? _host.Bootstrap : null;
+            var remaining = bootstrap != null && bootstrap.IsBerserk(BattleSide.Player)
+                ? bootstrap.BerserkRemaining(BattleSide.Player) : 0f;
+            _berserkBar?.Render(remaining, bootstrap != null ? bootstrap.BerserkDuration : 0f);
         }
         public void RefreshView()
         {
@@ -184,6 +195,7 @@ namespace GameLogic
         }
         protected override void OnUpdate()
         {
+            RefreshBerserkBar();
             Drag.Advance(Time.unscaledTime);
             var flashing = Time.unscaledTime < _flashUntil && Mathf.Repeat(Time.unscaledTime * 10f, 1f) < 0.5f;
             _coins.color = flashing ? new Color(1f, 0.25f, 0.15f) : Color.white;

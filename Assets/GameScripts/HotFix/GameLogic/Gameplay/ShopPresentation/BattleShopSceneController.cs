@@ -314,6 +314,7 @@ namespace GameLogic
 
         private void OnBerserkChanged(BattleSide side, bool active)
         {
+            if (side == BattleSide.Player) ShopWindow?.RefreshBerserkBar();
             var views = new List<RobotView>();
             foreach (var instance in _views.Values)
             {
