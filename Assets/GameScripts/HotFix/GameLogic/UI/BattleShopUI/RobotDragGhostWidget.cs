@@ -1,4 +1,3 @@
-using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -6,16 +5,15 @@ namespace GameLogic
 {
     public sealed class RobotDragGhostWidget : UIWidget
     {
-        private Image _icon;
+        private RobotIconPresentation _visual;
         protected override void ScriptGenerator()
         {
-            _icon = FindChildComponent<Image>("m_img_RobotIcon");
+            _visual = new RobotIconPresentation(FindChildComponent<Image>("m_img_RobotIcon"));
         }
         public void Show(string icon, int level, Vector2 position, Camera camera)
         {
             Visible = true;
-            _icon.color = RobotLevelStyle.ColorForLevel(level);
-            _icon.SetSprite(icon, cancellationToken: gameObject.GetCancellationTokenOnDestroy());
+            _visual.Render(icon, level, true);
             Move(position, camera);
             transform.SetAsLastSibling();
         }
@@ -26,5 +24,6 @@ namespace GameLogic
                 // local 是相对父节点 pivot 的坐标，不能当作相对自身锚点的 anchoredPosition。
                 rectTransform.localPosition = new Vector3(local.x, local.y, 0);
         }
+        protected override void OnDestroy() { _visual?.Dispose(); }
     }
 }

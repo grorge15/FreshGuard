@@ -13,6 +13,7 @@ namespace GameLogic
         // 预留真实物理间隙，包含 PolygonCollider2D 的边缘厚度。
         private const float CollisionInsetRatio = 0.06f;
         [SerializeField] private SpriteRenderer _iconRenderer;
+        [SerializeField] private SpriteRenderer _portraitRenderer;
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
@@ -80,6 +81,11 @@ namespace GameLogic
             {
                 _iconRenderer.enabled = visible;
                 _iconRenderer.color = color;
+            }
+            if (_portraitRenderer != null)
+            {
+                _portraitRenderer.enabled = visible && useIcon && _portraitRenderer.sprite != null;
+                _portraitRenderer.color = Color.white;
             }
             foreach (var edge in _outline) edge.enabled = visible && !useIcon;
             var collider = GetPhysicalCollider();

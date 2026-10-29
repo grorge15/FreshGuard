@@ -1,4 +1,3 @@
-using Cysharp.Threading.Tasks;
 using GameConfig.robot;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,7 +6,7 @@ namespace GameLogic
 {
     public sealed class ShopRobotItemWidget : UIWidget
     {
-        private Image _icon;
+        private RobotIconPresentation _visual;
         private Image _quality;
         private Image _background;
         private Image _priceCoin;
@@ -15,12 +14,11 @@ namespace GameLogic
         private ShopPointerInput _input;
         private BattleShopUI _owner;
         private int _slot;
-        private string _iconLocation;
         private Color _baseBackgroundColor;
 
         protected override void ScriptGenerator()
         {
-            _icon = FindChildComponent<Image>("m_img_RobotIcon");
+            _visual = new RobotIconPresentation(FindChildComponent<Image>("m_img_RobotIcon"));
             _quality = FindChildComponent<Image>("m_img_Quality");
             _price = FindChildComponent<Text>("m_text_Price");
             _input = gameObject.GetComponent<ShopPointerInput>();
@@ -70,18 +68,10 @@ namespace GameLogic
                 _baseBackgroundColor = Color.clear;
                 _background.color = _baseBackgroundColor;
             }
-            _icon.enabled = config != null && !hidden;
+            _visual.Render(config?.RobotIcon, level, config != null && !hidden);
             _quality.enabled = false;
             _price.enabled = config != null;
             _priceCoin.enabled = config != null && !content.IsPurchased;
-            if (config == null) return;
-            _icon.color = RobotLevelStyle.ColorForLevel(level);
-            _icon.enabled = !hidden;
-            if (_iconLocation != config.RobotIcon)
-            {
-                _iconLocation = config.RobotIcon;
-                _icon.SetSprite(config.RobotIcon, cancellationToken: gameObject.GetCancellationTokenOnDestroy());
-            }
         }
         public void SetMergeCandidate(bool eligible, bool hovered)
         {
@@ -103,6 +93,7 @@ namespace GameLogic
         }
         protected override void OnDestroy()
         {
+            _visual?.Dispose();
             _owner = null;
             if (_input != null) { _input.Pressed = null; _input.Moved = null; _input.Released = null; }
         }

@@ -40,15 +40,36 @@ namespace GameLogic.Tests
                     var icon = iconNode.GetComponent<SpriteRenderer>();
                     Assert.AreSame(AssetDatabase.LoadAssetAtPath<Sprite>(
                         "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"), icon.sprite);
-                    CollectionAssert.AreEquivalent(new[] { icon },
+                    var portrait = instance.transform.Find("RobotPortrait").GetComponent<SpriteRenderer>();
+                    Assert.AreSame(AssetDatabase.LoadAssetAtPath<Sprite>(
+                        "Assets/AssetRaw/Actor/Robots/Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png"), portrait.sprite);
+                    Assert.AreEqual(icon.sprite.pivot, portrait.sprite.pivot);
+                    Assert.AreEqual(icon.sprite.rect, portrait.sprite.rect);
+                    Assert.AreEqual(icon.sprite.pixelsPerUnit, portrait.sprite.pixelsPerUnit);
+                    Assert.AreEqual(icon.transform.localPosition, portrait.transform.localPosition);
+                    Assert.AreEqual(icon.transform.localScale, portrait.transform.localScale);
+                    Assert.Greater(portrait.sortingOrder, icon.sortingOrder);
+                    CollectionAssert.AreEquivalent(new[] { icon, portrait },
                         instance.GetComponentsInChildren<SpriteRenderer>(true).Where(renderer => renderer.enabled));
                     Assert.AreEqual(Color.white, icon.color);
+                    Assert.AreEqual(Color.white, portrait.color);
                     Assert.IsTrue(robot.TryUpgrade());
                     view.Render(robot);
                     Assert.AreEqual(RobotLevelStyle.ColorForLevel(2), icon.color);
+                    Assert.AreEqual(Color.white, portrait.color);
                     view.SetMergeCandidate(true);
                     Assert.AreEqual(Color.Lerp(RobotLevelStyle.ColorForLevel(2), Color.cyan, 0.65f), icon.color);
+                    Assert.AreEqual(Color.white, portrait.color);
                     view.SetMergeCandidate(false);
+                    for (var level = 3; level <= 5; level++)
+                    {
+                        Assert.IsTrue(robot.TryUpgrade());
+                        view.Render(robot);
+                        Assert.AreEqual(RobotLevelStyle.ColorForLevel(level), icon.color);
+                        Assert.AreEqual(Color.white, portrait.color, "升级只能改变底板，立绘必须保持原色。");
+                    }
+                    view.PlayMergeFeedback();
+                    Assert.AreEqual(Color.white, portrait.color, "合成闪光不能给立绘染色。");
                     robot.TrySetDragging(true);
                     view.Render(robot);
                     Assert.IsFalse(instance.GetComponentsInChildren<SpriteRenderer>(true).Any(renderer => renderer.enabled));
@@ -56,6 +77,7 @@ namespace GameLogic.Tests
                     robot.TrySetDragging(false);
                     view.Render(robot);
                     Assert.IsTrue(icon.enabled);
+                    Assert.IsTrue(portrait.enabled);
                     Assert.IsTrue(view.GetPhysicalCollider().enabled);
                     foreach (var cell in robot.Definition.Cells)
                     {
@@ -66,6 +88,30 @@ namespace GameLogic.Tests
                     }
                 }
                 finally { Object.DestroyImmediate(instance); }
+            }
+        }
+
+        [TestCase("BattleShopUI")]
+        [TestCase("ShopRobotItem")]
+        [TestCase("StorageRobotSlot")]
+        [TestCase("RobotDragGhost")]
+        public void ShopStorageAndGhostHaveAlignedOriginalColorPortraits(string prefabName)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/" + prefabName + ".prefab");
+            var icons = prefab.GetComponentsInChildren<UnityEngine.UI.Image>(true)
+                .Where(image => image.name == "m_img_RobotIcon").ToArray();
+            Assert.IsNotEmpty(icons);
+            foreach (var icon in icons)
+            {
+                var portrait = icon.transform.Find("m_img_RobotPortrait").GetComponent<UnityEngine.UI.Image>();
+                Assert.AreEqual(Color.white, portrait.color);
+                Assert.IsFalse(portrait.raycastTarget, "立绘不能阻挡原有商店和拖拽输入。");
+                Assert.AreEqual(Vector2.zero, portrait.rectTransform.anchorMin);
+                Assert.AreEqual(Vector2.one, portrait.rectTransform.anchorMax);
+                Assert.AreEqual(Vector2.zero, portrait.rectTransform.offsetMin);
+                Assert.AreEqual(Vector2.zero, portrait.rectTransform.offsetMax);
+                Assert.IsTrue(icon.preserveAspect);
+                Assert.IsTrue(portrait.preserveAspect);
             }
         }
 
