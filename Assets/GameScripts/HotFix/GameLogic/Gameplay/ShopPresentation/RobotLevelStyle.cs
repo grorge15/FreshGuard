@@ -6,6 +6,13 @@ namespace GameLogic
     public static class RobotLevelStyle
     {
         public static readonly Color IconColor = new Color(0.16f, 0.19f, 0.24f);
+        public static string PortraitForIcon(string icon)
+        {
+            if (string.IsNullOrEmpty(icon) || !icon.EndsWith("Icon", System.StringComparison.Ordinal))
+                throw new System.ArgumentException("机器人底板地址必须以 Icon 结尾。", nameof(icon));
+            return icon.Substring(0, icon.Length - 4) + "Portrait";
+        }
+
         public static Color ColorForLevel(int level)
         {
             switch (level)

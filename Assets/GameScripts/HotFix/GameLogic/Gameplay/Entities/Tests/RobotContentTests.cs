@@ -106,6 +106,9 @@ namespace GameLogic.Tests
                     "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab").Address);
                 Assert.AreEqual(config.RobotIcon, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png").Address);
+                var portrait = RobotLevelStyle.PortraitForIcon(config.RobotIcon);
+                Assert.AreEqual(portrait, assets.Single(asset => asset.AssetInfo.AssetPath ==
+                    "Assets/AssetRaw/Actor/Robots/Portraits/" + portrait + ".png").Address);
             }
         }
 
