@@ -15,5 +15,7 @@ namespace GameLogic
         public bool IsRunning => IsValid(_context.BattleId) && _host.IsCombatRunning;
         public bool TryGetPosition(BattleSide side, int targetId, out Vector3 position) =>
             _enemies.TryGetTargetPosition(side, targetId, out position);
+        public bool TryGetDeathPosition(BattleSide side, int targetId, out Vector3 position) =>
+            _enemies.TryGetDeathPosition(side, targetId, out position);
     }
 }

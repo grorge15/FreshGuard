@@ -26,6 +26,9 @@ namespace GameLogic
         private readonly List<SpawnGroup> _groups = new List<SpawnGroup>();
         private readonly Dictionary<int, MoveEntry> _active = new Dictionary<int, MoveEntry>();
         private readonly Dictionary<int, DeathEntry> _dying = new Dictionary<int, DeathEntry>();
+        // 只保存本局的值快照，死亡表现回收后仍供在途子弹查询。
+        private readonly Dictionary<int, (BattleSide Side, Vector3 Position)> _deathPositions =
+            new Dictionary<int, (BattleSide Side, Vector3 Position)>();
         private readonly List<DamageNumberView> _damageNumbers = new List<DamageNumberView>();
         private BattleShopSceneController _host;
         private BattleShopContext _context;
@@ -461,6 +464,14 @@ namespace GameLogic
             return true;
         }
 
+        internal bool TryGetDeathPosition(BattleSide side, int instanceId, out Vector3 position)
+        {
+            position = default;
+            if (!OwnsBattle || !_deathPositions.TryGetValue(instanceId, out var death) || death.Side != side) return false;
+            position = death.Position;
+            return true;
+        }
+
         /// <summary>逻辑实体已回收，死亡动画单独保留，不能再抵塔或被索敌。</summary>
         public void NotifyKilled(EntityRemovalSnapshot snapshot)
         {
@@ -469,6 +480,7 @@ namespace GameLogic
                 !_active.TryGetValue(snapshot.InstanceId, out var entry) || entry.Group.Side != snapshot.Side) return;
             _active.Remove(snapshot.InstanceId);
             if (entry.View == null) return;
+            _deathPositions[snapshot.InstanceId] = (snapshot.Side, entry.View.transform.position);
             _dying.Add(snapshot.InstanceId, new DeathEntry { View = entry.View });
             entry.View.RemovalAnimationCompleted += OnDeathCompleted;
             try
@@ -529,6 +541,7 @@ namespace GameLogic
                 if (pair.Value.View != null) Release(pair.Value.View.gameObject);
             }
             _active.Clear();
+            _deathPositions.Clear();
             foreach (var id in _dying.Keys.ToArray()) ReleaseDeathView(id);
             foreach (var number in _damageNumbers)
                 if (number != null) Release(number.gameObject);

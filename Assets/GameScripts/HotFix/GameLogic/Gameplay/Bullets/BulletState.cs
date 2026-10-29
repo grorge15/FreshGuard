@@ -8,6 +8,8 @@ namespace GameLogic
     {
         private readonly IBulletWorld _world;
         private readonly Action<BulletState> _onHit;
+        private Vector3 _targetPosition;
+        private bool _targetLost;
         public BulletLauncher Launcher { get; }
         public CombatActionSnapshot Action => Launcher.Action;
         public Vector3 Position { get; private set; }
@@ -19,6 +21,7 @@ namespace GameLogic
             _world = world ?? throw new ArgumentNullException(nameof(world));
             _onHit = onHit ?? throw new ArgumentNullException(nameof(onHit));
             Position = launcher.Action.Origin;
+            _targetPosition = launcher.Action.AimPoint;
         }
         public bool Advance(float deltaTime)
         {
@@ -26,15 +29,25 @@ namespace GameLogic
             if (IsResolved) return true;
             if (!_world.IsValid(Action.BattleId)) { Cancel(); return true; }
             if (!_world.IsRunning) return false;
-            if (!_world.TryGetPosition(Action.SourceSide, Action.TargetInstanceIds[0], out var target))
-            { Cancel(); return true; }
+            if (!_targetLost)
+            {
+                if (_world.TryGetPosition(Action.SourceSide, Action.TargetInstanceIds[0], out var target))
+                    _targetPosition = target;
+                else
+                {
+                    // 死亡坐标独立于已回收的实体/表现；无死亡记录时沿用最后一次瞄准点。
+                    if (_world.TryGetDeathPosition(Action.SourceSide, Action.TargetInstanceIds[0], out var deathPosition))
+                        _targetPosition = deathPosition;
+                    _targetLost = true;
+                }
+            }
             Elapsed = Mathf.Min(Launcher.Model.FlightTime, Elapsed + deltaTime);
             var u = Elapsed / Launcher.Model.FlightTime;
-            Position = Vector3.Lerp(Action.Origin, target, u) +
+            Position = Vector3.Lerp(Action.Origin, _targetPosition, u) +
                 Vector3.up * (4f * Launcher.Model.ArcHeight * u * (1f - u));
             if (Elapsed < Launcher.Model.FlightTime) return false;
             IsResolved = true; // 命中回调之前封住重入。
-            _onHit(this);
+            if (!_targetLost) _onHit(this);
             return true;
         }
         public void Cancel() { IsResolved = true; }

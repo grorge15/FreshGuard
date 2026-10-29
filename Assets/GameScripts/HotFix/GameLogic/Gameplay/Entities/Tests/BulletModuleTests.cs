@@ -17,13 +17,39 @@ namespace GameLogic.Tests
             Assert.IsTrue(state.Advance(1f)); Assert.AreEqual(1,hits);
         }
         [Test]
-        public void MissingTargetEndsWithoutRetargetingAndFreezeDoesNotAdvance()
+        public void MissingTargetFinishesArcAtLastPositionWithoutRetargetingOrHit()
         {
             var world=new World(); var hits=0; var state=State(world,s=>hits++);
             world.Running=false; Assert.IsFalse(state.Advance(5f)); Assert.AreEqual(0f,state.Elapsed);
+            world.Running=true; world.Position=new Vector3(4f,0f,0f);
+            Assert.IsFalse(state.Advance(0.25f));
             world.Running=true; world.TargetValid=false;
-            Assert.IsTrue(state.Advance(1f)); Assert.AreEqual(0,hits);
+            Assert.IsFalse(state.Advance(0.25f), "目标消失后子弹应继续飞行");
+            Assert.AreEqual(new Vector3(2f,1f,0f),state.Position);
+            world.TargetValid=true; world.Position=new Vector3(20f,0f,0f);
+            Assert.IsTrue(state.Advance(0.5f)); Assert.AreEqual(new Vector3(4f,0f,0f),state.Position);
             world.TargetValid=true; Assert.IsTrue(state.Advance(1f)); Assert.AreEqual(0,hits);
+        }
+
+        [Test]
+        public void TargetMissingBeforeFirstTickUsesLaunchAimPointUntilArrival()
+        {
+            var world=new World(); var hits=0; var state=State(world,s=>hits++);
+            world.TargetValid=false;
+            Assert.IsFalse(state.Advance(0.5f));
+            Assert.AreEqual(new Vector3(1f,1f,0f),state.Position);
+            Assert.IsTrue(state.Advance(0.5f));
+            Assert.AreEqual(new Vector3(2f,0f,0f),state.Position);
+            Assert.AreEqual(0,hits);
+        }
+
+        [Test]
+        public void InvalidBattleStillCancelsInFlightBulletImmediately()
+        {
+            var world=new World(); var state=State(world,s=>Assert.Fail("终局不得命中"));
+            state.Advance(0.25f); var position=state.Position;
+            world.Valid=false;
+            Assert.IsTrue(state.Advance(0.1f)); Assert.AreEqual(position,state.Position);
         }
         [Test]
         public void ManagerReleasesExactlyOnceWhenHitSynchronouslyEndsBattle()
@@ -47,6 +73,7 @@ namespace GameLogic.Tests
             public bool IsValid(long battleId)=>Valid&&battleId==1;
             public bool IsRunning=>Running;
             public bool TryGetPosition(BattleSide side,int id,out Vector3 position){position=Position;return TargetValid&&id==2;}
+            public bool TryGetDeathPosition(BattleSide side,int id,out Vector3 position){position=default;return false;}
         }
     }
 }

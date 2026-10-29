@@ -226,6 +226,39 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, _combat.LiveBulletCount);
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void DeadTargetBulletFinishesAtDeathPositionEvenAfterDeathViewIsReleased(bool beforeFirstTick)
+        {
+            Prepare(); var robot = AddRobot();
+            var victim = _f.PlayerView;
+            var victimId = victim.InstanceId;
+            Assert.IsTrue(Contact(robot));
+            var bullet = _f.Root.GetComponentInChildren<RobotBulletView>();
+            var state = bullet.State;
+            if (!beforeFirstTick) _combat.AdvanceExistingBullets(0.1f);
+            _f.Advance(0.1f); // 敌人移动到子弹尚未采样的新位置后死亡。
+            var deathPosition = victim.transform.position;
+            Assert.AreEqual(DamageResult.Killed, _f.Context.Registry.ApplyDamage(victimId, int.MaxValue, out var removal));
+            ((EnemyBattleController)_f.Controller).NotifyKilled(removal);
+            victim.OnDeathAnimationComplete();
+            Assert.IsFalse(((EnemyBattleController)_f.Controller).TryGetTargetPosition(BattleSide.Player, victimId, out _));
+            var resolved = 0;
+            _f.Context.Combat.TargetResolved += _ => resolved++;
+            _combat.AdvanceExistingBullets(0.1f);
+            Assert.AreEqual(1, _combat.LiveBulletCount, "死亡后在途子弹不能提前回收");
+            Assert.IsFalse(state.IsResolved);
+            var progress = state.Elapsed / state.Launcher.Model.FlightTime;
+            var expected = Vector3.Lerp(state.Action.Origin, deathPosition, progress) + Vector3.up *
+                (4f * state.Launcher.Model.ArcHeight * progress * (1f-progress));
+            Assert.That(Vector3.Distance(expected, state.Position), Is.LessThan(0.00001f));
+            _f.Advance(0.1f); // 后续新敌人移动不得改变这颗子弹的落点。
+            _combat.AdvanceExistingBullets(1f);
+            Assert.AreEqual(deathPosition, state.Position);
+            Assert.AreEqual(0, _combat.LiveBulletCount);
+            Assert.AreEqual(0, resolved, "空落点不能再次结算伤害");
+        }
+
         [Test]
         public void FailedPreparationDoesNotSpendCooldownAndRetriesAfterOneCombatSecond()
         {

@@ -22,6 +22,7 @@ namespace GameLogic
         bool IsValid(long battleId);
         bool IsRunning { get; }
         bool TryGetPosition(BattleSide side, int targetId, out Vector3 position);
+        bool TryGetDeathPosition(BattleSide side, int targetId, out Vector3 position);
     }
 
     public sealed class BulletLauncher
