@@ -62,7 +62,7 @@ namespace GameLogic.Tests
 
         [Test]
         [TestCase("EnemyType", 4)]
-        [TestCase("CanDropRogue", 2)]
+        [TestCase("EnemyKillSP", -1)]
         [TestCase("ControlResist", 1.1f)]
         [TestCase("KnockbackResist", -0.1f)]
         [TestCase("Id", 9999)]

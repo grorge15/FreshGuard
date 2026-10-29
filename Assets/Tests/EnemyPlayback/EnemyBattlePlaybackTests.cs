@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System.Collections;
 using System.Reflection;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -13,6 +14,80 @@ namespace GameLogic.Tests
 {
     public sealed class EnemyBattlePlaybackTests
     {
+        [UnityTest]
+        public IEnumerator EnemyKillSPImmediatelyAccumulatesInPlayerEnergyCoinsText()
+        {
+            var host = Object.FindObjectOfType<BattleShopSceneController>();
+            if (host != null && ConfigSystem.Instance.Tables != null)
+            {
+                host.EndBattle();
+            }
+            else
+            {
+                EditorSceneManager.LoadSceneInPlayMode("Assets/Scenes/main.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                var menuDeadline = Time.realtimeSinceStartup + 60f;
+                while ((UIModule.UIRoot == null || GameModule.UI.GetUI<MainMenuUI>() == null) &&
+                    Time.realtimeSinceStartup < menuDeadline) yield return null;
+                Assert.IsNotNull(UIModule.UIRoot);
+                Assert.IsNotNull(GameModule.UI.GetUI<MainMenuUI>(), "等待 Launcher 完成资源与主菜单准备");
+                yield return GameModule.Scene.LoadSceneAsync("Main").ToCoroutine();
+                host = Object.FindObjectOfType<BattleShopSceneController>();
+            }
+            Assert.IsNotNull(host);
+            GameModule.UI.CloseUI<MainMenuUI>();
+            yield return host.InitializeAsync().ToCoroutine();
+            var deadline = Time.realtimeSinceStartup + 60f;
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                host = Object.FindObjectOfType<BattleShopSceneController>();
+                if (host != null && host.IsCombatRunning) break;
+                yield return null;
+            }
+            Assert.IsNotNull(host);
+            Assert.IsTrue(host.IsCombatRunning);
+            try
+            {
+                host.SetFrozen(true);
+                var context = host.Context;
+                var label = host.CombatWindow.Shop.transform.Find("m_rect_ShopPanel/m_text_EnergyCoins").GetComponent<Text>();
+                var initial = context.GetState(BattleSide.Player).EnergyCoins;
+                Assert.AreEqual(initial.ToString(), label.text);
+                var expected = initial;
+                foreach (var configId in new[] { 2001, 2002, 2003 })
+                {
+                    var config = ConfigSystem.Instance.Tables.TbEnemy.Get(configId);
+                    var id = context.Registry.CreateEnemyFromConfig(config, BattleSide.Player);
+                    host.SetFrozen(false);
+                    ResolveRewardTarget(context, id, BattleSide.Player);
+                    ResolveRewardTarget(context, id, BattleSide.Player);
+                    host.SetFrozen(true);
+                    expected += config.EnemyKillSP;
+                    Assert.AreEqual(expected, context.GetState(BattleSide.Player).EnergyCoins);
+                    Assert.AreEqual(expected.ToString(), label.text, "同帧收到商店通知后显示累加金额");
+                }
+                var opponentBefore = context.GetState(BattleSide.Opponent).EnergyCoins;
+                var opponent = context.Registry.CreateEnemyFromConfig(ConfigSystem.Instance.Tables.TbEnemy.Get(2001), BattleSide.Opponent);
+                host.SetFrozen(false);
+                ResolveRewardTarget(context, opponent, BattleSide.Opponent);
+                host.SetFrozen(true);
+                Assert.AreEqual(opponentBefore + 1, context.GetState(BattleSide.Opponent).EnergyCoins);
+                Assert.AreEqual(expected.ToString(), label.text);
+                var leaked = context.Registry.CreateEnemyFromConfig(ConfigSystem.Instance.Tables.TbEnemy.Get(2001), BattleSide.Player);
+                context.Registry.Remove(leaked, EntityRemovalReason.Leaked, out _);
+                Assert.AreEqual(expected.ToString(), label.text);
+            }
+            finally { host.EndBattle(); }
+            yield return null;
+        }
+
+        private static void ResolveRewardTarget(BattleShopContext context, int id, BattleSide side)
+        {
+            var combat = context.Battle.Combat;
+            var action = new CombatActionSnapshot(context.BattleId, 99999, side, 0, new[] { id },
+                CombatOutcomeTag.SingleDamage, 100000, Vector3.zero, Vector3.zero, 1, CombatSourceKind.Other);
+            combat.Resolve(combat.CaptureAttack(action));
+        }
+
         [UnityTest]
         public IEnumerator EditedCombatRegionsKeepLayoutAndShopStillDragsAndCancelsOnHide()
         {

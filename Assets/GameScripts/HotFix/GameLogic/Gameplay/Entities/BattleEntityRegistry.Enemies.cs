@@ -42,7 +42,7 @@ namespace GameLogic
             EntityValidation.RequirePositive(config.HpC2, nameof(config.HpC2));
             EntityValidation.RequireFiniteNonNegative(config.EnemySpeed, nameof(config.EnemySpeed));
             if (config.EnemyType < 1 || config.EnemyType > 3) throw new ArgumentOutOfRangeException(nameof(config.EnemyType));
-            if (config.CanDropRogue != 0 && config.CanDropRogue != 1) throw new ArgumentOutOfRangeException(nameof(config.CanDropRogue));
+            if (config.EnemyKillSP < 0) throw new ArgumentOutOfRangeException(nameof(config.EnemyKillSP));
             if (config.LeakDamage < 0) throw new ArgumentOutOfRangeException(nameof(config.LeakDamage));
             RequireRatio(config.ControlResist, nameof(config.ControlResist));
             RequireRatio(config.KnockbackResist, nameof(config.KnockbackResist));

@@ -19,8 +19,8 @@ public sealed partial class Enemy : Luban.BeanBase
         Id = _buf.ReadInt();
         EnemyName = _buf.ReadString();
         EnemyType = _buf.ReadInt();
+        EnemyKillSP = _buf.ReadInt();
         EnemyPrefab = _buf.ReadString();
-        CanDropRogue = _buf.ReadInt();
         HpC1 = _buf.ReadInt();
         HpC2 = _buf.ReadInt();
         EnemySpeed = _buf.ReadFloat();
@@ -48,13 +48,13 @@ public sealed partial class Enemy : Luban.BeanBase
     /// </summary>
     public readonly int EnemyType;
     /// <summary>
+    /// 敌人击杀掉落资源
+    /// </summary>
+    public readonly int EnemyKillSP;
+    /// <summary>
     /// 预制体资源名
     /// </summary>
     public readonly string EnemyPrefab;
-    /// <summary>
-    /// 合法击败后肉鸽选择：0否、1是
-    /// </summary>
-    public readonly int CanDropRogue;
     /// <summary>
     /// Cycle1基础生命（1~10波）
     /// </summary>
@@ -97,8 +97,8 @@ public sealed partial class Enemy : Luban.BeanBase
         + "id:" + Id + ","
         + "enemyName:" + EnemyName + ","
         + "enemyType:" + EnemyType + ","
+        + "enemyKillSP:" + EnemyKillSP + ","
         + "enemyPrefab:" + EnemyPrefab + ","
-        + "canDropRogue:" + CanDropRogue + ","
         + "hpC1:" + HpC1 + ","
         + "hpC2:" + HpC2 + ","
         + "enemySpeed:" + EnemySpeed + ","

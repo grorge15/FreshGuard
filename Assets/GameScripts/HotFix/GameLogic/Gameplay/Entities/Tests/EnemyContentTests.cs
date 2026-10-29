@@ -150,8 +150,8 @@ namespace GameLogic.Tests
         private static Enemy Config(int id, float speed = 0.6f)
         {
             var buffer = new ByteBuf();
-            buffer.WriteInt(id); buffer.WriteString("Test"); buffer.WriteInt(1); buffer.WriteString("SkeletonEnemy");
-            buffer.WriteInt(0); buffer.WriteInt(100); buffer.WriteInt(220); buffer.WriteFloat(speed);
+            buffer.WriteInt(id); buffer.WriteString("Test"); buffer.WriteInt(1); buffer.WriteInt(1);
+            buffer.WriteString("SkeletonEnemy"); buffer.WriteInt(100); buffer.WriteInt(220); buffer.WriteFloat(speed);
             buffer.WriteInt(1); buffer.WriteFloat(1f); buffer.WriteFloat(1f); buffer.WriteSize(0);
             return new Enemy(buffer);
         }
