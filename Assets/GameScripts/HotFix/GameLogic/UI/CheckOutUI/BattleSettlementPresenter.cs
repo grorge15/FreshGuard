@@ -74,6 +74,8 @@ namespace GameLogic
             _generation++;
             CancelPending();
             CloseOwnedWindow(battleId);
+            // 商店失败由主菜单自行恢复，不回滚奖励或重新打开结算页。
+            await menu.ShowMysteriousStorePreviewAsync(battleId);
         }
 
         private static void CloseOwnedWindow(long battleId)
