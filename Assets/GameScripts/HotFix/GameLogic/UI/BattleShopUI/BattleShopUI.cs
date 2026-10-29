@@ -17,7 +17,6 @@ namespace GameLogic
         private BattleShopSceneController _host;
         private float _flashUntil;
         private float _messageUntil;
-        private Font _font;
         private RobotDragSource? _offerMergeSource;
         private int _hoveredOfferSlot = -1;
         public BattleShopContext Context { get; private set; }
@@ -59,9 +58,6 @@ namespace GameLogic
                 _items[i] = CreateWidget<ShopRobotItemWidget>("m_rect_ShopPanel/m_tf_Offers/Slot_" + i);
             _storage = CreateWidget<StorageRobotSlotWidget>("m_rect_ShopPanel/m_item_Storage");
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
-            // The current target is Windows; retain Arial as a fallback for other hosts.
-            _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "SimHei", "Arial" }, 24);
-            foreach (var text in gameObject.GetComponentsInChildren<Text>(true)) text.font = _font;
         }
         protected override void OnRefresh()
         {
@@ -201,7 +197,6 @@ namespace GameLogic
             Context = null;
             _host = null;
             _userDatas = null;
-            if (_font != null) Object.Destroy(_font);
         }
     }
 }
