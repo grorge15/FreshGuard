@@ -15,7 +15,7 @@ namespace GameLogic.EditorTools
         public static void Build()
         {
             if(EditorApplication.isPlaying || EditorApplication.isCompiling) throw new InvalidOperationException("请先停止运行并等编译完成。");
-            _font=AssetDatabase.LoadAssetAtPath<Font>("Assets/AssetRaw/Fonts/NotoSansSC-Regular.otf");
+            _font=FreshGuard.Editor.ModernUIFontTheme.LoadFont(false);
             if(_font==null) throw new InvalidOperationException("缺少中文字体。");
             if(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath)==null) throw new InvalidOperationException("缺少原BattleLoadingUI。");
             var root=PrefabUtility.LoadPrefabContents(PrefabPath);
@@ -124,7 +124,8 @@ namespace GameLogic.EditorTools
             label.font=_font; label.fontSize=fontSize; label.text=text; label.color=color; label.alignment=TextAnchor.MiddleCenter;
             label.raycastTarget=false; label.supportRichText=true; label.horizontalOverflow=HorizontalWrapMode.Wrap;
             label.verticalOverflow=VerticalWrapMode.Truncate;
-            if(outline){var effect=rect.gameObject.AddComponent<Outline>();effect.effectColor=new Color(.1f,.3f,.58f,.8f);effect.effectDistance=new Vector2(2,-2);}
+            if(outline){var effect=rect.gameObject.AddComponent<Outline>();effect.effectColor=new Color(.1f,.3f,.58f,.8f);effect.effectDistance=new Vector2(.75f,-.75f);}
+            FreshGuard.Editor.ModernUIFontTheme.Apply(label);
             return label;
         }
         private static void Fill(RectTransform rect) {rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;}

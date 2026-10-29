@@ -164,7 +164,6 @@ namespace FreshGuard.Editor
         private static Text Label(string name, Transform parent, string content, int size, Vector2 bounds, Vector2 position, Color color)
         {
             var text = Rect(name, parent, bounds, position).gameObject.AddComponent<Text>();
-            text.font = UnityEngine.Resources.GetBuiltinResource<Font>("Arial.ttf");
             text.text = content;
             text.fontSize = size;
             text.color = color;
@@ -172,6 +171,7 @@ namespace FreshGuard.Editor
             text.raycastTarget = false;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Truncate;
+            ModernUIFontTheme.Apply(text);
             return text;
         }
         private static GameObject BuildItem()
@@ -185,11 +185,7 @@ namespace FreshGuard.Editor
             icon.preserveAspect = true;
             Image(Rect("m_img_Quality", root, new Vector2(100, 4), new Vector2(0, -40)), new Color(0.37f, 0.67f, 0.42f)).gameObject.SetActive(false);
             EnergyCoin(Rect("m_img_PriceCoin", root, new Vector2(60, 60), new Vector2(-44, -43)));
-            var price = Label("m_text_Price", root, "6", 48, new Vector2(100, 62), new Vector2(38, -43), Color.white);
-            price.fontStyle = FontStyle.Bold;
-            var outline = price.gameObject.AddComponent<Outline>();
-            outline.effectColor = Color.black;
-            outline.effectDistance = new Vector2(3, -3);
+            Label("m_text_Price", root, "6", 48, new Vector2(100, 62), new Vector2(38, -43), ModernUIFontTheme.ShopPriceColor);
             return root.gameObject;
         }
 
