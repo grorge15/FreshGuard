@@ -139,6 +139,108 @@ namespace GameLogic.Tests
             return source;
         }
 
+        [TestCase(0.9f)]
+        [TestCase(1.2f)]
+        public void ScaledBoardAcceptsFreeCellThatFitsActualBallNextToGlass(float boardScale)
+        {
+            ConfigureScaledRecoveryBoard(boardScale);
+            var source = Robot(_origin);
+            source.GetPhysicalCollider().SetPath(0, new[] { new Vector2(-0.154f,-0.154f), new Vector2(0.154f,-0.154f),
+                new Vector2(0.154f,0.154f), new Vector2(-0.154f,0.154f) });
+            // 八邻格仅右侧可用；下方玻璃和球的实际形状不相交。
+            for (int row = 1; row <= 3; row++) for (int column = 1; column <= 3; column++)
+            {
+                var cell = new BoardCoordinate(column, row);
+                if (!_board.Model.IsOccupied(cell) && !(column == 3 && row == 2))
+                    Assert.IsTrue(_board.Model.TryPlace(cell, new PlaceableDefinition(column + ":" + row, 1, 1)));
+            }
+            AddGridObstacle(new BoardCoordinate(3, 1));
+            var start = _body.position;
+            _ball.ResolvePlacementOverlap(source, _board);
+            Assert.AreEqual("Escaping", State, "不能把物理系统的接触预留量额外扩到球半径上，误判可容纳球的空格。");
+            Assert.That(Vector2.Distance(start, _body.position), Is.LessThan(0.0001f));
+            for (int i = 0; i < 20 && State != "None"; i++) Tick();
+            Assert.AreEqual("None", State);
+            Assert.IsFalse(Physics2D.GetIgnoreCollision(_ball.GetComponent<Collider2D>(), source.GetPhysicalCollider()));
+            Assert.AreEqual(1, _attacks);
+        }
+
+        [Test]
+        public void PausedOpponentLayoutEscapesTrappedStateWithoutWaitingForAutoRelaunch()
+        {
+            BeginPausedOpponentLayout();
+            var start = _body.position;
+            for (int i = 0; i < 15 && State != "None"; i++) Tick();
+            Assert.AreEqual("None", State, "现场存在可通行空格，必须自行退出Trapped状态。");
+            Assert.Greater(Vector2.Distance(start, _body.position), 0.02f);
+            Assert.GreaterOrEqual(BallBounceMath.AxisDistance(_ball.CurrentDirection), 9.999f);
+        }
+
+        [Test]
+        public void FreeSlotTypeStillRejectsBallTooLargeForPhysicalGap()
+        {
+            ConfigureScaledRecoveryBoard(0.9f);
+            // 格子类型可通行并不表示球体能够穿过：0.18半径大于0.1575半格宽。
+            Set(_ball, "radius", 0.18f); _ball.GetComponent<CircleCollider2D>().radius = 0.18f;
+            var recovery = (BallPlacementRecovery)Get(_ball, "_placementRecovery");
+            recovery.Begin(_board, _body.position);
+            var cell = new BoardCoordinate(1, 2);
+            AddGridObstacle(new BoardCoordinate(1, 1));
+            Assert.IsTrue(_board.Model.CanEnergyBallPass(cell));
+            Assert.IsFalse(_board.Model.IsOccupied(cell));
+            var free = typeof(PhysicalCollisionBall).GetMethod("IsPlacementPositionFree", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsFalse((bool)free.Invoke(_ball, new object[] { (Vector2)_board.GetCellWorldPosition(cell) }));
+        }
+
+        private void ConfigureScaledRecoveryBoard(float scale)
+        {
+            Set(_board, "_cellSize", 0.35f);
+            _board.transform.localScale = new Vector3(scale, scale, 1f);
+            _ball.Stop(); Set(_ball, "radius", 0.14f); Set(_ball, "speed", 4f);
+            _ball.GetComponent<CircleCollider2D>().radius = 0.14f;
+            _ball.BindBattle(1, BattleSide.Opponent, () => _running);
+            _ball.BindCombo(_registry, NewObject("OpponentPopupRoot").transform);
+            _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 45f);
+        }
+
+        private BoxCollider2D AddGridObstacle(BoardCoordinate cell)
+        {
+            var box = NewObject("GridGlass_" + cell.Column + "_" + cell.Row).AddComponent<BoxCollider2D>();
+            box.transform.SetParent(_board.transform, false);
+            box.transform.position = _board.GetCellWorldPosition(cell);
+            box.size = Vector2.one * 0.35f;
+            Physics2D.SyncTransforms();
+            return box;
+        }
+
+        private void BeginPausedOpponentLayout()
+        {
+            ConfigureScaledRecoveryBoard(0.9f);
+            // 2026-10-29暂停现场：原格下方整排玻璃、右侧玻璃，上方L形机器人。
+            for (int column = 1; column <= 3; column++)
+            {
+                AddGridObstacle(new BoardCoordinate(column, 1));
+                _board.Model.TryPlace(new BoardCoordinate(column, 1), new PlaceableDefinition("glass" + column, 1, 1));
+            }
+            AddGridObstacle(new BoardCoordinate(3, 2));
+            _board.Model.TryPlace(new BoardCoordinate(3, 2), new PlaceableDefinition("rightGlass", 1, 1));
+            var robot = Robot(new BoardCoordinate(1, 3));
+            _board.Model.Release(robot.InstanceId.ToString());
+            Assert.IsTrue(_board.Model.TryPlace(new BoardCoordinate(1, 3), new PlaceableDefinition(robot.InstanceId.ToString(),
+                new[] { new BoardCoordinate(0, 0), new BoardCoordinate(1, 0), new BoardCoordinate(0, 1) })));
+            robot.GetPhysicalCollider().SetPath(0, new[] { new Vector2(-0.154f,-0.154f), new Vector2(0.504f,-0.154f),
+                new Vector2(0.504f,0.154f), new Vector2(0.154f,0.154f), new Vector2(0.154f,0.504f), new Vector2(-0.154f,0.504f) });
+            _board.Model.TryPlace(new BoardCoordinate(3, 3), new PlaceableDefinition("unreachable", 1, 1));
+            var recovery = (BallPlacementRecovery)Get(_ball, "_placementRecovery");
+            recovery.Begin(_board, _body.position); recovery.EnterTrapped(0, false);
+            // 以原格中心为参照，完整保留现场相对位置及离开真实边线后的斜向方向。
+            var center = (Vector2)_board.GetCellWorldPosition(_origin);
+            var position = center + new Vector2(-0.002863f, -0.012696f);
+            _body.position = position; _ball.transform.position = position;
+            Set(_ball, "_direction", new Vector2(-0.730274f, -0.683154f));
+            Physics2D.SyncTransforms();
+        }
+
         [Test]
         public void AllEightOccupiedSnapsToRealEdgeMidpointThenCountsEndpointsWithoutAttacks()
         {
@@ -350,7 +452,7 @@ namespace GameLogic.Tests
             var go = UnityEngine.Object.Instantiate(prefab); _objects.Add(go);
             SceneManager.MoveGameObjectToScene(go, _scene);
             go.transform.SetParent(_board.transform, false); go.transform.position = _board.GetCellWorldPosition(cell);
-            var entity = _registry.CreateRobot(501, BattleSide.Player, 1, 1);
+            var entity = _registry.CreateRobot(501, _ball.Side, 1, 1);
             entity.TrySetLocation(RobotLocation.Board, cell);
             Assert.IsTrue(_board.Model.TryPlace(cell, new PlaceableDefinition(entity.InstanceId.ToString(), 1, 1)));
             var view = go.GetComponent<RobotView>(); view.Bind(_registry, entity.InstanceId);
@@ -398,6 +500,33 @@ namespace GameLogic.Tests
             _fixture?.TearDown();
             _fixture = null;
             yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator RealFixedLoopPausedOpponentLayoutResumesMovement()
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var type = typeof(BallPlacementRecoveryTests);
+            var ball = (PhysicalCollisionBall)type.GetField("_ball", flags).GetValue(_fixture);
+            type.GetMethod("BeginPausedOpponentLayout", flags).Invoke(_fixture, null);
+            var body = ball.GetComponent<Rigidbody2D>();
+            var start = body.position;
+            var resultPath = System.IO.Path.Combine(Application.dataPath, "../Temp/PausedOpponentRecoveryPlayerLoop.json");
+            System.IO.File.WriteAllText(resultPath, "{\"passed\":false,\"status\":\"running\"}");
+            var samples = 0;
+            var maxDistance = 0f;
+            var until = Time.time + 0.8f;
+            while (Time.time < until)
+            {
+                yield return null;
+                Assert.That(body.velocity.magnitude, Is.EqualTo(4f).Within(0.001f));
+                maxDistance = Mathf.Max(maxDistance, Vector2.Distance(start, body.position));
+                samples++;
+            }
+            Assert.AreEqual(PlacementRecoveryState.None, ball.RecoveryState);
+            Assert.Greater(maxDistance, 0.1f, "实际球心必须持续移动，不能只有速度字段非零。");
+            Assert.Greater(ball.BounceCount, 0, "恢复后继续通过普通碰撞反弹。");
+            System.IO.File.WriteAllText(resultPath, "{\"passed\":true,\"samples\":" + samples + ",\"bounces\":" + ball.BounceCount + "}");
         }
 
         [UnityTest]

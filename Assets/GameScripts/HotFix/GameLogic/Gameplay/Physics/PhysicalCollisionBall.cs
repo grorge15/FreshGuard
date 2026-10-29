@@ -361,7 +361,9 @@ namespace GameLogic
 
         private bool IsPlacementPositionFree(Vector2 center)
         {
-            float castRadius = WorldRadius + PlacementClearance;
+            // 空位按整个球的实际尺寸检查。移动扫掠的预留量不能再叠加到这里，
+            // 否则缩小棋盘上足够容纳球的单格通道也会被误判为无空位。
+            float castRadius = WorldRadius;
             if (!FitsInsideBoard(center, castRadius, _placementRecovery.Board)) return false;
             gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, castRadius,
                 new ContactFilter2D { useTriggers = false }, _placementOverlaps);
@@ -454,6 +456,8 @@ namespace GameLogic
             // 已脱离即可交还普通碰撞；前方下一步有障碍时由正常反弹处理。
             // 否则可能在空格中心反复选中当前位置，归一化零向量后永久停住。
             _direction = direction;
+            // 实际球体已无重叠，立即恢复碰撞对；不能再等额外接触间隙才解除保护。
+            ReleaseProtectedContacts();
             ClearPlacementRecovery();
             _lowSpeedElapsed = SecondsSinceEffectiveInteraction = 0f;
             ApplyEffectiveVelocity();
