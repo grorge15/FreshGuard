@@ -36,6 +36,7 @@ namespace GameLogic
         public PhysicalCollisionBall OpponentBall => _opponentBall;
         public bool IsBerserk(BattleSide side) => Session(side)?.Berserk == true;
         public float BerserkRemaining(BattleSide side) => Session(side)?.Remaining ?? 0f;
+        public float BerserkDuration => _berserkDuration;
         private BallSession Session(BattleSide side) => side == BattleSide.Player ? _player : _opponent;
 
         public void ConfigureFromTables(GameConfig.Tables tables)
