@@ -23,7 +23,6 @@ namespace GameLogic
         private Button _doubleReward;
         private Button _returnMain;
         private Text _rewardAmount;
-        private Text _rewardName;
         private BattleSettlementReward _reward;
         private Func<UniTask> _returnToMain;
         private bool _busy;
@@ -41,15 +40,19 @@ namespace GameLogic
             _defeatRewards = FindChild(content + "m_rect_Rewards/m_img_DefeatBG").gameObject;
             _rewardTitle = FindChildComponent<Text>(content + "m_rect_Rewards/m_text_Title");
             _rewardAmount = FindChildComponent<Text>(content + "m_rect_Rewards/m_item_Reward/m_text_Amount");
-            _rewardName = FindChildComponent<Text>(content + "m_rect_Rewards/m_item_Reward/m_text_Name");
             _doubleReward = FindChildComponent<Button>(content + "m_btn_DoubleReward");
             _returnMain = FindChildComponent<Button>(content + "m_btn_ReturnMain");
         }
 
         protected override void OnCreate()
         {
-            _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "SimHei", "Arial" }, 28);
-            foreach (var text in gameObject.GetComponentsInChildren<Text>(true)) text.font = _font;
+            foreach (var text in gameObject.GetComponentsInChildren<Text>(true))
+            {
+                if (text.font != null) continue;
+                if (_font == null)
+                    _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "SimHei", "Arial" }, 28);
+                text.font = _font;
+            }
             _doubleReward.onClick.AddListener(OnDoubleReward);
             _returnMain.onClick.AddListener(OnReturnMain);
         }
@@ -73,7 +76,6 @@ namespace GameLogic
         private void RefreshReward()
         {
             _rewardAmount.text = _reward.DisplayAmount.ToString();
-            _rewardName.text = _reward.ItemName;
             _doubleReward.interactable = !_busy && (!_reward.IsDoubled || !_reward.IsSaved);
             _returnMain.interactable = !_busy;
         }
