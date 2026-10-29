@@ -9,6 +9,10 @@
 /[Bb]uilds/
 /[Ll]ogs/
 /[Mm]emoryCaptures/
+
+# Local screenshots and recordings used for gameplay verification
+/Captures/
+
 /[Aa]ssets/StreamingAssets
 /[Aa]ssets/StreamingAssets.meta
 # Asset meta data should only be ignored when the corresponding asset is also ignored
