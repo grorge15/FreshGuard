@@ -59,7 +59,7 @@ namespace GameLogic
                 level = content.Offer.Level;
                 hidden = owner.Drag.DraggedOfferId == content.Offer.OfferId;
                 _price.text = content.Offer.Price.ToString();
-                _price.color = balance >= content.Offer.Price ? Color.white : new Color(0.8f, 0.12f, 0.1f);
+                _price.color = balance >= content.Offer.Price ? new Color(0.23f, 0.16f, 0.12f) : new Color(0.8f, 0.12f, 0.1f);
                 _price.fontSize = 48;
             }
             // Slot 的位置由 BattleShopUI Prefab 保存；运行时只更新内容和可见状态。

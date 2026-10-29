@@ -42,6 +42,12 @@ namespace GameLogic.Tests
                 shop.sizeDelta = new Vector2(960, 230);
                 shop.localScale = Vector3.one * 0.9f;
                 typeof(MainCombatUI).GetMethod("OnCreate", PRIVATE).Invoke(window, null);
+                foreach (var text in root.GetComponentsInChildren<Text>(true))
+                {
+                    Assert.That(AssetDatabase.GetAssetPath(text.font), Does.StartWith("Assets/AssetRaw/Fonts/MiSans-UI-"),
+                        "窗口创建时应保留预制体字体，不能回退到系统字体：" + text.name);
+                    Assert.AreEqual(FontStyle.Normal, text.fontStyle, "字重应使用独立字体，不能重复合成粗体。");
+                }
                 typeof(UIBase).GetField("_userDatas", PRIVATE).SetValue(window,
                     new object[] { null, null, new BattleProgressSnapshot(17, 4, 125d) });
                 typeof(MainCombatUI).GetMethod("OnRefresh", PRIVATE).Invoke(window, null);
@@ -95,13 +101,6 @@ namespace GameLogic.Tests
             {
                 DisposeChildren(child);
                 typeof(UIBase).GetMethod("RemoveAllUIEvent", PRIVATE).Invoke(child, null);
-                // EditMode 不允许 Object.Destroy；即时回收商店在 OnCreate 分配的运行时字体。
-                if (child is BattleShopUI)
-                {
-                    var font = typeof(BattleShopUI).GetField("_font", PRIVATE);
-                    Object.DestroyImmediate(font.GetValue(child) as Font);
-                    font.SetValue(child, null);
-                }
                 child.GetType().GetMethod("OnDestroy", PRIVATE).Invoke(child, null);
             }
         }

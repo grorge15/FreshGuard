@@ -17,7 +17,6 @@ namespace GameLogic
         private GameObject _victoryRewards;
         private GameObject _defeatRewards;
         private Text _rewardTitle;
-        private Font _font;
 
         protected override void ScriptGenerator()
         {
@@ -31,12 +30,6 @@ namespace GameLogic
             _victoryRewards = FindChild(content + "m_rect_Rewards/m_img_VictoryBG").gameObject;
             _defeatRewards = FindChild(content + "m_rect_Rewards/m_img_DefeatBG").gameObject;
             _rewardTitle = FindChildComponent<Text>(content + "m_rect_Rewards/m_text_Title");
-        }
-
-        protected override void OnCreate()
-        {
-            _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "SimHei", "Arial" }, 28);
-            foreach (var text in gameObject.GetComponentsInChildren<Text>(true)) text.font = _font;
         }
 
         protected override void OnRefresh()
@@ -57,9 +50,5 @@ namespace GameLogic
             _rewardTitle.color = victory ? new Color(0.39f, 0.17f, 0.04f) : new Color(0.19f, 0.12f, 0.36f);
         }
 
-        protected override void OnDestroy()
-        {
-            if (_font != null) Object.Destroy(_font);
-        }
     }
 }

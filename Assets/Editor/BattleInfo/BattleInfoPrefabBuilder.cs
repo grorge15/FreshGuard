@@ -179,15 +179,13 @@ namespace FreshGuard.Editor
             Vector2 rectSize, Vector2 position, Color color)
         {
             var text = Rect(name, parent, rectSize, position).gameObject.AddComponent<Text>();
-            text.font = AssetDatabase.LoadAssetAtPath<Font>("Assets/AssetRaw/Fonts/NotoSansSC-Regular.otf");
-            if (text.font == null) throw new InvalidOperationException("缺少 NotoSansSC 中文字体。");
             text.text = content;
             text.fontSize = size;
-            text.fontStyle = FontStyle.Bold;
             text.color = color;
             text.alignment = TextAnchor.MiddleCenter;
             text.supportRichText = false;
             text.raycastTarget = false;
+            ModernUIFontTheme.Apply(text, true);
             return text;
         }
     }

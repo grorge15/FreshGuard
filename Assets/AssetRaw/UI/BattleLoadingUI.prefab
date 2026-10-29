@@ -129,7 +129,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 69b78bdd164b5d849ba3f1c8095b1b1e, type: 3}
     m_FontSize: 34
     m_FontStyle: 0
     m_BestFit: 0
@@ -286,7 +286,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 94
     m_FontStyle: 0
     m_BestFit: 0
@@ -312,7 +312,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &1071068258146198320
 GameObject:
@@ -381,7 +381,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 46
     m_FontStyle: 0
     m_BestFit: 0
@@ -462,7 +462,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 64
     m_FontStyle: 0
     m_BestFit: 0
@@ -488,7 +488,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &1419527519157103894
 GameObject:
@@ -596,7 +596,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 40
     m_FontStyle: 0
     m_BestFit: 0
@@ -622,7 +622,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &1997793746170391227
 GameObject:
@@ -691,7 +691,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 69b78bdd164b5d849ba3f1c8095b1b1e, type: 3}
     m_FontSize: 34
     m_FontStyle: 0
     m_BestFit: 0
@@ -1046,7 +1046,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 33
     m_FontStyle: 0
     m_BestFit: 1
@@ -1072,7 +1072,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &3678527503302746796
 GameObject:
@@ -1294,7 +1294,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 33
     m_FontStyle: 0
     m_BestFit: 1
@@ -1320,7 +1320,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &4673125265226635327
 GameObject:
@@ -1389,7 +1389,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 69b78bdd164b5d849ba3f1c8095b1b1e, type: 3}
     m_FontSize: 34
     m_FontStyle: 0
     m_BestFit: 0
@@ -1546,7 +1546,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 22
     m_FontStyle: 0
     m_BestFit: 0
@@ -1572,7 +1572,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &5338993249091719321
 GameObject:
@@ -1858,7 +1858,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 69b78bdd164b5d849ba3f1c8095b1b1e, type: 3}
     m_FontSize: 34
     m_FontStyle: 0
     m_BestFit: 0
@@ -2173,7 +2173,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 40
     m_FontStyle: 0
     m_BestFit: 0
@@ -2199,7 +2199,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &7346314183181456857
 GameObject:
@@ -2532,7 +2532,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 48
     m_FontStyle: 0
     m_BestFit: 0
@@ -2558,7 +2558,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &7835813527582879403
 GameObject:
@@ -2745,7 +2745,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 69b78bdd164b5d849ba3f1c8095b1b1e, type: 3}
     m_FontSize: 30
     m_FontStyle: 0
     m_BestFit: 0
@@ -3055,7 +3055,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 5b95ab9f3ccde9945aaca9938f318bbf, type: 3}
     m_FontSize: 22
     m_FontStyle: 0
     m_BestFit: 0
@@ -3081,7 +3081,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0.1, g: 0.3, b: 0.58, a: 0.8}
-  m_EffectDistance: {x: 2, y: -2}
+  m_EffectDistance: {x: 0.75, y: -0.75}
   m_UseGraphicAlpha: 1
 --- !u!1 &9062148737951055463
 GameObject:
@@ -3231,7 +3231,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: eda563d5accf78f43b764e042a7a35ef, type: 3}
+    m_Font: {fileID: 12800000, guid: 69b78bdd164b5d849ba3f1c8095b1b1e, type: 3}
     m_FontSize: 30
     m_FontStyle: 0
     m_BestFit: 0

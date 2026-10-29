@@ -146,10 +146,9 @@ namespace FreshGuard.Editor
         private static Text Label(string name, Transform parent, string value, int fontSize, Vector2 size, Vector2 position, Color color)
         {
             var text = Rect(name, parent, size, position).gameObject.AddComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             text.text = value;
             text.fontSize = fontSize;
-            text.fontStyle = FontStyle.Bold;
+            ModernUIFontTheme.Apply(text, true);
             text.alignment = TextAnchor.MiddleCenter;
             text.color = color;
             text.raycastTarget = false;
@@ -169,7 +168,6 @@ namespace FreshGuard.Editor
             Camera camera = null;
             RenderTexture target = null;
             Texture2D capture = null;
-            Font font = null;
             var previous = RenderTexture.active;
             try
             {
@@ -193,8 +191,6 @@ namespace FreshGuard.Editor
                 canvas.planeDistance = 1;
                 // 预览只使用 Prefab 节点，不启动业务或全局 UI 模块。
                 SetTheme(root.transform, victory);
-                font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "SimHei", "Arial" }, 30);
-                foreach (var text in root.GetComponentsInChildren<Text>(true)) text.font = font;
                 Canvas.ForceUpdateCanvases();
                 camera.Render();
                 RenderTexture.active = target;
@@ -210,7 +206,6 @@ namespace FreshGuard.Editor
                 if (camera != null) camera.targetTexture = null;
                 if (capture != null) Object.DestroyImmediate(capture);
                 if (target != null) { target.Release(); Object.DestroyImmediate(target); }
-                if (font != null) Object.DestroyImmediate(font);
                 EditorSceneManager.ClosePreviewScene(scene);
             }
         }

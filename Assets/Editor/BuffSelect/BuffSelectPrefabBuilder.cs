@@ -11,7 +11,7 @@ namespace FreshGuard.Editor
     {
         public const string FOLDER = "Assets/AssetRaw/UI/BuffSelect";
         private const string SPRITES = "Assets/AssetRaw/Actor/BuffSelect/Sprites/";
-        private const string FONT_PATH = "Assets/AssetRaw/Fonts/NotoSansSC-Regular.otf";
+        private const string FONT_PATH = ModernUIFontTheme.RegularPath;
 
         [MenuItem("FreshGuard/Buff Select/Build Prefabs")]
         public static void Build()
@@ -73,9 +73,8 @@ namespace FreshGuard.Editor
         {
             var text = Rect(name, parent, rectSize, position).gameObject.AddComponent<Text>();
             text.text = content;
-            text.font = AssetDatabase.LoadAssetAtPath<Font>(FONT_PATH);
             text.fontSize = size;
-            text.fontStyle = FontStyle.Bold;
+            ModernUIFontTheme.Apply(text);
             text.color = color;
             text.alignment = alignment;
             text.raycastTarget = false;
@@ -109,7 +108,7 @@ namespace FreshGuard.Editor
             Label("m_text_IconPlaceholder", root, "强化\n图标", 36, new Vector2(160, 130), new Vector2(0, 224), Color.black);
             var level = Label("m_text_Level", root, "等级1", 28, new Vector2(240, 42), new Vector2(0, 99), Color.white);
             level.gameObject.AddComponent<Outline>().effectColor = Color.black;
-            level.GetComponent<Outline>().effectDistance = new Vector2(2, -2);
+            level.GetComponent<Outline>().effectDistance = new Vector2(0.75f, -0.75f);
             var title = Label("m_text_Name", root, "金色强化", 36, new Vector2(202, 47), new Vector2(0, 23), Color.white);
             title.resizeTextForBestFit = true;
             title.resizeTextMinSize = 22;
