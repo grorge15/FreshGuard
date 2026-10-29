@@ -11,9 +11,11 @@ namespace GameLogic
         private Image _background;
         private Image _priceCoin;
         private Text _price;
+        private int _priceFontSize;
         private ShopPointerInput _input;
         private BattleShopUI _owner;
         private int _slot;
+        public int SlotId => _slot;
         private Color _baseBackgroundColor;
 
         protected override void ScriptGenerator()
@@ -27,6 +29,7 @@ namespace GameLogic
         }
         protected override void OnCreate()
         {
+            _priceFontSize = _price.fontSize;
             _input.Pressed = (id, position, now) => _owner?.PressSlot(_slot, id, position, now);
             _input.Moved = (id, position) => _owner?.Drag.Move(id, position);
             _input.Released = (id, position) => _owner?.Drag.Release(id, position);
@@ -58,7 +61,7 @@ namespace GameLogic
                 hidden = owner.Drag.DraggedOfferId == content.Offer.OfferId;
                 _price.text = content.Offer.Price.ToString();
                 _price.color = balance >= content.Offer.Price ? new Color(0.23f, 0.16f, 0.12f) : new Color(0.8f, 0.12f, 0.1f);
-                _price.fontSize = 48;
+                _price.fontSize = _priceFontSize;
             }
             // Slot 的位置由 BattleShopUI Prefab 保存；运行时只更新内容和可见状态。
             Visible = true;

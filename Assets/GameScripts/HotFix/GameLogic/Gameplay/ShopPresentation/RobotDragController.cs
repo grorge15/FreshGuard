@@ -51,6 +51,19 @@ namespace GameLogic
             _pressedAt = now;
             _gestureCancellation = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
             Phase = RobotDragPhase.Pressed;
+            var generation = _generation;
+            RobotDragSession reserved;
+            result = context.TryReserveDrag(BattleSide.Player, source, out reserved);
+            if (result != ShopOperationResult.Success)
+            { if (generation == _generation) { Cancel(); _ui?.ShowFailure(result); } return false; }
+            if (generation != _generation || _host == null || _host.Context != context || !context.IsCurrentInteraction(reserved?.InteractionId ?? 0))
+            {
+                if (reserved != null) context.CancelInteraction(reserved.InteractionId);
+                if (generation == _generation) Cancel();
+                return false;
+            }
+            _session = reserved;
+            _ui.RefreshView();
             return true;
         }
 
@@ -70,9 +83,8 @@ namespace GameLogic
             {
                 var generation = _generation;
                 var context = _context;
-                RobotDragSession session;
-                var result = context.TryBeginDrag(BattleSide.Player, _source, out session,
-                    allowUnaffordableOffer: _source.Kind == RobotDragSourceKind.ShopOffer);
+                var session = _session;
+                var result = context.TryLiftDrag(session.InteractionId);
                 // 通知监听器可能同步关闭窗口、终局或取消本次手势。
                 if (generation != _generation || _host == null || !_host.CanInteractWithRobots || _host.Context != context || context.IsEnded)
                 { if (session != null) context.CancelInteraction(session.InteractionId); return; }
@@ -97,11 +109,11 @@ namespace GameLogic
             _ui.MoveGhost(_position);
             _host.Placement.UpdateDrag(_position);
             _ui.UpdateOfferMergeCandidates(_source, _position);
-            int shopSlot;
-            var overShop = _ui.TryGetShopSlot(_position, out shopSlot);
+            var storage = _ui.IsOverStorage(_position);
+            var overShop = !storage && _ui.IsOverShop(_position);
             if (overShop) _host.ClearMergeCandidates();
             else _host.UpdateMergeCandidates(_source);
-            var storage = !overShop && _ui.IsOverStorage(_position);
+
             _ui.SetStorageHighlighted(storage);
             int occupant;
             if (overShop || storage || (_host.Placement.TryGetDragOccupant(out occupant) &&
@@ -135,15 +147,12 @@ namespace GameLogic
                 if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
                 RobotEntity robot;
                 int shopSlot;
-                if (_ui.TryGetShopSlot(_position, out shopSlot))
+                if (_ui.IsOverStorage(_position)) result = context.TryCommitStorage(session.InteractionId, out robot);
+                else if (_ui.IsOverShop(_position))
                 {
-                    // 商店槽位（包括空槽）遮挡棋盘；无效目标只能回位，不能穿透购买。
-                    var offer = context.GetState(BattleSide.Player).Slots[shopSlot].Offer;
-                    result = offer != null
-                        ? context.TryCommitOfferMerge(session.InteractionId, shopSlot, offer.OfferId)
-                        : ShopOperationResult.IncompatibleMerge;
+                    int? targetSlot = _ui.TryGetShopSlot(_position, out shopSlot) ? (int?)shopSlot : null;
+                    result = context.TryCommitShopDrop(session.InteractionId, targetSlot);
                 }
-                else if (_ui.IsOverStorage(_position)) result = context.TryCommitStorage(session.InteractionId, out robot);
                 else
                 {
                     int targetId;
@@ -168,14 +177,14 @@ namespace GameLogic
 
         public void Cancel()
         {
-            _generation++;
+            var generation = ++_generation;
             var cancellation = _gestureCancellation;
             _gestureCancellation = null;
             var session = _session;
             var context = _context;
             _session = null;
             _context = null;
-            Phase = RobotDragPhase.Idle;
+            Phase = RobotDragPhase.Committing;
             cancellation?.Cancel();
             cancellation?.Dispose();
             if (_host != null && (context == null || _host.Context == context))
@@ -184,10 +193,11 @@ namespace GameLogic
                 _host.ClearMergeCandidates();
                 _host.SetPlayerDragging(false);
             }
+            if (session != null) context?.CancelInteraction(session.InteractionId);
+            if (generation != _generation) return;
+            Phase = RobotDragPhase.Idle;
             if (_ui != null)
             { _ui.HideGhost(); _ui.SetStorageHighlighted(false); _ui.ClearOfferMergeCandidates(); _ui.RefreshView(); }
-            // 最后通知Context；监听器重入或重启后，不再清理其新手势/新局展示。
-            if (session != null) context?.CancelInteraction(session.InteractionId);
         }
         private void OnApplicationFocus(bool focused) { if (!focused) Cancel(); }
         private void OnDisable() { Cancel(); }
