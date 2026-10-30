@@ -76,6 +76,155 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void PlacementAccelerationDecaysLinearlyToNormalSpeed()
+        {
+            ConfigureAcceleration();
+            var source = Robot(_origin);
+            _ball.ResolvePlacementOverlap(source, _board);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(5f).Within(0.0001f));
+            source.GetPhysicalCollider().enabled = false;
+            for (int i = 0; i < 10; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_body.velocity.magnitude, Is.EqualTo(4.6f).Within(0.0001f));
+            for (int i = 0; i < 15; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4f).Within(0.0001f));
+        }
+
+        [Test]
+        public void AnotherEligiblePlacementRefreshesTimeAndBonusWithoutStacking()
+        {
+            ConfigureAcceleration();
+            var first = Robot(_origin);
+            _ball.ResolvePlacementOverlap(first, _board);
+            for (int i = 0; i < 10; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4.6f).Within(0.0001f));
+            _ball.ResolvePlacementOverlap(first, _board);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4.6f).Within(0.0001f), "重复提交同一碰撞对不能刷新。");
+            var second = Robot(new BoardCoordinate(1, 1));
+            second.transform.position = _body.position; Physics2D.SyncTransforms();
+            _ball.ResolvePlacementOverlap(second, _board);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(5f).Within(0.0001f));
+            for (int i = 0; i < 25; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4f).Within(0.0001f));
+        }
+
+        [Test]
+        public void DisabledRobotAccelerationDoesNotRefreshExistingDecay()
+        {
+            ConfigureAcceleration();
+            var first = Robot(_origin); _ball.ResolvePlacementOverlap(first, _board);
+            for (int i = 0; i < 10; i++) Invoke(_ball, "FixedUpdate");
+            var provider = _ball.GlobalValueProvider;
+            _ball.GlobalValueProvider = id => id == 14 ? 0f : provider(id);
+            var second = Robot(new BoardCoordinate(1, 1));
+            second.transform.position = _body.position; Physics2D.SyncTransforms();
+            _ball.ResolvePlacementOverlap(second, _board);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4.6f).Within(0.0001f));
+        }
+
+        [Test]
+        public void AccelerationFreezesWithBallAndRespectsMapAndDragMultipliers()
+        {
+            _ball.Stop(); _ball.SetMapScale(1.2f); _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 45f);
+            ConfigureAcceleration();
+            var source = Robot(_origin); _ball.ResolvePlacementOverlap(source, _board);
+            _ball.SetDragging(true);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4.2f).Within(0.0001f));
+            _ball.SetFrozen(true);
+            for (int i = 0; i < 30; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_body.velocity.magnitude, Is.Zero);
+            _ball.SetFrozen(false);
+            Assert.That(_body.velocity.magnitude, Is.EqualTo(4.2f).Within(0.0001f));
+            source.GetPhysicalCollider().enabled = false;
+            for (int i = 0; i < 25; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(3.36f).Within(0.0001f));
+        }
+
+        [TestCase("Stop")]
+        [TestCase("LaunchAt")]
+        [TestCase("BindBattle")]
+        [TestCase("Disable")]
+        public void ResetClearsBounceAcceleration(string transition)
+        {
+            ConfigureAcceleration();
+            _ball.ResolvePlacementOverlap(Robot(_origin), _board);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(5f).Within(0.0001f));
+            if (transition == "Stop") _ball.Stop();
+            else if (transition == "LaunchAt") _ball.LaunchAt(_body.position, 30f);
+            else if (transition == "BindBattle") _ball.BindBattle(2, BattleSide.Player, () => _running);
+            else { _ball.gameObject.SetActive(false); if (!Application.isPlaying) Invoke(_ball, "OnDisable"); }
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4f).Within(0.0001f));
+        }
+
+        [Test]
+        public void FiftiethPlacementComboSwitchesToRageBeforeApplyingAcceleration()
+        {
+            ConfigureTestSpeeds();
+            _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 45f);
+            ConfigureAcceleration();
+            typeof(PhysicalCollisionBall).GetProperty("ComboCount").SetValue(_ball, 49);
+            _ball.ComboThresholdReached += ball => ball.SetBerserk(true);
+            var source = Robot(_origin); _ball.ResolvePlacementOverlap(source, _board);
+            Assert.IsTrue(_ball.IsBerserk);
+            Assert.That(_body.velocity.magnitude, Is.EqualTo(7f).Within(0.0001f));
+            source.GetPhysicalCollider().enabled = false;
+            for (int i = 0; i < 10; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(6.6f).Within(0.0001f));
+            _ball.SetBerserk(false);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4.6f).Within(0.0001f));
+            _ball.SetBerserk(true);
+            for (int i = 0; i < 15; i++) Invoke(_ball, "FixedUpdate");
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(6f).Within(0.0001f));
+        }
+
+        private void ConfigureTestSpeeds()
+        {
+            var tables = WaveTestData.SingleWaveTables();
+            var bytes = new Luban.ByteBuf(); bytes.WriteSize(tables.TbGlobal.DataList.Count);
+            foreach (var row in tables.TbGlobal.DataList)
+            {
+                bytes.WriteInt(row.Id); bytes.WriteFloat(row.Id == 2 ? 4f : row.Id == 3 ? 6f : row.Value);
+                bytes.WriteSize(row.IntArrVal.Length); foreach (int value in row.IntArrVal) bytes.WriteInt(value);
+            }
+            tables.TbGlobal = new GameConfig.globalcfg.TbGlobal(bytes);
+            _ball.Stop(); _ball.ConfigureFromTables(tables);
+        }
+
+        [Test]
+        public void GeometricTrappedEndpointUsesWallAccelerationSwitch()
+        {
+            ConfigureAcceleration(wall: true, robot: false);
+            var source = FillNeighbors(); _ball.ResolvePlacementOverlap(source, _board);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(4f).Within(0.0001f));
+            foreach (var view in _board.GetComponentsInChildren<RobotView>()) view.GetPhysicalCollider().enabled = false;
+            for (int i = 0; i < 15 && _ball.BounceCount == 1; i++) Tick();
+            Assert.Greater(_ball.BounceCount, 1);
+            Assert.That(_ball.EffectiveSpeed, Is.EqualTo(5f).Within(0.0001f));
+        }
+
+        private void ConfigureAcceleration(bool wall = true, bool robot = true)
+        {
+            Set(_ball, "speed", 4f);
+            var provider = _ball.GlobalValueProvider;
+            _ball.GlobalValueProvider = id => id == 11 ? 1f : id == 12 ? 0.5f : id == 13 ? (wall ? 1f : 0f) :
+                id == 14 ? (robot ? 1f : 0f) : provider(id);
+        }
+
+        private void BeginAccelerationCollision(bool hitRobot, bool enabled)
+        {
+            _ball.Stop();
+            ConfigureAcceleration(wall: !hitRobot && enabled, robot: hitRobot && enabled);
+            _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 0f);
+            if (hitRobot) Robot(new BoardCoordinate(3, 2));
+            else
+            {
+                var wall = NewObject("AccelerationWall").AddComponent<BoxCollider2D>();
+                wall.transform.position = _body.position + Vector2.right;
+                wall.size = new Vector2(0.2f, 2f);
+            }
+            Physics2D.SyncTransforms();
+        }
+
+        [Test]
         public void FreeNeighborChangesDirectionWithoutTeleportAndCountsPlacementOnce()
         {
             var robot = Robot(_origin);
@@ -317,9 +466,11 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, _attacks);
         }
 
-        [Test]
-        public void OtherRobotCreatesEarlierEndpointWithoutBeingIgnoredOrAttacked()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OtherRobotCreatesEarlierEndpointWithoutBeingIgnoredOrAttacked(bool accelerate)
         {
+            if (accelerate) ConfigureAcceleration(wall: false, robot: true);
             var source = FillNeighbors(); _ball.ResolvePlacementOverlap(source, _board);
             var start = _body.position; var direction = _ball.CurrentDirection;
             RobotView blocker = null;
@@ -337,6 +488,7 @@ namespace GameLogic.Tests
             Assert.Less(Vector2.Dot(_body.position - start, direction), 0.3f);
             Assert.AreEqual(2, _ball.ComboCount); Assert.AreEqual(1, _attacks);
             Assert.IsFalse(Physics2D.GetIgnoreCollision(_ball.GetComponent<Collider2D>(), blocker.GetPhysicalCollider()));
+            if (accelerate) Assert.That(_ball.EffectiveSpeed, Is.EqualTo(5f).Within(0.0001f));
         }
 
         [Test]
@@ -355,9 +507,11 @@ namespace GameLogic.Tests
             Assert.AreEqual("None", State);
         }
 
-        [Test]
-        public void GlassAtActualEndpointLosesDurabilityOnceUntilBallLeavesAndReturns()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void GlassAtActualEndpointLosesDurabilityOnceUntilBallLeavesAndReturns(bool accelerate)
         {
+            if (accelerate) ConfigureAcceleration(wall: true, robot: false);
             var tables = WaveTestData.SingleWaveTables();
             _glassContext = new BattleShopContext(new ShopRules(new Dictionary<int, double> { { 501, 1d }, { 502, 1d }, { 503, 1d } }),
                 new[] { 501, 502, 503 }, new[] { 501, 502, 503 }, id => tables.TbRobot.Get(id));
@@ -384,6 +538,7 @@ namespace GameLogic.Tests
             for (var i = 0; i < 40 && entity.CurrentDurability == entity.MaxDurability; i++)
             { _glassContext.Registry.AdvanceTime(Time.fixedDeltaTime); Tick(); }
             Assert.AreEqual(entity.MaxDurability - 1, entity.CurrentDurability);
+            if (accelerate) Assert.That(_ball.EffectiveSpeed, Is.EqualTo(5f).Within(0.0001f));
             Assert.AreEqual(2, _ball.ComboCount, "玻璃挡住路线形成实际端点，只计一次。");
             for (var i = 0; i < 3; i++) { _glassContext.Registry.AdvanceTime(Time.fixedDeltaTime); Tick(); }
             Assert.AreEqual(entity.MaxDurability - 1, entity.CurrentDurability, "尚未返回不能再次扣耐久。");
@@ -500,6 +655,66 @@ namespace GameLogic.Tests
             _fixture?.TearDown();
             _fixture = null;
             yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator RealCollisionCallbacksAccelerateAndDecayForWallAndRobot()
+        {
+            var path = System.IO.Path.Combine(Application.dataPath, "../Temp/BallBounceAccelerationPlayerLoop.json");
+            System.IO.File.WriteAllText(path, "{\"passed\":false,\"status\":\"running\"}");
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var type = typeof(BallPlacementRecoveryTests);
+            int samples = 0;
+            for (int scenario = 0; scenario < 6; scenario++)
+            {
+                bool robot = scenario >= 2;
+                bool enabled = scenario % 2 == 1 || scenario >= 4;
+                bool rageOnBounce = scenario == 4;
+                bool triggerOnly = scenario == 5;
+                _fixture.TearDown(); _fixture.SetUp();
+                Physics2D.simulationMode = SimulationMode2D.FixedUpdate;
+                type.GetMethod("BeginAccelerationCollision", flags).Invoke(_fixture, new object[] { robot, enabled });
+                var ball = (PhysicalCollisionBall)type.GetField("_ball", flags).GetValue(_fixture);
+                var body = ball.GetComponent<Rigidbody2D>();
+                if (rageOnBounce || triggerOnly)
+                {
+                    type.GetMethod("ConfigureTestSpeeds", flags).Invoke(_fixture, null);
+                    var board = (PlacementBoardView)type.GetField("_board", flags).GetValue(_fixture);
+                    ball.LaunchAt(board.GetCellWorldPosition(new BoardCoordinate(2, 2)), 0f);
+                    if (rageOnBounce)
+                    {
+                        typeof(PhysicalCollisionBall).GetProperty("ComboCount").SetValue(ball, 49);
+                        ball.ComboThresholdReached += current => current.SetBerserk(true);
+                    }
+                    else
+                    {
+                        ball.SetBerserk(true);
+                        foreach (var view in board.GetComponentsInChildren<RobotView>()) view.GetPhysicalCollider().isTrigger = true;
+                        var until = Time.time + 0.3f;
+                        while (Time.time < until) { yield return null; Assert.That(body.velocity.magnitude, Is.EqualTo(6f).Within(0.0001f)); samples++; }
+                        Assert.AreEqual(0, ball.BounceCount, "暴走穿过机器人的触发回调不能施加加速。");
+                        continue;
+                    }
+                }
+                var deadline = Time.time + 1f;
+                while (ball.BounceCount == 0 && Time.time < deadline) yield return null;
+                Assert.AreEqual(1, ball.BounceCount, "需要实际OnCollisionEnter2D反弹，不能手动调用效果方法替代。");
+                float baseSpeed = rageOnBounce ? 6f : 4f;
+                if (rageOnBounce) Assert.IsTrue(ball.IsBerserk);
+                Assert.That(body.velocity.magnitude, Is.EqualTo(baseSpeed + (enabled ? 1f : 0f)).Within(0.045f));
+                float collisionTime = Time.fixedTime;
+                deadline = Time.time + 0.6f;
+                while (Time.time < deadline)
+                {
+                    yield return null;
+                    float expected = baseSpeed + (enabled ? Mathf.Max(0f, 1f - (Time.fixedTime - collisionTime) / 0.5f) : 0f);
+                    Assert.That(body.velocity.magnitude, Is.EqualTo(expected).Within(0.045f));
+                    Assert.AreEqual(1, ball.BounceCount, "离开接触后不能因Stay回调反复刷新。");
+                    samples++;
+                }
+                Assert.That(body.velocity.magnitude, Is.EqualTo(baseSpeed).Within(0.0001f));
+            }
+            System.IO.File.WriteAllText(path, "{\"passed\":true,\"scenarios\":6,\"samples\":" + samples + "}");
         }
 
         [UnityTest]
