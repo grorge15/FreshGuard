@@ -49,6 +49,9 @@ namespace GameLogic
         private Vector2 _launchPosition;
         private float _lowSpeedElapsed;
         private float _rageReentryRemaining;
+        private float _bounceSpeedIncrease;
+        private float _bounceSpeedDuration;
+        private float _bounceSpeedRemaining;
         private readonly Dictionary<int, RobotContact> _robotContacts = new Dictionary<int, RobotContact>();
         private readonly HashSet<int> _robotHitsThisStep = new HashSet<int>();
         private readonly List<int> _endedRobotContacts = new List<int>();
@@ -83,7 +86,9 @@ namespace GameLogic
         {
             get
             {
-                return Speed * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
+                float increase = _bounceSpeedRemaining > 0f
+                    ? _bounceSpeedIncrease * Mathf.Clamp01(_bounceSpeedRemaining / _bounceSpeedDuration) : 0f;
+                return (Speed + increase) * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
             }
         }
         public int BounceCount { get; private set; }
@@ -180,6 +185,7 @@ namespace GameLogic
                 if (_launched && !_frozen && _runningGate != null && !_runningGate()) { Stop(); return; }
                 if (_launched && !_frozen && (_runningGate == null || _runningGate()))
                 {
+                    _bounceSpeedRemaining = Mathf.Max(0f, _bounceSpeedRemaining - Time.fixedDeltaTime);
                     ReconcileProtectedContacts();
                     ReconcileRobotContacts();
                     AdvanceContactTime(Time.fixedDeltaTime);
@@ -338,6 +344,7 @@ namespace GameLogic
                 if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
                 SecondsSinceEffectiveInteraction = 0f;
                 AddCombo();
+                ApplyBounceAcceleration(true);
                 if (!_launched || IsBerserk || RecoveryState == PlacementRecoveryState.None) return;
                 ApplyEffectiveVelocity();
             }
@@ -449,7 +456,13 @@ namespace GameLogic
                 }
                 bool count = _placementRecovery.Turn(PlacementClearance);
                 _direction = (_placementRecovery.Destination - center).normalized;
-                if (count) ProcessRecoveryEndpoint(center, hit.collider);
+                if (count)
+                {
+                    float previousSpeed = EffectiveSpeed;
+                    ProcessRecoveryEndpoint(center, hit.collider);
+                    // 端点在步内加速时，余下的时间按新速度继续运动。
+                    remaining *= EffectiveSpeed / previousSpeed;
+                }
                 // 零长度夹缝不能逐帧刷Combo，也不能在同一步内无限反向。
                 if (++turns > 64 || travel <= 0.000001f) break;
             }
@@ -507,6 +520,7 @@ namespace GameLogic
                 if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
             }
             AddCombo();
+            ApplyBounceAcceleration(obstacle != null && obstacle.GetComponentInParent<RobotView>() != null);
         }
 
         private void ProcessRecoveryGlass(GlassView glass)
@@ -628,6 +642,7 @@ namespace GameLogic
 
         public void Stop()
         {
+            ClearBounceAcceleration();
             ClearPlacementRecovery();
             _launched = false;
             _dragging = false;
@@ -661,6 +676,7 @@ namespace GameLogic
                     float.IsNaN(position.y) || float.IsInfinity(position.x) || float.IsInfinity(position.y))
                     throw new InvalidOperationException("发射位置和角度必须有限。");
                 float rad = angle * Mathf.Deg2Rad;
+                ClearBounceAcceleration();
                 ClearPlacementRecovery();
                 ReleaseProtectedContacts();
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
@@ -713,15 +729,40 @@ namespace GameLogic
                     bounced = true;
                     break;
                 }
-                _body.velocity = _direction * EffectiveSpeed;
                 var robot = collision.collider.GetComponentInParent<RobotView>();
                 if (robot != null) ProcessRobotCombo(robot, collision.collider, bounced);
                 if (bounced && glass != null) ApplyGlassCollision(glass);
+                if (bounced) ApplyBounceAcceleration(robot != null);
+                ApplyEffectiveVelocity();
             }
             catch (Exception e) { StopWithError(e); }
         }
 
         private bool IsComboRunning => _comboEnabled && _launched && !_frozen && _runningGate != null && _runningGate();
+
+        /// <summary>有效反弹结算Combo及暴走后调用；刷新增速和计时，不叠加。</summary>
+        private void ApplyBounceAcceleration(bool hitRobot)
+        {
+            if (!_launched || _frozen || (_runningGate != null && !_runningGate())) return;
+            int switchId = hitRobot ? 14 : 13;
+            float enabled = GlobalValueProvider(switchId);
+            if (enabled != 0f && enabled != 1f)
+                throw new InvalidOperationException("Global" + switchId + " 反弹加速开关必须为0或1。");
+            if (enabled == 0f) return;
+            float increase = GlobalValueProvider(11), duration = GlobalValueProvider(12);
+            if (float.IsNaN(increase) || float.IsInfinity(increase) || increase < 0f ||
+                float.IsNaN(duration) || float.IsInfinity(duration) || duration <= 0f)
+                throw new InvalidOperationException("Global11反弹增速必须为有限非负数，Global12衰减时间必须为有限正数。");
+            _bounceSpeedIncrease = increase;
+            _bounceSpeedDuration = duration;
+            _bounceSpeedRemaining = duration;
+            ApplyEffectiveVelocity();
+        }
+
+        private void ClearBounceAcceleration()
+        {
+            _bounceSpeedIncrease = _bounceSpeedDuration = _bounceSpeedRemaining = 0f;
+        }
         private bool IsContactRunning => _comboRegistry != null && _launched && !_frozen && _runningGate != null && _runningGate();
 
         private void ProcessRobotCombo(RobotView view, Collider2D collider, bool bounced)

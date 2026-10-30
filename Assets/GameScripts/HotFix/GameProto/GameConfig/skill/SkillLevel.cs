@@ -31,28 +31,28 @@ public sealed partial class SkillLevel : Luban.BeanBase
     }
 
     /// <summary>
-    /// id
+    /// 等级记录ID<br/>每条记录唯一
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// skillId
+    /// 所属技能ID<br/>关联技能基础表
     /// </summary>
     public readonly int SkillId;
     public skill.Skill SkillId_Ref;
     /// <summary>
-    /// level
+    /// 技能等级<br/>从1开始
     /// </summary>
     public readonly int Level;
     /// <summary>
-    /// damage
+    /// 直接伤害<br/>非负整数
     /// </summary>
     public readonly int Damage;
     /// <summary>
-    /// slow
+    /// 减速比例<br/>0～1，0.3=30%
     /// </summary>
     public readonly float Slow;
     /// <summary>
-    /// duration
+    /// 减速持续时间<br/>单位：秒
     /// </summary>
     public readonly float Duration;
    

@@ -23,12 +23,14 @@ namespace TEngine.Editor
             try
             {
 #if UNITY_EDITOR_OSX || UNITY_EDITOR_LINUX
-                string path = Application.dataPath + "/../../Configs/GameConfig/gen_code_bin_to_project_lazyload.sh";
+                string path = Path.GetFullPath(Path.Combine(Application.dataPath, "../GameConfig/gen_code_bin_to_project_lazyload.sh"));
                 var start = new ProcessStartInfo("/bin/bash", "\"" + path + "\"");
 #elif UNITY_EDITOR_WIN
-                string path = Application.dataPath + "/../../Configs/GameConfig/gen_code_bin_to_project_lazyload.bat";
+                string path = Path.GetFullPath(Path.Combine(Application.dataPath, "../GameConfig/gen_code_bin_to_project_lazyload.bat"));
                 var start = new ProcessStartInfo("cmd.exe", "/d /s /c \"\"" + path + "\"\"");
 #endif
+                if (!File.Exists(path))
+                    throw new FileNotFoundException("找不到 Luban 转表脚本，请确认 GameConfig 文件夹位于 Unity 工程根目录。", path);
                 Debug.Log($"执行转表：{path}");
                 start.WorkingDirectory = Path.GetDirectoryName(path);
                 start.UseShellExecute = false;

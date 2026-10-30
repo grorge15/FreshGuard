@@ -14,6 +14,7 @@ namespace GameLogic
         private Text _trophies;
         private Text _energy;
         private Text _energyCountdown;
+        private Text _status;
         private GameObject _energyCool;
         private Text _coins;
         private Button _startButton;
@@ -36,6 +37,7 @@ namespace GameLogic
             _trophies = FindText("Trophies", "Cup", "Trophy");
             _energy = FindText("Energy", "Stamina");
             _energyCountdown = FindText("EnergyCountdown", "Countdown", "Recovery");
+            _status = FindText("m_text_Status");
             _energyCool = transform.Find("EnergyPanel/energyCool")?.gameObject;
             _coins = FindText("Coins", "Money");
             _startButton = FindButton("StartBattleButton", "StartButton", "BattleButton");
@@ -155,6 +157,7 @@ namespace GameLogic
         private void RefreshView()
         {
             if (_startButton != null) _startButton.interactable = !_starting && !_openingMysteriousStore && _mysteriousStore == null;
+            RefreshStatus();
             if (State == null) return;
             if (_energyCool != null) _energyCool.SetActive(State.Energy < State.EnergyCapacity);
             if (_playerName != null) _playerName.text = State.PlayerName;
@@ -163,11 +166,6 @@ namespace GameLogic
             if (_coins != null) _coins.text = State.Coins.ToString();
             if (_energyCountdown != null)
             {
-                if (!string.IsNullOrEmpty(_statusMessage) && Time.unscaledTime < _statusUntil)
-                {
-                    _energyCountdown.text = _statusMessage;
-                    return;
-                }
                 var remaining = State.Energy >= State.EnergyCapacity
                     ? TimeSpan.Zero
                     : State.NextEnergyRecoveryUtc - DateTimeOffset.UtcNow;
@@ -182,7 +180,15 @@ namespace GameLogic
         {
             _statusMessage = message;
             _statusUntil = Time.unscaledTime + 3f;
-            if (_energyCountdown != null) _energyCountdown.text = message;
+            RefreshStatus();
+        }
+
+        private void RefreshStatus()
+        {
+            if (_status == null) return;
+            var visible = !string.IsNullOrEmpty(_statusMessage) && Time.unscaledTime < _statusUntil;
+            _status.gameObject.SetActive(visible);
+            _status.text = visible ? _statusMessage : string.Empty;
         }
 
         public void ShowStatus(string message) { SetStatus(message); }
