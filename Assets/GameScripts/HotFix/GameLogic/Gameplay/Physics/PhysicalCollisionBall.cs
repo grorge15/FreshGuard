@@ -20,7 +20,9 @@ namespace GameLogic
         [SerializeField] private Sprite _normalSprite;
         [Tooltip("暴走状态使用的 Sprite；未配置时使用普通状态图片。")]
         [SerializeField] private Sprite _berserkSprite;
-        [Tooltip("暴走移动时播放的世界空间粒子拖尾；暂停时冻结，结束或重新发射时清理。")]
+        [Tooltip("普通球移动时播放的橙黄色粒子拖尾；暂停时冻结。")]
+        [SerializeField] private ParticleSystem _normalTrail;
+        [Tooltip("暴走移动时播放的彩虹粒子拖尾；暂停时冻结，切换状态或重新发射时清理。")]
         [SerializeField] private ParticleSystem _berserkTrail;
         [Tooltip("Luban 生成的 Global 二进制；作为 Prefab 依赖加载，不在碰撞回调中进行 IO。")]
         [SerializeField] private TextAsset globalConfig;
@@ -149,7 +151,7 @@ namespace GameLogic
             _spriteRenderer = GetComponent<SpriteRenderer>();
             if (_spriteRenderer != null) _defaultSprite = _spriteRenderer.sprite;
             RefreshSprite();
-            ClearBerserkTrail();
+            ClearBallTrails();
             _body.gravityScale = 0f;
             _body.drag = 0f;
             _body.angularDrag = 0f;
@@ -278,28 +280,36 @@ namespace GameLogic
             _spriteRenderer.sprite = IsBerserk && _berserkSprite != null ? _berserkSprite : normal;
         }
 
-        private void ClearBerserkTrail()
+        private void ClearBallTrails()
         {
+            if (_normalTrail != null)
+                _normalTrail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (_berserkTrail != null)
                 _berserkTrail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
 
-        private void RefreshBerserkTrail(bool moving)
+        private void RefreshBallTrails(bool moving)
         {
-            if (_berserkTrail == null) return;
-            if (!IsBerserk || !_launched || !isActiveAndEnabled)
+            RefreshTrail(_normalTrail, !IsBerserk, moving);
+            RefreshTrail(_berserkTrail, IsBerserk, moving);
+        }
+
+        private void RefreshTrail(ParticleSystem trail, bool active, bool moving)
+        {
+            if (trail == null) return;
+            if (!active || !_launched || !isActiveAndEnabled)
             {
-                ClearBerserkTrail();
+                trail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             }
             else if (moving)
             {
-                if (!_berserkTrail.isPlaying) _berserkTrail.Play(true);
+                if (!trail.isPlaying) trail.Play(true);
             }
             else if (_frozen)
             {
-                if (_berserkTrail.isPlaying) _berserkTrail.Pause(true);
+                if (trail.isPlaying) trail.Pause(true);
             }
-            else ClearBerserkTrail();
+            else trail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
 
         /// <summary>提交占格后开始恢复；有相邻空位匀速脱离，否则在原格真实边线上往返。</summary>
@@ -321,7 +331,10 @@ namespace GameLogic
                 BounceCount++;
                 // 放置本身只算一次接触；保护接触不能通过普通回调再次攻击或累计。
                 if (IsContactRunning && placed.TryGetComboRobot(_comboRegistry, Side, out var robot))
+                {
+                    placed.PlayCollisionFeedback();
                     RobotContactDetected?.Invoke(this, robot.InstanceId);
+                }
                 if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
                 SecondsSinceEffectiveInteraction = 0f;
                 AddCombo();
@@ -608,7 +621,7 @@ namespace GameLogic
                 Vector2 velocity = moving ? _direction * EffectiveSpeed : Vector2.zero;
                 _body.simulated = moving;
                 _body.velocity = velocity;
-                RefreshBerserkTrail(moving);
+                RefreshBallTrails(moving);
             }
             catch (Exception e) { StopWithError(e); }
         }
@@ -622,7 +635,7 @@ namespace GameLogic
             _rageReentryRemaining = 0f;
             RefreshSprite();
             ReleaseProtectedContacts();
-            ClearBerserkTrail();
+            ClearBallTrails();
             _glassHitsThisStep.Clear();
             ClearCombo();
             if (_body != null) { _body.velocity = Vector2.zero; _body.simulated = false; }
@@ -651,7 +664,7 @@ namespace GameLogic
                 ClearPlacementRecovery();
                 ReleaseProtectedContacts();
                 _direction = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
-                ClearBerserkTrail();
+                ClearBallTrails();
                 _body.simulated = true;
                 _body.position = position;
                 transform.position = new Vector3(position.x, position.y, transform.position.z);
@@ -663,7 +676,7 @@ namespace GameLogic
                 _glassHitsThisStep.Clear();
                 ClearCombo();
                 _launched = true;
-                RefreshBerserkTrail(true);
+                RefreshBallTrails(true);
             }
             catch (Exception e) { StopWithError(e); }
         }
@@ -727,6 +740,7 @@ namespace GameLogic
                 contact.AttackHandled = true;
                 contact.StayElapsed = 0f;
                 SecondsSinceEffectiveInteraction = 0f;
+                view.PlayCollisionFeedback();
                 RobotContactDetected?.Invoke(this, robot.InstanceId);
                 // A contact notification can synchronously settle and dispose the battle.
                 if (!IsContactRunning) return;

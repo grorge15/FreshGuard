@@ -51,7 +51,7 @@ namespace GameLogic.Tests
                     Assert.Greater(portrait.sortingOrder, icon.sortingOrder);
                     CollectionAssert.AreEquivalent(new[] { icon, portrait },
                         instance.GetComponentsInChildren<SpriteRenderer>(true).Where(renderer => renderer.enabled));
-                    Assert.AreEqual(Color.white, icon.color);
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(1), icon.color);
                     Assert.AreEqual(Color.white, portrait.color);
                     Assert.IsTrue(robot.TryUpgrade());
                     view.Render(robot);
@@ -222,9 +222,9 @@ namespace GameLogic.Tests
             Assert.IsNotNull(style, "等级背景必须独立于固定品质。");
             var method = style.GetMethod("ColorForLevel", BindingFlags.Public | BindingFlags.Static);
             Assert.IsNotNull(method);
-            var white = (Color)method.Invoke(null, new object[] { 1 });
+            var baseColor = (Color)method.Invoke(null, new object[] { 1 });
             var gold = (Color)method.Invoke(null, new object[] { 5 });
-            Assert.AreEqual(Color.white, white);
+            Assert.AreEqual((Color)new Color32(238, 243, 247, 255), baseColor);
             Assert.Greater(gold.r, gold.b);
             Assert.Greater(gold.g, gold.b);
             for (var level = 1; level < 5; level++)

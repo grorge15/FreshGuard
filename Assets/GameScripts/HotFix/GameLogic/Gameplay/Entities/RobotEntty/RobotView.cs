@@ -14,6 +14,9 @@ namespace GameLogic
         private const float CollisionInsetRatio = 0.06f;
         [SerializeField] private SpriteRenderer _iconRenderer;
         [SerializeField] private SpriteRenderer _portraitRenderer;
+        [Header("碰撞反馈")]
+        [SerializeField, Range(1f, 1.5f)] private float _collisionScale = 1.08f;
+        [SerializeField, Min(0.05f)] private float _collisionDuration = 0.22f;
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
@@ -24,6 +27,20 @@ namespace GameLogic
         private RobotEntity _robot;
         private BattleEntityRegistry _registry;
         private Vector3? _authoredScale;
+        private BattleShopSceneController _host;
+        private CollisionVisual[] _collisionVisuals;
+        private float _collisionElapsed;
+        private float _collisionStartScale = 1f;
+        private float _collisionCurrentScale = 1f;
+        private bool _collisionPlaying;
+
+        private struct CollisionVisual
+        {
+            public Transform Transform;
+            public Vector3 Position;
+            public Vector3 Scale;
+            public Vector3 Pivot;
+        }
 
         public void ApplyBoardScale(PlacementBoardView board)
         {
@@ -54,6 +71,7 @@ namespace GameLogic
 
         public void BindInput(BattleShopSceneController host)
         {
+            _host = host;
             var input = GetComponent<RobotBoardPointerInput>();
             if (input != null) input.Bind(host, InstanceId);
         }
@@ -73,6 +91,7 @@ namespace GameLogic
                 _outline = outlineRoot != null ? outlineRoot.GetComponentsInChildren<SpriteRenderer>(true) : Array.Empty<SpriteRenderer>();
             }
             var visible = !robot.IsRemoved && robot.Location == RobotLocation.Board && !robot.IsDragging;
+            if (!visible) ResetCollisionFeedback();
             var useIcon = _iconRenderer != null && _iconRenderer.sprite != null;
             var color = _mergeCandidate ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.cyan, 0.65f) :
                 Time.unscaledTime < _feedbackUntil ? Color.Lerp(RobotLevelStyle.ColorForLevel(robot.Level), Color.white, 0.65f) :
@@ -199,6 +218,76 @@ namespace GameLogic
             _feedbackUntil = Time.unscaledTime + 0.4f;
             if (_robot != null) Render(_robot);
         }
+
+        /// <summary>只缩放底板与立绘，保持整体碰撞、占格节点和攻击原点不变。</summary>
+        public void PlayCollisionFeedback()
+        {
+            if (!isActiveAndEnabled || _robot == null || !_robot.CanParticipate) return;
+            if (_collisionVisuals == null)
+            {
+                if (_iconRenderer == null || _iconRenderer.sprite == null) return;
+                var pivot = _iconRenderer.transform.TransformPoint(_iconRenderer.sprite.bounds.center);
+                var visuals = new List<CollisionVisual>();
+                foreach (var renderer in new[] { _iconRenderer, _portraitRenderer })
+                {
+                    if (renderer == null) continue;
+                    var node = renderer.transform;
+                    visuals.Add(new CollisionVisual
+                    {
+                        Transform = node, Position = node.localPosition, Scale = node.localScale,
+                        Pivot = node.parent.InverseTransformPoint(pivot)
+                    });
+                }
+                _collisionVisuals = visuals.ToArray();
+            }
+            // 从当前大小重新回弹，不叠加倍率，密集碰撞也不会越变越大。
+            _collisionStartScale = _collisionCurrentScale;
+            _collisionElapsed = 0f;
+            _collisionPlaying = true;
+        }
+
+        private void LateUpdate()
+        {
+            if (_host != null && _host.IsFrozen) return;
+            AdvanceCollisionFeedback(Time.deltaTime);
+        }
+
+        private void AdvanceCollisionFeedback(float deltaTime)
+        {
+            if (!_collisionPlaying) return;
+            if (_robot == null || !_robot.CanParticipate) { ResetCollisionFeedback(); return; }
+            _collisionElapsed += Mathf.Max(0f, deltaTime);
+            var duration = Mathf.Max(0.05f, _collisionDuration);
+            if (_collisionElapsed >= duration) { ResetCollisionFeedback(); return; }
+            var progress = _collisionElapsed / duration;
+            var peak = Mathf.Max(1f, _collisionScale);
+            var scale = progress < 0.25f
+                ? Mathf.Lerp(_collisionStartScale, peak, Mathf.SmoothStep(0f, 1f, progress / 0.25f))
+                : Mathf.Lerp(peak, 1f, Mathf.SmoothStep(0f, 1f, (progress - 0.25f) / 0.75f));
+            ApplyCollisionScale(scale);
+        }
+
+        private void ApplyCollisionScale(float scale)
+        {
+            _collisionCurrentScale = scale;
+            if (_collisionVisuals == null) return;
+            foreach (var visual in _collisionVisuals)
+            {
+                if (visual.Transform == null) continue;
+                visual.Transform.localPosition = visual.Pivot + (visual.Position - visual.Pivot) * scale;
+                visual.Transform.localScale = new Vector3(visual.Scale.x * scale, visual.Scale.y * scale, visual.Scale.z);
+            }
+        }
+
+        private void ResetCollisionFeedback()
+        {
+            if (!_collisionPlaying) return;
+            _collisionPlaying = false;
+            ApplyCollisionScale(1f);
+        }
+
+        private void OnDisable() { ResetCollisionFeedback(); }
+
         private void Update()
         {
             if (_feedbackUntil <= 0f || _robot == null) return;
@@ -213,6 +302,7 @@ namespace GameLogic
             if (registry == null || !registry.TryGet(instanceId, out entity) ||
                 !(entity is RobotEntity robot) || robot.ConfigId != _configId)
                 throw new ArgumentException("视图与已购买机器人不匹配。", nameof(instanceId));
+            ResetCollisionFeedback();
             InstanceId = instanceId;
             _registry = registry;
             Render(robot);

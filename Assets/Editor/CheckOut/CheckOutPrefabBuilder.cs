@@ -14,7 +14,7 @@ namespace FreshGuard.Editor
     public static class CheckOutPrefabBuilder
     {
         public const string PrefabPath = "Assets/AssetRaw/UI/CheckOutUI.prefab";
-        private const string Sprites = "Assets/AssetRaw/Actor/CheckOutScreen/Sprites/";
+        private const string Sprites = "Assets/AssetRaw/Actor/UISprites/CheckOutScreen/Sprites/";
         private const string CommonSprites = "Assets/AssetRaw/Actor/UISprites/General/";
         private static readonly Vector2 DesignSize = new Vector2(750, 1334);
 
@@ -54,13 +54,31 @@ namespace FreshGuard.Editor
             Image("m_img_DefeatBG", rewards, "Res_loseResourceBGSingle", new Vector2(650, 215), Vector2.zero).gameObject.SetActive(false);
             var ink = new Color(0.39f, 0.17f, 0.04f);
             Label("m_text_Title", rewards, "获得奖励", 28, new Vector2(560, 45), new Vector2(0, 68), ink);
-            var reward = Rect("m_item_Reward", rewards, new Vector2(270, 106), new Vector2(0, -18));
-            Image("m_img_Icon", reward, "zhuliCoin", new Vector2(72, 72), new Vector2(-78, 0));
-            Label("m_text_Name", reward, "助力币", 24, new Vector2(155, 40), new Vector2(43, 20), ink);
-            Label("m_text_Amount", reward, "—", 30, new Vector2(155, 40), new Vector2(43, -22), ink);
+            var reward = Rect("m_item_Reward", rewards, new Vector2(240, 112), new Vector2(0, -18));
+            Image("m_img_Icon", reward, "zhuliCoin", new Vector2(104, 104), new Vector2(-62, 0));
+            var amount = Label("m_text_Amount", reward, "—", 38, new Vector2(112, 60), new Vector2(54, 0), ink);
+            amount.resizeTextForBestFit = true;
+            amount.resizeTextMinSize = 20;
+            amount.resizeTextMaxSize = 38;
+            amount.horizontalOverflow = HorizontalWrapMode.Wrap;
+            ApplyRewardAmountStyle(amount);
             BusinessButton(content, "m_btn_DoubleReward", "双倍奖励", "U_yellowButton", new Vector2(-166, -487), ink);
             BusinessButton(content, "m_btn_ReturnMain", "返回主界面", "U_blueButton", new Vector2(166, -487), Color.white);
             return root.gameObject;
+        }
+
+        public static void ApplyRewardAmountStyle(Text amount)
+        {
+            foreach (var effect in amount.GetComponents<Shadow>()) Object.DestroyImmediate(effect);
+            amount.color = new Color32(255, 217, 106, 255);
+            var depth = amount.gameObject.AddComponent<Shadow>();
+            depth.effectColor = new Color32(104, 65, 28, 255);
+            depth.effectDistance = new Vector2(0f, -3.1f);
+            depth.useGraphicAlpha = true;
+            var outline = amount.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color32(139, 84, 29, 255);
+            outline.effectDistance = new Vector2(0.8f, -0.8f);
+            outline.useGraphicAlpha = true;
         }
 
         private static void Theme(Transform root, string name, bool victory)

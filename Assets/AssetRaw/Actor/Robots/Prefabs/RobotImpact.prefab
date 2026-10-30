@@ -896,6 +896,8 @@ MonoBehaviour:
   _configId: 505
   _iconRenderer: {fileID: 2927022282519624938}
   _portraitRenderer: {fileID: 207869288040744138}
+  _collisionScale: 1.08
+  _collisionDuration: 0.22
 --- !u!114 &6876318073855962648
 MonoBehaviour:
   m_ObjectHideFlags: 0
