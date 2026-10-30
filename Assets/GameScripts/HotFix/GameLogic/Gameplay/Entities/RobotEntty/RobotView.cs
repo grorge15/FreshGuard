@@ -14,6 +14,9 @@ namespace GameLogic
         private const float CollisionInsetRatio = 0.06f;
         [SerializeField] private SpriteRenderer _iconRenderer;
         [SerializeField] private SpriteRenderer _portraitRenderer;
+        [SerializeField] private SpriteRenderer _levelFrameRenderer;
+        [SerializeField] private Transform _starsRoot;
+        [SerializeField] private SpriteRenderer[] _levelStars;
         [Header("碰撞反馈")]
         [SerializeField, Range(1f, 1.5f)] private float _collisionScale = 1.08f;
         [SerializeField, Min(0.05f)] private float _collisionDuration = 0.22f;
@@ -106,6 +109,12 @@ namespace GameLogic
                 _portraitRenderer.enabled = visible && useIcon && _portraitRenderer.sprite != null;
                 _portraitRenderer.color = Color.white;
             }
+            if (_levelFrameRenderer != null)
+            {
+                _levelFrameRenderer.enabled = visible && useIcon && _levelFrameRenderer.sprite != null;
+                _levelFrameRenderer.color = RobotLevelStyle.FrameColorForLevel(robot.Level);
+            }
+            RenderStars(robot, visible && useIcon);
             foreach (var edge in _outline) edge.enabled = visible && !useIcon;
             var collider = GetPhysicalCollider();
             if (collider != null)
@@ -118,6 +127,27 @@ namespace GameLogic
                 // 占格节点继续提供攻击原点和拖拽选格；正式外观使用整张 Icon。
                 cell.enabled = visible && !useIcon;
                 cell.color = color;
+            }
+        }
+
+        private void RenderStars(RobotEntity robot, bool visible)
+        {
+            if (_levelStars == null) return;
+            var count = Mathf.Clamp(robot.Level, 1, RobotLevelStyle.MaxStars);
+            var cells = robot.Configuration?.ShapeId_Ref?.CellOffsets;
+            var anchor = RobotLevelStyle.StarAnchor(cells);
+            var fit = RobotLevelStyle.StarScaleForCells(cells);
+            var spacing = RobotLevelStyle.StarSpacingForCells(cells);
+            var cellSize = MapGridMath.REFERENCE_CELL_SIZE;
+            for (var i = 0; i < _levelStars.Length; i++)
+            {
+                var star = _levelStars[i];
+                if (star == null) continue;
+                star.enabled = visible && i < count && star.sprite != null;
+                star.color = Color.white;
+                star.transform.localPosition = (anchor + Vector2.right * ((i - (count - 1) * 0.5f) * spacing)) * cellSize;
+                if (star.sprite != null)
+                    star.transform.localScale = Vector3.one * (RobotLevelStyle.StarSpriteSize * fit * cellSize / star.sprite.bounds.size.x);
             }
         }
 
@@ -219,7 +249,7 @@ namespace GameLogic
             if (_robot != null) Render(_robot);
         }
 
-        /// <summary>只缩放底板与立绘，保持整体碰撞、占格节点和攻击原点不变。</summary>
+        /// <summary>同步缩放底板、立绘和星星，保持碰撞、占格节点和攻击原点不变。</summary>
         public void PlayCollisionFeedback()
         {
             if (!isActiveAndEnabled || _robot == null || !_robot.CanParticipate) return;
@@ -228,10 +258,10 @@ namespace GameLogic
                 if (_iconRenderer == null || _iconRenderer.sprite == null) return;
                 var pivot = _iconRenderer.transform.TransformPoint(_iconRenderer.sprite.bounds.center);
                 var visuals = new List<CollisionVisual>();
-                foreach (var renderer in new[] { _iconRenderer, _portraitRenderer })
+                foreach (var node in new[] { _iconRenderer.transform, _portraitRenderer != null ? _portraitRenderer.transform : null,
+                    _levelFrameRenderer != null ? _levelFrameRenderer.transform : null, _starsRoot })
                 {
-                    if (renderer == null) continue;
-                    var node = renderer.transform;
+                    if (node == null) continue;
                     visuals.Add(new CollisionVisual
                     {
                         Transform = node, Position = node.localPosition, Scale = node.localScale,
