@@ -84,7 +84,7 @@ namespace FreshGuard.Editor
             try
             {
                 var offers = root.transform.Find("m_rect_ShopPanel/m_tf_Offers");
-                if (offers == null) return false;
+                if (offers == null || offers.Find("m_item_Template") != null) return false;
                 var layout = offers.GetComponent<HorizontalLayoutGroup>();
                 // 仅迁移仍使用旧自动布局的资源，已有手工布局不再重设。
                 if (layout == null) return false;

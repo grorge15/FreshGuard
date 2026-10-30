@@ -184,8 +184,8 @@ namespace GameLogic.Tests
         [TestCase(ShopRewardSource.NormalEnemy, 4)]
         [TestCase(ShopRewardSource.EliteEnemy, 20)]
         [TestCase(ShopRewardSource.Boss, 50)]
-        [TestCase(ShopRewardSource.NormalGlass, 10)]
-        [TestCase(ShopRewardSource.ColoredGlass, 10)]
+        [TestCase(ShopRewardSource.NormalGlass, 2)]
+        [TestCase(ShopRewardSource.ColoredGlass, 2)]
         public void FormalRewardApiReadsFiveRealConfigAmounts(ShopRewardSource source, int amount)
         {
             var rules = ShopRules.FromTables(RealTables());

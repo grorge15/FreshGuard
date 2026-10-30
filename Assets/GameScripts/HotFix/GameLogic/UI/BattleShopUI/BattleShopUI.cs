@@ -1,17 +1,18 @@
+using System.Collections.Generic;
 using TEngine;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace GameLogic
 {
-    public sealed class BattleShopUI : UIWidget
+    public sealed partial class BattleShopUI : UIWidget
     {
         private Text _coins;
         private Text _refreshPrice;
         private Text _message;
         private Button _refreshButton;
         private RectTransform _offers;
-        private ShopRobotItemWidget[] _items;
+        private readonly List<ShopRobotItemWidget> _items = new List<ShopRobotItemWidget>();
         private StorageRobotSlotWidget _storage;
         private RobotDragGhostWidget _ghost;
         private BerserkBarWidget _berserkBar;
@@ -38,25 +39,19 @@ namespace GameLogic
             OnRefresh();
         }
 
-        protected override void ScriptGenerator()
-        {
-            _coins = FindChildComponent<Text>("m_rect_ShopPanel/m_text_EnergyCoins");
-            _refreshPrice = FindChildComponent<Text>("m_rect_ShopPanel/m_btn_Refresh/m_text_Price");
-            _message = FindChildComponent<Text>("m_rect_ShopPanel/m_text_Message");
-            _offers = FindChildComponent<RectTransform>("m_rect_ShopPanel/m_tf_Offers");
-            _refreshButton = FindChildComponent<Button>("m_rect_ShopPanel/m_btn_Refresh");
-            _refreshButton.onClick.AddListener(OnRefreshClicked);
-            Drag = gameObject.GetComponent<RobotDragController>();
-        }
         protected override void RegisterEvent()
         {
             AddUIEvent<int>(BattleShopEvents.Changed, side => { if (side == (int)BattleSide.Player) RefreshView(); });
         }
         protected override void OnCreate()
         {
-            _items = new ShopRobotItemWidget[3];
-            for (var i = 0; i < _items.Length; i++)
-                _items[i] = CreateWidget<ShopRobotItemWidget>("m_rect_ShopPanel/m_tf_Offers/Slot_" + i);
+            _coins = m_text_EnergyCoins;
+            _refreshPrice = m_text_Price;
+            _message = m_text_Message;
+            _offers = m_tf_Offers as RectTransform;
+            _refreshButton = m_btn_Refresh;
+            Drag = gameObject.GetComponent<RobotDragController>();
+            m_item_Template.SetActive(false);
             _storage = CreateWidget<StorageRobotSlotWidget>("m_rect_ShopPanel/m_item_Storage");
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
             _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: false);
@@ -95,7 +90,14 @@ namespace GameLogic
             _refreshPrice.text = _host != null ? _host.RefreshPrice.ToString() : "";
             _refreshPrice.color = _host != null && state.EnergyCoins < _host.RefreshPrice
                 ? new Color(0.8f, 0.12f, 0.1f) : new Color(0.23f, 0.13f, 0.08f);
-            for (var i = 0; i < _items.Length; i++) _items[i].Render(this, i, state.Slots[i], state.EnergyCoins);
+            while (_items.Count < state.Slots.Count && _items.Count < ShopRules.ShopCapacity)
+                _items.Add(CreateWidgetByPrefab<ShopRobotItemWidget>(m_item_Template, _offers));
+            for (var i = 0; i < _items.Count; i++)
+            {
+                if (i < state.Slots.Count) _items[i].Render(this, state.Slots[i].SlotId, state.Slots[i], state.EnergyCoins);
+                else _items[i].Visible = false;
+            }
+            _refreshButton.interactable = !Context.IsBusy && Drag.Phase == RobotDragPhase.Idle;
             _storage.Render(this);
             ApplyOfferMergeHighlights();
         }
@@ -103,7 +105,8 @@ namespace GameLogic
         {
             if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsEnded || Context.IsBusy ||
                 Drag.Phase != RobotDragPhase.Idle) return;
-            var slot = Context.GetState(BattleSide.Player).Slots[slotId];
+            var slot = Context.GetState(BattleSide.Player).FindSlot(slotId);
+            if (slot == null) return;
             if (slot.Offer != null)
             {
                 Drag.Press(RobotDragSource.Offer(slotId, slot.Offer.OfferId), pointerId, position, now, new BoardCoordinate(0, 0));
@@ -117,7 +120,7 @@ namespace GameLogic
             var id = Context.GetState(BattleSide.Player).StorageInstanceId;
             if (id.HasValue) Drag.Press(id.Value, pointerId, position, now);
         }
-        private void OnRefreshClicked()
+        private partial void OnClick_RefreshBtn()
         {
             if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsBusy ||
                 Drag.Phase != RobotDragPhase.Idle) return;
@@ -125,6 +128,8 @@ namespace GameLogic
             if (result != ShopOperationResult.Success) ShowFailure(result);
             
         }
+        public bool IsOverShop(Vector2 position) => RectTransformUtility.RectangleContainsScreenPoint(m_rect_ShopPanel, position, EventCamera);
+
         public bool IsOverStorage(Vector2 position)
         {
             return _storage != null && RectTransformUtility.RectangleContainsScreenPoint(_storage.rectTransform, position, EventCamera);
@@ -133,12 +138,12 @@ namespace GameLogic
         {
             slotId = -1;
             if (_items == null) return false;
-            for (var i = 0; i < _items.Length; i++)
+            for (var i = 0; i < _items.Count; i++)
             {
                 var item = _items[i];
                 if (item != null && item.gameObject != null && item.gameObject.activeInHierarchy &&
                     RectTransformUtility.RectangleContainsScreenPoint(item.rectTransform, position, EventCamera))
-                { slotId = i; return true; }
+                { slotId = item.SlotId; return true; }
             }
             return false;
         }
@@ -159,14 +164,14 @@ namespace GameLogic
         {
             if (_items == null) return;
             var state = Context != null && !Context.IsEnded ? Context.GetState(BattleSide.Player) : null;
-            for (var i = 0; i < _items.Length; i++)
+            for (var i = 0; i < _items.Count; i++)
             {
                 var item = _items[i];
                 if (item == null || item.gameObject == null) continue;
-                var offer = state?.Slots[i].Offer;
-                var eligible = _offerMergeSource.HasValue && offer != null &&
-                    Context.CheckOfferMerge(BattleSide.Player, _offerMergeSource.Value, i, offer.OfferId) == ShopOperationResult.Success;
-                item.SetMergeCandidate(eligible, eligible && i == _hoveredOfferSlot);
+                var slot = state?.FindSlot(item.SlotId);
+                var eligible = item.Visible && _offerMergeSource.HasValue && slot != null &&
+                    Context.CheckShopDrop(BattleSide.Player, _offerMergeSource.Value, slot.SlotId) == ShopOperationResult.Success;
+                item.SetMergeCandidate(eligible, eligible && item.SlotId == _hoveredOfferSlot);
             }
         }
         public void SetStorageHighlighted(bool highlighted) { _storage?.SetHighlighted(highlighted); }
@@ -188,6 +193,7 @@ namespace GameLogic
                 case ShopOperationResult.IncompatibleMerge: _message.text = "需要相同机器人、相同等级"; break;
                 case ShopOperationResult.MaxLevelReached: _message.text = "Lv5 无法继续合成"; break;
                 case ShopOperationResult.EntityNotFound: _message.text = "目标已失效，已返回来源位置"; break;
+                case ShopOperationResult.ShopFull: _message.text = "商店已满，无法放入"; break;
                 case ShopOperationResult.StorageFull: _message.text = "暂存位已满，已返回原位置"; break;
                 default: _message.text = "无法放置，已返回来源位置"; break;
             }
@@ -199,12 +205,12 @@ namespace GameLogic
             Drag.Advance(Time.unscaledTime);
             var flashing = Time.unscaledTime < _flashUntil && Mathf.Repeat(Time.unscaledTime * 10f, 1f) < 0.5f;
             _coins.color = flashing ? new Color(1f, 0.25f, 0.15f) : Color.white;
-            if (Time.unscaledTime > _messageUntil) _message.text = "";
+            if (Time.unscaledTime > _messageUntil) _message.text = "刷新会清除店内所有机器人，已购机器人不退款。";
         }
         protected override void OnSetVisible(bool visible) { if (!visible) Drag?.Cancel(); }
         protected override void OnDestroy()
         {
-            if (_refreshButton != null) _refreshButton.onClick.RemoveListener(OnRefreshClicked);
+            if (_refreshButton != null) _refreshButton.onClick.RemoveListener(OnClick_RefreshBtn);
             Drag?.Cancel();
             Context = null;
             _host = null;

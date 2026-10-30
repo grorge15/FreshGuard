@@ -24,6 +24,7 @@ namespace GameLogic
         DuplicateReward,
         CoinOverflow,
         ResourceFailed,
+        ShopFull,
         InvalidTarget = InvalidPlacement,
         InvalidSource = InvalidLocation,
         InsufficientFunds = InsufficientCoins
@@ -51,7 +52,7 @@ namespace GameLogic
         }
     }
 
-    /// <summary>槽ID为0..2；Offer和InstanceId互斥，已购实体离槽后两者都为空。</summary>
+    /// <summary>SlotId为局内稳定身份，不是列表下标；Offer和InstanceId互斥，空项移除。</summary>
     public sealed class ShopSlot
     {
         public int SlotId { get; }
@@ -64,6 +65,8 @@ namespace GameLogic
 
     public sealed class BattleShopState
     {
+        private readonly List<ShopSlot> _slots = new List<ShopSlot>();
+        private int _nextSlotId;
         public BattleSide Side { get; }
         public int EnergyCoins { get; internal set; }
         public IReadOnlyList<ShopSlot> Slots { get; }
@@ -74,10 +77,24 @@ namespace GameLogic
         {
             Side = side;
             EnergyCoins = rules.InitialCoins;
-            var slots = new List<ShopSlot>();
-            for (var index = 0; index < rules.SlotCount; index++) slots.Add(new ShopSlot(index));
-            Slots = slots.AsReadOnly();
+            Slots = _slots.AsReadOnly();
             LastBatchRobotIds = new List<int>().AsReadOnly();
         }
+        public ShopSlot FindSlot(int slotId)
+        {
+            foreach (var slot in _slots) if (slot.SlotId == slotId) return slot;
+            return null;
+        }
+
+        internal bool HasIssuedSlot(int slotId) => slotId >= 0 && slotId < _nextSlotId;
+
+        internal ShopSlot AddSlot()
+        {
+            var slot = new ShopSlot(_nextSlotId++);
+            _slots.Add(slot);
+            return slot;
+        }
+        internal void RemoveSlot(ShopSlot slot) => _slots.Remove(slot);
+        internal void ClearSlots() => _slots.Clear();
     }
 }

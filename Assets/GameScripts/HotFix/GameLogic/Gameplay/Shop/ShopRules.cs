@@ -24,7 +24,9 @@ namespace GameLogic
     {
         private readonly IReadOnlyDictionary<int, double> _sharedRobotWeights;
         public int InitialCoins { get; }
-        public int SlotCount => 3;
+        public const int OfferBatchCount = 3;
+        public const int ShopCapacity = 5;
+        public int SlotCount => OfferBatchCount;
         public int RefreshPrice { get; }
         public int MaxRobotLevel => 5;
         public int AdditionalRerollLimit { get; }

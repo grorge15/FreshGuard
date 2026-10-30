@@ -54,8 +54,8 @@ namespace GameLogic.Tests
                     Assert.That(context.TryRefresh(BattleSide.Opponent),Is.EqualTo(ShopOperationResult.Success));
                     var offer=context.GetState(BattleSide.Opponent).Slots[0].Offer;
                     Assert.That(offer.Level,Is.EqualTo(1)); Assert.That(offer.Price,Is.EqualTo(6));
-                    var target=ShopTestData.Purchase(context,0,BattleSide.Opponent);
-                    var source=ShopTestData.Purchase(context,1,BattleSide.Opponent);
+                    var target=ShopTestData.Purchase(context,context.GetState(BattleSide.Opponent).Slots[0].SlotId,BattleSide.Opponent);
+                    var source=ShopTestData.Purchase(context,context.GetState(BattleSide.Opponent).Slots[1].SlotId,BattleSide.Opponent);
                     Assert.That(target.MaxLevel,Is.EqualTo(1));
                     var board=new BoardModel(4,2);
                     context.TryDeploy(BattleSide.Opponent,target.InstanceId,BattleSide.Opponent,board,new BoardCoordinate(0,0));

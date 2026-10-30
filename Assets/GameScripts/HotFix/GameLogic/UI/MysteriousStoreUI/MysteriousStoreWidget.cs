@@ -21,6 +21,10 @@ namespace GameLogic
             {
                 for (var i = 0; i < _qualities.Length; i++) _qualities[i].SetActive(i == (int)quality);
             }
+            public void Clear()
+            {
+                foreach (var quality in _qualities) quality.SetActive(false);
+            }
         }
 
         private sealed class OfferView
@@ -46,6 +50,7 @@ namespace GameLogic
         private readonly HeldView[] _held = new HeldView[MysteriousStorePreviewSession.SlotCount];
         private MysteriousStorePreviewSession _session;
         private Action _close;
+        private Action _purchased;
         private Text _balance, _feedback, _removeName, _removeLevel;
         private GameObject _confirmation;
         private IconView _removeIcon;
@@ -64,7 +69,17 @@ namespace GameLogic
             FitToRootCanvas();
         }
 
-        protected override void OnUpdate() { FitToRootCanvas(); }
+        protected override void OnUpdate()
+        {
+            FitToRootCanvas();
+            if (_session != null && !_disposed) RefreshCoins();
+        }
+
+        private void RefreshCoins()
+        {
+            var text = "助力币  " + _session.PlayerState.Coins;
+            if (_balance.text != text) _balance.text = text;
+        }
 
         private void FitToRootCanvas()
         {
@@ -132,11 +147,12 @@ namespace GameLogic
             Listen(panel.Find("m_btn_Remove").GetComponent<Button>(), ConfirmRemoval);
         }
 
-        public void Bind(MysteriousStorePreviewSession session, Action close)
+        public void Bind(MysteriousStorePreviewSession session, Action close, Action purchased = null)
         {
             if (_disposed) return;
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _close = close;
+            _purchased = purchased;
             _feedback.text = string.Empty;
             CancelRemoval();
             RefreshView();
@@ -146,7 +162,7 @@ namespace GameLogic
         {
             if (_disposed || _session == null) return;
             FitToRootCanvas();
-            _balance.text = "助力币  " + _session.Balance;
+            RefreshCoins();
             for (var i = 0; i < _offers.Length; i++)
             {
                 var view = _offers[i];
@@ -172,7 +188,12 @@ namespace GameLogic
                 var item = FindSlot(slot);
                 var view = _held[slot];
                 view.Content.SetActive(item != null);
-                if (item == null) continue;
+                if (item == null)
+                {
+                    view.Icon.Clear();
+                    view.Level.text = string.Empty;
+                    continue;
+                }
                 view.Icon.Render(item.Buff.Quality);
                 view.Level.text = item.Level + "级";
             }
@@ -185,6 +206,7 @@ namespace GameLogic
             switch (_session.TryBuy(index))
             {
                 case MysteriousStorePurchaseResult.Success:
+                    _purchased?.Invoke();
                     _feedback.text = (wasHeld ? "升层成功：" : "获得助力：") + _session.Offers[index].Name +
                         " " + _session.GetHeldLevel(_session.Offers[index].BuffId) + "层";
                     break;
@@ -245,6 +267,7 @@ namespace GameLogic
             _listeners.Clear();
             _session = null;
             _close = null;
+            _purchased = null;
             _rootCanvasRect = null;
         }
     }

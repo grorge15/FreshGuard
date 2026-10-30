@@ -24,6 +24,7 @@ namespace GameLogic
     /// <summary>不可变手势身份；只有创建它的Context可以提交，原占格在拿起时释放。</summary>
     public sealed class RobotDragSession
     {
+        public bool IsLifted { get; internal set; }
         public long InteractionId { get; }
         public long BattleId { get; }
         public BattleSide Side { get; }

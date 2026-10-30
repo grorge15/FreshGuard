@@ -60,6 +60,14 @@ namespace GameLogic
             Coins = checked(Coins + amount);
         }
 
+        public bool TrySpendCoins(int amount)
+        {
+            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+            if (Coins < amount) return false;
+            Coins -= amount;
+            return true;
+        }
+
         public void Refresh(DateTimeOffset utcNow)
         {
             utcNow = utcNow.ToUniversalTime();

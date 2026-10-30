@@ -29,24 +29,23 @@ namespace GameLogic
             return BeginDrag(side, source, out session, true, allowUnaffordableOffer);
         }
 
-        private ShopOperationResult BeginDrag(BattleSide side, RobotDragSource source,
-            out RobotDragSession session, bool notify, bool allowUnaffordableOffer = false)
+        // 预留只占用操作锁；余额仅在真实购买提交时校验。
+        public ShopOperationResult TryReserveDrag(BattleSide side, RobotDragSource source, out RobotDragSession session)
+            => ReserveDrag(side, source, out session, true);
+
+        private ShopOperationResult ReserveDrag(BattleSide side, RobotDragSource source,
+            out RobotDragSession session, bool notify)
         {
             session = null;
-            var gate = CheckMutation(side);
-            if (gate != ShopOperationResult.Success) return gate;
+            var result = CheckMutation(side);
+            if (result != ShopOperationResult.Success) return result;
             RobotEntity robot;
             ShopSlot slot;
             Robot config;
             int level;
             PlaceableDefinition definition;
-            var result = ResolveDragSource(side, source, out robot, out slot, out config, out level, out definition, true);
+            result = ResolveDragSource(side, source, out robot, out slot, out config, out level, out definition, true);
             if (result != ShopOperationResult.Success) return result;
-            if (!allowUnaffordableOffer)
-            {
-                result = CheckOfferFunds(side, slot);
-                if (result != ShopOperationResult.Success) return result;
-            }
             BoardModel board = null;
             if (robot != null && robot.Location == RobotLocation.Board)
             {
@@ -59,15 +58,49 @@ namespace GameLogic
                 session = new RobotDragSession(Interlocked.Increment(ref _lastInteractionId), BattleId, side, source,
                     robot != null ? robot.Location : RobotLocation.Unplaced, board, robot?.Anchor);
                 ActiveInteraction = session;
-                if (robot != null)
-                {
-                    robot.TrySetDragging(true);
-                    if (board != null) board.Release(definition.Id);
-                }
                 if (notify) Notify(side);
                 return ShopOperationResult.Success;
             }
             finally { FinishMutation(); }
+        }
+
+        public ShopOperationResult TryLiftDrag(long interactionId) => LiftDrag(interactionId, true);
+
+        private ShopOperationResult LiftDrag(long interactionId, bool notify)
+        {
+            var session = ActiveInteraction;
+            if (IsEnded || _endRequested) return ShopOperationResult.BattleEnded;
+            if (_committing) return ShopOperationResult.Busy;
+            if (!IsCurrentInteraction(interactionId)) return ShopOperationResult.InvalidSource;
+            if (session.IsLifted) return ShopOperationResult.Busy;
+            RobotEntity robot;
+            ShopSlot slot;
+            Robot config;
+            int level;
+            PlaceableDefinition definition;
+            var result = ResolveDragSource(session.Side, session.Source, out robot, out slot, out config, out level, out definition, true);
+            if (result != ShopOperationResult.Success) return result;
+            if (session.OriginalBoard != null && !HasCompleteFootprint(robot)) return ShopOperationResult.InvalidPlacement;
+            _committing = true;
+            try
+            {
+                session.IsLifted = true;
+                if (robot != null) robot.TrySetDragging(true);
+                session.OriginalBoard?.Release(definition.Id);
+                if (notify) Notify(session.Side);
+                return ShopOperationResult.Success;
+            }
+            finally { FinishMutation(); }
+        }
+
+        private ShopOperationResult BeginDrag(BattleSide side, RobotDragSource source,
+            out RobotDragSession session, bool notify, bool allowUnaffordableOffer = false)
+        {
+            var result = ReserveDrag(side, source, out session, false);
+            if (result != ShopOperationResult.Success) return result;
+            result = LiftDrag(session.InteractionId, notify);
+            if (result != ShopOperationResult.Success) CancelInteraction(session.InteractionId);
+            return result;
         }
 
         public void CancelInteraction(long interactionId)
@@ -120,7 +153,7 @@ namespace GameLogic
             if (sourceSlot.Offer.RobotId != targetSlot.Offer.RobotId ||
                 sourceSlot.Offer.Level != targetSlot.Offer.Level) return ShopOperationResult.IncompatibleMerge;
             if (sourceSlot.Offer.Level < 1) return ShopOperationResult.InvalidConfiguration;
-            if (sourceSlot.Offer.Level >= Rules.MaxRobotLevel) return ShopOperationResult.MaxLevelReached;
+            if (sourceSlot.Offer.Level >= Rules.MaxRobotLevel || sourceSlot.Offer.Level >= GetRobotLevelCap(side, config.Id)) return ShopOperationResult.MaxLevelReached;
             return ShopOperationResult.Success;
         }
 
@@ -150,7 +183,7 @@ namespace GameLogic
             {
                 _offerDefinitions.Remove(sourceSlot.Offer.OfferId);
                 _offerDefinitions.Remove(targetSlot.Offer.OfferId);
-                sourceSlot.Offer = null;
+                GetState(session.Side).RemoveSlot(sourceSlot);
                 targetSlot.Offer = merged;
                 _nextOfferId++;
                 CompleteInteraction();
@@ -173,8 +206,13 @@ namespace GameLogic
             result = FindOwned(side, targetInstanceId, out target);
             if (result != ShopOperationResult.Success) return result;
             if (sourceRobot == target) return ShopOperationResult.IncompatibleMerge;
-            if (target.Location != RobotLocation.Board || target.IsDragging) return ShopOperationResult.InvalidLocation;
-            if (!HasCompleteFootprint(target)) return ShopOperationResult.InvalidPlacement;
+            if (target.IsDragging) return ShopOperationResult.InvalidLocation;
+            if (target.Location == RobotLocation.Board)
+            {
+                if (!HasCompleteFootprint(target)) return ShopOperationResult.InvalidPlacement;
+            }
+            else if (target.Location != RobotLocation.PurchasedShopSlot || sourceRobot == null)
+                return ShopOperationResult.InvalidLocation;
             if (config.Id != target.ConfigId || level != target.Level) return ShopOperationResult.IncompatibleMerge;
             if (level >= 5 || level >= Rules.MaxRobotLevel || level >= target.MaxLevel || level >= GetRobotLevelCap(side, config.Id))
                 return ShopOperationResult.MaxLevelReached;
@@ -211,7 +249,7 @@ namespace GameLogic
                     Registry.Remove(sourceRobot.InstanceId, EntityRemovalReason.Consumed, out removal);
                     _owned.Remove(sourceRobot.InstanceId);
                 }
-                else ConsumeOffer(session.Side, slot);
+                else { ConsumeOffer(session.Side, slot); GetState(session.Side).RemoveSlot(slot); }
                 CompleteInteraction();
                 var snapshot = new RobotMergeSnapshot(BattleId, session.InteractionId, session.Side, session.Source,
                     targetInstanceId, previousLevel, target.Level);
@@ -258,7 +296,7 @@ namespace GameLogic
                 // 无await/通知，Evaluate后占格不会被其他Context操作改变。
                 board.TryPlace(anchor, robot.Definition);
                 if (owned != null) DetachSource(owned);
-                else ConsumeOffer(session.Side, slot);
+                else { ConsumeOffer(session.Side, slot); GetState(session.Side).RemoveSlot(slot); }
                 _boards[robot.InstanceId] = board;
                 _boardSides[board] = session.Side;
                 robot.TrySetLocation(RobotLocation.Board, anchor);
@@ -311,12 +349,16 @@ namespace GameLogic
                         if (result != ShopOperationResult.Success) return result;
                         ConsumeOffer(session.Side, sourceSlot);
                     }
-                    else DetachSource(robot);
+                    else
+                    {
+                        DetachSource(robot, stored != null);
+                    }
                     if (stored != null)
                     {
                         sourceSlot.InstanceId = stored.InstanceId;
                         stored.TrySetLocation(RobotLocation.PurchasedShopSlot, null);
                     }
+                    if (stored == null && sourceSlot != null) state.RemoveSlot(sourceSlot);
                     state.StorageInstanceId = robot.InstanceId;
                     robot.TrySetLocation(RobotLocation.Storage, null);
                 }
@@ -356,6 +398,7 @@ namespace GameLogic
             if (_committing) return ShopOperationResult.Busy;
             if (session == null || session.InteractionId != interactionId) return ShopOperationResult.InvalidSource;
             if (session.BattleId != BattleId) return ShopOperationResult.WrongBattle;
+            if (!session.IsLifted) return ShopOperationResult.InvalidSource;
             return ShopOperationResult.Success;
         }
 
@@ -380,7 +423,7 @@ namespace GameLogic
             }
         }
 
-        private bool IsLiftedBoardSource(RobotEntity robot) => ActiveInteraction != null &&
+        private bool IsLiftedBoardSource(RobotEntity robot) => ActiveInteraction != null && ActiveInteraction.IsLifted &&
             ActiveInteraction.Source.Kind == RobotDragSourceKind.OwnedRobot &&
             ActiveInteraction.Source.InstanceId == robot.InstanceId &&
             ActiveInteraction.OriginalLocation == RobotLocation.Board;
@@ -388,7 +431,7 @@ namespace GameLogic
         private bool RestoreInteraction()
         {
             var session = ActiveInteraction;
-            if (session == null || session.OriginalBoard == null) return true;
+            if (session == null || !session.IsLifted || session.OriginalBoard == null) return true;
             RobotEntity robot;
             if (!_owned.TryGetValue(session.Source.InstanceId, out robot) || robot.IsRemoved) return true;
             // 全局交互锁保证Context内没有其他操作占用原位。外部写入冲突时保持会话，可重试取消。
@@ -416,7 +459,7 @@ namespace GameLogic
                 if (robot.IsDragging && !IsActiveSource(side, source)) return ShopOperationResult.InvalidLocation;
                 if (IsActiveSource(side, source))
                 {
-                    if (!robot.IsDragging || robot.Location != ActiveInteraction.OriginalLocation ||
+                    if (robot.IsDragging != ActiveInteraction.IsLifted || robot.Location != ActiveInteraction.OriginalLocation ||
                         !Nullable.Equals(robot.Anchor, ActiveInteraction.OriginalAnchor)) return ShopOperationResult.InvalidLocation;
                     BoardModel original;
                     if (ActiveInteraction.OriginalBoard != null &&
@@ -433,8 +476,8 @@ namespace GameLogic
             }
             if (source.Kind != RobotDragSourceKind.ShopOffer) return ShopOperationResult.InvalidArgument;
             var state = GetState(side);
-            if (source.SlotId < 0 || source.SlotId >= state.Slots.Count) return ShopOperationResult.InvalidSlot;
-            slot = state.Slots[source.SlotId];
+            slot = state.FindSlot(source.SlotId);
+            if (slot == null) return state.HasIssuedSlot(source.SlotId) ? ShopOperationResult.StaleOffer : ShopOperationResult.InvalidSlot;
             if (slot.IsPurchased) return ShopOperationResult.AlreadyPurchased;
             var offer = slot.Offer;
             if (offer == null || offer.OfferId != source.OfferId) return ShopOperationResult.StaleOffer;
