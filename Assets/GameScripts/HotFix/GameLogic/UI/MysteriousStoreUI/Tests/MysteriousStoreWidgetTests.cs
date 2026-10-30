@@ -306,15 +306,60 @@ namespace GameLogic.Tests
             Assert.That(_loader.Calls, Is.Zero);
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void SettlementReturnButtonOpensStoreForBothResults(bool victory)
+        {
+            var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/CheckOutUI.prefab"));
+            SceneManager.MoveGameObjectToScene(root, _scene);
+            var checkout = new CheckOutUI();
+            typeof(UIWindow).GetField("_panel", Private).SetValue(checkout, root);
+            try
+            {
+                foreach (var method in new[] { "ScriptGenerator", "OnCreate", "OnRefresh" })
+                    typeof(CheckOutUI).GetMethod(method, Private).Invoke(checkout, null);
+                checkout.Render(victory);
+                var tables = new GameConfig.Tables(name => new Luban.ByteBuf(File.ReadAllBytes(
+                    Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+                var saved = 0;
+                var reward = new BattleSettlementReward(tables, MainMenuUI.State,
+                    victory ? BattleSettlementResult.Victory : BattleSettlementResult.Defeat,
+                    () => { saved++; return UniTask.CompletedTask; });
+                checkout.BindReward(reward, () => _menu.ShowMysteriousStorePreviewAsync(victory ? 109 : 108));
+                var returnButton = root.transform.Find("m_rect_Content/m_btn_ReturnMain").GetComponent<Button>();
+                Assert.That(returnButton.interactable, Is.True);
+                returnButton.onClick.Invoke();
+                Assert.That(reward.IsSaved, Is.True);
+                Assert.That(saved, Is.EqualTo(1));
+                var widget = (MysteriousStoreWidget)typeof(MainMenuUI).GetField("_mysteriousStore", Private).GetValue(_menu);
+                Assert.That(widget, Is.Not.Null, "正常胜负结算返回都应创建商店。");
+                Assert.That(widget.Visible, Is.True);
+                Assert.That(widget.Session.PlayerState, Is.SameAs(MainMenuUI.State));
+                Assert.That(MainMenuUI.State.Coins, Is.EqualTo(777 + reward.BaseAmount));
+            }
+            finally { typeof(CheckOutUI).GetMethod("OnDestroy", Private).Invoke(checkout, null); }
+        }
+
         [Test]
         public void LoadFailureRestoresMenuAndDoesNotRetrySameBattle()
         {
+            MainMenuUI.State.TrySpendEnergy(5);
+            Invoke("OnRefresh");
+            var countdown = _root.GetComponentsInChildren<Text>(true).First(t => t.name == "EnergyCountdown");
+            var previousCountdown = countdown.text;
             _loader.Fail = true;
             _menu.ShowMysteriousStorePreviewAsync(103).GetAwaiter().GetResult();
             _menu.ShowMysteriousStorePreviewAsync(103).GetAwaiter().GetResult();
             Assert.That(_loader.Calls, Is.EqualTo(1));
             Assert.That((bool)typeof(MainMenuUI).GetField("_openingMysteriousStore", Private).GetValue(_menu), Is.False);
             Assert.That((string)typeof(MainMenuUI).GetField("_statusMessage", Private).GetValue(_menu), Is.EqualTo("神秘商店加载失败"));
+            Assert.That(countdown.text, Is.EqualTo(previousCountdown), "商店错误不能覆盖体力倒计时。");
+            var status = _root.transform.Find("m_text_Status").GetComponent<Text>();
+            Assert.That(status.gameObject.activeSelf, Is.True);
+            Assert.That(status.text, Is.EqualTo("神秘商店加载失败"));
+            typeof(MainMenuUI).GetField("_statusUntil", Private).SetValue(_menu, -1f);
+            Invoke("OnUpdate");
+            Assert.That(status.gameObject.activeSelf, Is.False);
             Assert.That(GameApp.PlayerState.Coins, Is.EqualTo(777));
             Assert.That(_root.GetComponentsInChildren<Button>().First(b => b.name == "StartBattleButton").interactable, Is.True);
         }
