@@ -46,7 +46,8 @@ namespace GameLogic.Tests
                 {
                     Assert.That(AssetDatabase.GetAssetPath(text.font), Does.StartWith("Assets/AssetRaw/Fonts/MiSans-UI-"),
                         "窗口创建时应保留预制体字体，不能回退到系统字体：" + text.name);
-                    Assert.AreEqual(FontStyle.Normal, text.fontStyle, "字重应使用独立字体，不能重复合成粗体。");
+                    Assert.AreEqual(text.transform.parent.name == "Notice" ? FontStyle.Bold : FontStyle.Normal,
+                        text.fontStyle, "只有战斗提示使用指定的白色粗体，其余文本保留现有字重。");
                 }
                 typeof(UIBase).GetField("_userDatas", PRIVATE).SetValue(window,
                     new object[] { null, null, new BattleProgressSnapshot(17, 4, 125d) });

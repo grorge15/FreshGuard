@@ -9,7 +9,6 @@ namespace GameLogic
     {
         private Text _coins;
         private Text _refreshPrice;
-        private Text _message;
         private Button _refreshButton;
         private RectTransform _offers;
         private readonly List<ShopRobotItemWidget> _items = new List<ShopRobotItemWidget>();
@@ -18,7 +17,7 @@ namespace GameLogic
         private BerserkBarWidget _berserkBar;
         private BattleShopSceneController _host;
         private float _flashUntil;
-        private float _messageUntil;
+        private bool _refreshHintShown;
         private RobotDragSource? _offerMergeSource;
         private int _hoveredOfferSlot = -1;
         public BattleShopContext Context { get; private set; }
@@ -47,7 +46,7 @@ namespace GameLogic
         {
             _coins = m_text_EnergyCoins;
             _refreshPrice = m_text_Price;
-            _message = m_text_Message;
+            m_text_Message.gameObject.SetActive(false);
             _offers = m_tf_Offers as RectTransform;
             _refreshButton = m_btn_Refresh;
             Drag = gameObject.GetComponent<RobotDragController>();
@@ -65,6 +64,7 @@ namespace GameLogic
             {
                 Drag.Cancel();
                 Context = context;
+                _refreshHintShown = false;
                 _host = host;
                 Drag.Initialize(this, host);
             }
@@ -180,24 +180,24 @@ namespace GameLogic
         public void HideGhost() { if (_ghost != null && _ghost.gameObject != null) _ghost.Visible = false; }
         public void ShowFailure(ShopOperationResult result)
         {
-            if (_message == null) return;
+            if (Context == null || result == ShopOperationResult.Success || result == ShopOperationResult.Busy) return;
+            string message;
             switch (result)
             {
                 case ShopOperationResult.InsufficientCoins:
-                    _message.text = "能源币不足";
+                    message = "能源币不足";
                     _flashUntil = Time.unscaledTime + 0.5f;
                     break;
-                case ShopOperationResult.ResourceFailed: _message.text = "资源加载失败，请再次拖拽"; break;
-                case ShopOperationResult.BattleEnded: _message.text = "对局已结束"; break;
-                case ShopOperationResult.Busy: return;
-                case ShopOperationResult.IncompatibleMerge: _message.text = "需要相同机器人、相同等级"; break;
-                case ShopOperationResult.MaxLevelReached: _message.text = "Lv5 无法继续合成"; break;
-                case ShopOperationResult.EntityNotFound: _message.text = "目标已失效，已返回来源位置"; break;
-                case ShopOperationResult.ShopFull: _message.text = "商店已满，无法放入"; break;
-                case ShopOperationResult.StorageFull: _message.text = "暂存位已满，已返回原位置"; break;
-                default: _message.text = "无法放置，已返回来源位置"; break;
+                case ShopOperationResult.ResourceFailed: message = "资源加载失败，请再次拖拽"; break;
+                case ShopOperationResult.BattleEnded: message = "对局已结束"; break;
+                case ShopOperationResult.IncompatibleMerge: message = "需要相同机器人、相同等级"; break;
+                case ShopOperationResult.MaxLevelReached: message = "Lv5 无法继续合成"; break;
+                case ShopOperationResult.EntityNotFound: message = "目标已失效，已返回来源位置"; break;
+                case ShopOperationResult.ShopFull: message = "商店已满，无法放入"; break;
+                case ShopOperationResult.StorageFull: message = "暂存位已满，已返回原位置"; break;
+                default: message = "无法放置，已返回来源位置"; break;
             }
-            _messageUntil = Time.unscaledTime + 1.8f;
+            BattleNoticeEvents.Show(Context.BattleId, message);
         }
         protected override void OnUpdate()
         {
@@ -205,7 +205,11 @@ namespace GameLogic
             Drag.Advance(Time.unscaledTime);
             var flashing = Time.unscaledTime < _flashUntil && Mathf.Repeat(Time.unscaledTime * 10f, 1f) < 0.5f;
             _coins.color = flashing ? new Color(1f, 0.25f, 0.15f) : Color.white;
-            if (Time.unscaledTime > _messageUntil) _message.text = "刷新会清除店内所有机器人，已购机器人不退款。";
+            if (!_refreshHintShown && _host != null && _host.CanInteractWithRobots && Context != null)
+            {
+                _refreshHintShown = true;
+                BattleNoticeEvents.Show(Context.BattleId, "刷新会清除店内所有机器人，已购机器人不退款。");
+            }
         }
         protected override void OnSetVisible(bool visible) { if (!visible) Drag?.Cancel(); }
         protected override void OnDestroy()
