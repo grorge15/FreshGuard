@@ -1,8 +1,8 @@
 namespace GameLogic
 {
-    /// <summary>全屏战斗窗口；子区域的 RectTransform 完全由预制体控制。</summary>
+    /// <summary>全屏战斗窗口；Prefab 提供基准布局，屏幕适配只调整区域根节点。</summary>
     [Window(UILayer.UI, "MainCombatUI", fullScreen: true)]
-    public sealed class MainCombatUI : UIWindow
+    public sealed partial class MainCombatUI : UIWindow
     {
         public BattleInfoUI Info { get; private set; }
         public BattleShopUI Shop { get; private set; }
@@ -64,6 +64,7 @@ namespace GameLogic
 
         protected override void OnDestroy()
         {
+            _screenLayout?.Unbind();
             // 子 Widget 的监听、按钮和拖拽由框架统一销毁。
             Info = null;
             Shop = null;

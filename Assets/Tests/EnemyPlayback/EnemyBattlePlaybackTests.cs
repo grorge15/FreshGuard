@@ -89,42 +89,53 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
-        public IEnumerator EditedCombatRegionsKeepLayoutAndShopStillDragsAndCancelsOnHide()
+        public IEnumerator AdaptedCombatRegionsKeepLayoutAndShopStillDragsAndCancelsOnHide()
         {
             var host = Object.FindObjectOfType<BattleShopSceneController>();
             if (host != null && ConfigSystem.Instance.Tables != null)
             {
                 host.EndBattle();
-                host.SendMessage("Start");
             }
             else
+            {
                 EditorSceneManager.LoadSceneInPlayMode("Assets/Scenes/main.unity", new LoadSceneParameters(LoadSceneMode.Single));
+                var menuDeadline = Time.realtimeSinceStartup + 60f;
+                while ((UIModule.UIRoot == null || GameModule.UI.GetUI<MainMenuUI>() == null) && Time.realtimeSinceStartup < menuDeadline)
+                    yield return null;
+                Assert.IsNotNull(GameModule.UI.GetUI<MainMenuUI>());
+                yield return GameModule.Scene.LoadSceneAsync("Main").ToCoroutine();
+                host = Object.FindObjectOfType<BattleShopSceneController>();
+            }
+            GameModule.UI.CloseUI<MainMenuUI>();
+            yield return host.InitializeAsync().ToCoroutine();
             var deadline = Time.realtimeSinceStartup + 60f;
             while (Time.realtimeSinceStartup < deadline)
             {
                 host = Object.FindObjectOfType<BattleShopSceneController>();
-                if (host != null && host.IsReady) break;
+                if (host != null && host.TryOpenRobotInteraction(host.Context.BattleId)) break;
                 yield return null;
             }
             Assert.IsNotNull(host);
             Assert.IsTrue(host.IsReady);
             try
             {
-                host.SetFrozen(true);
                 var window = host.CombatWindow;
                 var shop = window.Shop;
                 var shopRect = shop.rectTransform;
                 var infoRect = window.Info.rectTransform;
-                shopRect.anchoredPosition = new Vector2(18, 120);
-                shopRect.sizeDelta = new Vector2(980, 240);
-                shopRect.localScale = Vector3.one * 0.8f;
-                infoRect.anchoredPosition = new Vector2(20, 280);
-                infoRect.sizeDelta = new Vector2(900, 135);
-                infoRect.localScale = Vector3.one * 0.9f;
+                Assert.IsTrue(host.GetComponent<BattleScreenLayoutController>().RefreshLayout());
+                var shopPosition = shopRect.anchoredPosition;
+                var shopSize = shopRect.sizeDelta;
+                var shopScale = shopRect.localScale;
+                var infoPosition = infoRect.anchoredPosition;
+                var infoSize = infoRect.sizeDelta;
+                var infoScale = infoRect.localScale;
                 Canvas.ForceUpdateCanvases();
                 var canvas = window.Canvas.rootCanvas;
                 var camera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-                var slot = shop.transform.Find("m_rect_ShopPanel/m_tf_Offers/Slot_0");
+                var items = (IList)typeof(BattleShopUI).GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(shop);
+                Assert.Greater(items.Count, 0);
+                var slot = ((ShopRobotItemWidget)items[0]).transform;
                 var pointer = RectTransformUtility.WorldToScreenPoint(camera, slot.position);
                 var eventData = new PointerEventData(EventSystem.current)
                     { position = pointer, pointerId = -1, button = PointerEventData.InputButton.Left };
@@ -144,12 +155,12 @@ namespace GameLogic.Tests
                 Assert.That(Vector2.Distance(pointer, RectTransformUtility.WorldToScreenPoint(camera, ghost.position)), Is.LessThan(1f));
                 host.SendMessage("LateUpdate");
                 yield return null;
-                Assert.AreEqual(new Vector2(18, 120), shopRect.anchoredPosition);
-                Assert.AreEqual(new Vector2(980, 240), shopRect.sizeDelta);
-                Assert.AreEqual(Vector3.one * 0.8f, shopRect.localScale);
-                Assert.AreEqual(new Vector2(20, 280), infoRect.anchoredPosition);
-                Assert.AreEqual(new Vector2(900, 135), infoRect.sizeDelta);
-                Assert.AreEqual(Vector3.one * 0.9f, infoRect.localScale);
+                Assert.AreEqual(shopPosition, shopRect.anchoredPosition);
+                Assert.AreEqual(shopSize, shopRect.sizeDelta);
+                Assert.AreEqual(shopScale, shopRect.localScale);
+                Assert.AreEqual(infoPosition, infoRect.anchoredPosition);
+                Assert.AreEqual(infoSize, infoRect.sizeDelta);
+                Assert.AreEqual(infoScale, infoRect.localScale);
                 window.Visible = false;
                 Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
                 Assert.IsFalse(host.Context.IsBusy);
