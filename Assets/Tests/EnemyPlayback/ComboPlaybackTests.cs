@@ -43,7 +43,6 @@ namespace GameLogic.Tests
         [UnityTest]
         public IEnumerator TinyBallCannotEnterSeamsOfAllEightRobots()
         {
-            typeof(PhysicalCollisionBall).GetField("radius", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(_ball, 0.003f);
             _ball.GetComponent<CircleCollider2D>().radius = 0.003f; // 直径小于原来的 0.021 格间隙。
             var contacts = 0;
             _ball.RobotContactDetected += (ball, id) => contacts++;

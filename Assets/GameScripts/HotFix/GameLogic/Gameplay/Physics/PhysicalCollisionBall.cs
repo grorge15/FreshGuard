@@ -13,7 +13,6 @@ namespace GameLogic
         [SerializeField] private float initialAngleMin = 20f;
         [SerializeField] private float initialAngleMax = 70f;
         [SerializeField, Min(0.01f)] private float speed = 5f;
-        [SerializeField, Min(0.001f)] private float radius = 0.2f;
         [SerializeField] private bool launchOnEnable;
         [Header("状态外观")]
         [Tooltip("普通状态使用的 Sprite；未配置时使用 SpriteRenderer 原有图片。")]
@@ -76,7 +75,16 @@ namespace GameLogic
         private Vector3? _mapOriginalScale;
         private float _mapScale = 1f;
         public float MapScale => _mapScale;
-        public float WorldRadius => radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
+        public float WorldRadius
+        {
+            get
+            {
+                // 编辑器校验可能早于Awake；尺寸始终以Collider配置为准。
+                var collider = _collider != null ? _collider : GetComponent<CircleCollider2D>();
+                var scale = collider.transform.lossyScale;
+                return collider.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
+            }
+        }
 
         public int ComboCount { get; private set; }
         public Func<int, float> GlobalValueProvider { get; set; }
@@ -162,7 +170,6 @@ namespace GameLogic
             _body.angularDrag = 0f;
             _body.freezeRotation = true;
             _body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-            GetComponent<CircleCollider2D>().radius = radius;
             if (globalConfig != null)
             {
                 _globalTable = new GameConfig.globalcfg.TbGlobal(new Luban.ByteBuf(globalConfig.bytes));
@@ -667,7 +674,9 @@ namespace GameLogic
             try
             {
                 ValidateConfig();
-                if (float.IsNaN(Speed) || float.IsInfinity(Speed) || Speed <= 0f || radius <= 0f)
+                float worldRadius = WorldRadius;
+                if (float.IsNaN(Speed) || float.IsInfinity(Speed) || Speed <= 0f ||
+                    float.IsNaN(worldRadius) || float.IsInfinity(worldRadius) || worldRadius <= 0f)
                     throw new InvalidOperationException("速度与半径必须为正数。");
                 if (float.IsNaN(initialAngleMin) || float.IsNaN(initialAngleMax) ||
                     float.IsInfinity(initialAngleMin) || float.IsInfinity(initialAngleMax))

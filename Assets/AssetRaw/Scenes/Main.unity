@@ -134,12 +134,20 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.15
+      value: 0.095
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 5.43
+      value: 5.268
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.z
@@ -2196,11 +2204,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0
+      value: -0.066
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: -0.139
       objectReference: {fileID: 0}
     - target: {fileID: 818768028028681628, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
       propertyPath: m_LocalPosition.z
@@ -2238,6 +2246,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PhysicalCollisionBall
       objectReference: {fileID: 0}
+    - target: {fileID: 6437572698029786110, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 72c25458f00e03c4a877732156db6fb7, type: 3}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 4756ff4407eafc84894e9db9d64edec0, type: 3}
 --- !u!4 &998851225 stripped
@@ -4573,6 +4585,10 @@ PrefabInstance:
     - target: {fileID: 8467228944091284964, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: m_Name
       value: PlacementBoard
+      objectReference: {fileID: 0}
+    - target: {fileID: 8467228944091284964, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8469060636508924800, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: m_Sprite

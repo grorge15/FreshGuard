@@ -611,13 +611,18 @@ namespace GameLogic.Tests
             private readonly Dictionary<string, object> _settings = new Dictionary<string, object>();
             private readonly Func<int, float> _provider;
             private readonly float _speed;
+            private readonly float _colliderRadius;
+            private readonly Vector2 _colliderOffset;
 
             public BallSettings(PhysicalCollisionBall ball)
             {
                 _ball = ball;
                 _speed = ball.Speed;
+                var collider = ball.GetComponent<CircleCollider2D>();
+                _colliderRadius = collider.radius;
+                _colliderOffset = collider.offset;
                 _provider = ball.GlobalValueProvider;
-                foreach (var field in new[] { "speed", "radius", "initialAngleMin", "initialAngleMax", "spawnPosition", "launchOnEnable", "globalConfig" })
+                foreach (var field in new[] { "speed", "initialAngleMin", "initialAngleMax", "spawnPosition", "launchOnEnable", "globalConfig" })
                     _settings.Add(field, Field(ball, field).GetValue(ball));
             }
 
@@ -625,6 +630,9 @@ namespace GameLogic.Tests
             {
                 Assert.That(_ball.Speed, Is.EqualTo(_speed));
                 Assert.That(_ball.GlobalValueProvider, Is.SameAs(_provider));
+                var collider = _ball.GetComponent<CircleCollider2D>();
+                Assert.That(collider.radius, Is.EqualTo(_colliderRadius));
+                Assert.That(collider.offset, Is.EqualTo(_colliderOffset));
                 foreach (var entry in _settings)
                     Assert.That(Field(_ball, entry.Key).GetValue(_ball), Is.EqualTo(entry.Value), entry.Key);
             }
