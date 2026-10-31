@@ -40,11 +40,12 @@ namespace GameLogic
                 throw new InvalidOperationException("重叠恢复的棋盘已失效。");
             bool found = false;
             float best = float.PositiveInfinity;
-            // 行、列顺序也是等距离时的稳定优先级；严格只遍历原格周围八格。
+            // 只检查原格及其八邻格；原格可能本来就空闲，只有球边缘与邻格机器人重叠。
+            // 原格同样经过占用和物理可达检查，不改变用于卡顿边线定位的OriginCell。
+            // 行、列顺序也是等距离时的稳定优先级。
             for (int row = OriginCell.Row - 1; row <= OriginCell.Row + 1; row++)
                 for (int column = OriginCell.Column - 1; column <= OriginCell.Column + 1; column++)
                 {
-                    if (column == OriginCell.Column && row == OriginCell.Row) continue;
                     var cell = new BoardCoordinate(column, row);
                     if (!Board.Model.IsInside(cell) || !Board.Model.CanEnergyBallPass(cell) || Board.Model.IsOccupied(cell)) continue;
                     Vector2 position = Board.GetCellWorldPosition(cell);

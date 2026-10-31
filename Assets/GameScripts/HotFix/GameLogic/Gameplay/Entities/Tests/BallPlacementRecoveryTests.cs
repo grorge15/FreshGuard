@@ -381,12 +381,90 @@ namespace GameLogic.Tests
             _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 45f);
         }
 
+        [TestCase(0.9f)]
+        [TestCase(1.2f)]
+        public void AuthoredBallEscapesIntoFreeCellWithSmallPositivePhysicalGap(float scale)
+        {
+            var source = BeginTightGlassLayout(scale, 0.24f, true);
+            var target = (Vector2)_board.GetCellWorldPosition(new BoardCoordinate(3, 2));
+            // 球来自真实Prefab；用Unity查询确认目标可容纳球，包括物理形状自身的边缘。
+            Assert.IsFalse(_board.Model.IsOccupied(new BoardCoordinate(3, 2)));
+            var overlaps = new List<Collider2D>();
+            _scene.GetPhysicsScene2D().OverlapCircle(target, _ball.WorldRadius,
+                new ContactFilter2D { useTriggers = false }, overlaps);
+            Assert.IsEmpty(overlaps, "测试前提：空格中心放得下整个球，不是仅凭图片估计空隙。");
+            var start = _body.position;
+            _ball.ResolvePlacementOverlap(source, _board);
+            Assert.AreEqual(PlacementRecoveryState.Escaping, _ball.RecoveryState,
+                "接触检测的容差不能把实际容得下球的唯一空格判成卡顿。");
+            Assert.That(Vector2.Distance(start, _body.position), Is.LessThan(0.0001f));
+            for (int i = 0; i < 100 && _ball.RecoveryState != PlacementRecoveryState.None; i++) Tick();
+            Assert.AreEqual(PlacementRecoveryState.None, _ball.RecoveryState);
+            Assert.That(Vector2.Distance((Vector2)_ball.GetComponent<Collider2D>().bounds.center, target),
+                Is.LessThan(0.04f * scale));
+            Assert.AreEqual(1, _ball.ComboCount);
+            Assert.AreEqual(1, _attacks);
+            Assert.IsFalse(Physics2D.GetIgnoreCollision(_ball.GetComponent<Collider2D>(), source.GetPhysicalCollider()));
+        }
+
+        [TestCase(0.9f)]
+        [TestCase(1.2f)]
+        public void TrappedBallUsesSmallRealTravelBetweenGlassEndpoints(float scale)
+        {
+            var source = BeginTightGlassLayout(scale, 0.26f, false);
+            _ball.ResolvePlacementOverlap(source, _board);
+            Assert.AreEqual(PlacementRecoveryState.Trapped, _ball.RecoveryState);
+            var start = (Vector2)_ball.GetComponent<Collider2D>().bounds.center;
+            float minimumX = start.x, maximumX = start.x, minimumY = start.y, maximumY = start.y;
+            for (int i = 0; i < 80; i++)
+            {
+                Tick();
+                var center = (Vector2)_ball.GetComponent<Collider2D>().bounds.center;
+                minimumX = Mathf.Min(minimumX, center.x); maximumX = Mathf.Max(maximumX, center.x);
+                minimumY = Mathf.Min(minimumY, center.y); maximumY = Mathf.Max(maximumY, center.y);
+            }
+            // 窄通道仍有实际行程；不能再每侧扣0.02，导致只有抖动且始终不计端点。
+            Assert.That(Mathf.Max(maximumX - minimumX, maximumY - minimumY), Is.GreaterThan(0.012f * scale));
+            Assert.Greater(_ball.ComboCount, 1, "非零的真实端点往返必须能够累计Combo。");
+            Assert.AreEqual(1, _attacks);
+            Assert.AreEqual(PlacementRecoveryState.Trapped, _ball.RecoveryState);
+        }
+
+        private RobotView BeginTightGlassLayout(float scale, float cellSize, bool leaveRightFree)
+        {
+            _ball.Stop();
+            Set(_board, "_cellSize", cellSize);
+            _board.transform.localScale = Vector3.one * scale;
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab");
+            var collider = _ball.GetComponent<CircleCollider2D>();
+            collider.radius = prefab.GetComponent<CircleCollider2D>().radius;
+            collider.offset = prefab.GetComponent<CircleCollider2D>().offset;
+            _ball.transform.localScale = prefab.transform.localScale;
+            _ball.SetMapScale(scale);
+            Set(_ball, "speed", 0.4f);
+            _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 45f);
+            var source = Robot(_origin);
+            float half = cellSize * 0.44f;
+            source.GetPhysicalCollider().SetPath(0, new[] { new Vector2(-half,-half), new Vector2(half,-half),
+                new Vector2(half,half), new Vector2(-half,half) });
+            for (int row = 1; row <= 3; row++) for (int column = 1; column <= 3; column++)
+            {
+                var cell = new BoardCoordinate(column, row);
+                if (cell.Equals(_origin) || leaveRightFree && column == 3 && row == 2) continue;
+                AddGridObstacle(cell);
+                Assert.IsTrue(_board.Model.TryPlace(cell, new PlaceableDefinition("glass" + column + ":" + row, 1, 1)));
+            }
+            if (leaveRightFree) AddGridObstacle(new BoardCoordinate(4, 2));
+            Physics2D.SyncTransforms();
+            return source;
+        }
+
         private BoxCollider2D AddGridObstacle(BoardCoordinate cell)
         {
             var box = NewObject("GridGlass_" + cell.Column + "_" + cell.Row).AddComponent<BoxCollider2D>();
             box.transform.SetParent(_board.transform, false);
             box.transform.position = _board.GetCellWorldPosition(cell);
-            box.size = Vector2.one * 0.35f;
+            box.size = Vector2.one * _board.CellSize;
             Physics2D.SyncTransforms();
             return box;
         }
@@ -434,6 +512,71 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void NineNonEmptyCellsKeepBallMovingOnSelectedRealEdge(
+            [Values(0, 1, 2, 3)] int edge, [Values(0.9f, 1.2f)] float scale,
+            [Values(false, true)] bool glassNeighbors)
+        {
+            BeginNineNonEmptyCells(edge, scale, glassNeighbors);
+            var recovery = (BallPlacementRecovery)Get(_ball, "_placementRecovery");
+            var a = recovery.EndpointA;
+            var tangent = (recovery.EndpointB - a).normalized;
+            float minimum = float.PositiveInfinity, maximum = float.NegativeInfinity;
+            for (int i = 0; i < 80; i++)
+            {
+                Tick();
+                var center = (Vector2)_ball.GetComponent<CircleCollider2D>().bounds.center;
+                float along = Vector2.Dot(center - a, tangent);
+                float away = Mathf.Abs((center.x - a.x) * tangent.y - (center.y - a.y) * tangent.x);
+                Assert.AreEqual(PlacementRecoveryState.Trapped, _ball.RecoveryState);
+                Assert.That(away, Is.LessThan(0.002f), "物理解算不能把球挤离选定的真实格边。");
+                minimum = Mathf.Min(minimum, along); maximum = Mathf.Max(maximum, along);
+            }
+            Assert.That(maximum - minimum, Is.GreaterThan(0.03f), "必须有实际往返位移，不能只给刚体写入非零速度。");
+            Assert.Greater(_ball.ComboCount, 1, "到达往返尽头应累计Combo。");
+            Assert.AreEqual(1, _attacks, "往返不能重复攻击覆盖球的机器人。");
+        }
+
+        private void BeginNineNonEmptyCells(int edge, float scale, bool glassNeighbors)
+        {
+            _ball.Stop();
+            Set(_board, "_cellSize", 0.35f);
+            _board.transform.localScale = Vector3.one * scale;
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab");
+            var collider = _ball.GetComponent<CircleCollider2D>();
+            collider.radius = prefab.GetComponent<CircleCollider2D>().radius;
+            collider.offset = prefab.GetComponent<CircleCollider2D>().offset;
+            _ball.transform.localScale = prefab.transform.localScale;
+            Set(_ball, "speed", 3f);
+            _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 45f);
+            RobotView source = null;
+            for (int row = 1; row <= 3; row++) for (int column = 1; column <= 3; column++)
+            {
+                var cell = new BoardCoordinate(column, row);
+                if (glassNeighbors && !cell.Equals(_origin))
+                {
+                    AddGridObstacle(cell);
+                    Assert.IsTrue(_board.Model.TryPlace(cell, new PlaceableDefinition("glass" + column + ":" + row, 1, 1)));
+                    continue;
+                }
+                var robot = Robot(cell);
+                robot.GetPhysicalCollider().SetPath(0, new[] { new Vector2(-0.154f,-0.154f), new Vector2(0.154f,-0.154f),
+                    new Vector2(0.154f,0.154f), new Vector2(-0.154f,0.154f) });
+                if (cell.Equals(_origin)) source = robot;
+            }
+            // 控制随机选边，四条边都验证；仍从正式放置入口进入，不手动设置恢复状态。
+            for (int seed = 0; seed < 1024; seed++)
+            {
+                UnityEngine.Random.InitState(seed);
+                if (UnityEngine.Random.Range(0, 4) != edge) continue;
+                UnityEngine.Random.InitState(seed); break;
+            }
+            Physics2D.SyncTransforms();
+            _ball.ResolvePlacementOverlap(source, _board);
+            Assert.AreEqual(PlacementRecoveryState.Trapped, _ball.RecoveryState);
+            Assert.AreEqual(RigidbodyType2D.Kinematic, _body.bodyType);
+        }
+
+        [Test]
         public void TrappedRechecksVacancyAndEscapesWithoutAnotherPlacementCount()
         {
             var source = FillNeighbors();
@@ -464,6 +607,7 @@ namespace GameLogic.Tests
             else if (transition == "LaunchAt") _ball.LaunchAt(Vector2.zero, 30f);
             else _ball.BindBattle(2, BattleSide.Player, () => _running);
             Assert.AreEqual("None", State);
+            Assert.AreEqual(RigidbodyType2D.Dynamic, _body.bodyType);
             foreach (var collider in colliders)
                 Assert.IsFalse(Physics2D.GetIgnoreCollision(_ball.GetComponent<Collider2D>(), collider));
         }
@@ -477,9 +621,11 @@ namespace GameLogic.Tests
             for (var i = 0; i < 40; i++) Tick(false);
             Assert.AreEqual(start, _body.position); Assert.AreEqual(combo, _ball.ComboCount);
             Assert.AreEqual("Trapped", State);
+            Assert.AreEqual(RigidbodyType2D.Kinematic, _body.bodyType);
             _ball.SetFrozen(false); Tick();
             _ball.SetBerserk(true);
             Assert.AreEqual("None", State);
+            Assert.AreEqual(RigidbodyType2D.Dynamic, _body.bodyType);
         }
 
         [Test]
@@ -575,6 +721,82 @@ namespace GameLogic.Tests
             { _glassContext.Registry.AdvanceTime(Time.fixedDeltaTime); Tick(); }
             Assert.AreEqual(entity.MaxDurability - 2, entity.CurrentDurability);
             Assert.AreEqual(1, _attacks);
+        }
+
+        [Test]
+        public void TrappedRecoveryCanSelectOriginAfterItBecomesFree()
+        {
+            var recovery = new BallPlacementRecovery();
+            recovery.Begin(_board, _body.position);
+            for (int row = 1; row <= 3; row++) for (int column = 1; column <= 3; column++)
+                Assert.IsTrue(_board.Model.TryPlace(new BoardCoordinate(column, row),
+                    new PlaceableDefinition(column + ":" + row, 1, 1)));
+            recovery.EnterTrapped(3, true);
+            var a = recovery.EndpointA; var b = recovery.EndpointB;
+            Assert.IsFalse(recovery.TrySelectTarget((a + b) * 0.5f, p => true));
+            _board.Model.Release("2:2");
+            Assert.IsFalse(recovery.TrySelectTarget((a + b) * 0.5f, p => false), "原格空闲也必须通过物理可达检查。");
+            Assert.AreEqual(PlacementRecoveryState.Trapped, recovery.State);
+            Assert.IsTrue(recovery.TrySelectTarget((a + b) * 0.5f, p => true), "原始格已空闲，不能被永久排除。");
+            Assert.AreEqual(_origin, recovery.TargetCell);
+            Assert.AreEqual(_origin, recovery.OriginCell);
+            Assert.AreEqual(PlacementRecoveryState.Escaping, recovery.State);
+            Assert.AreEqual(a, recovery.EndpointA); Assert.AreEqual(b, recovery.EndpointB);
+        }
+
+        [TestCase(0.9f)]
+        [TestCase(1.2f)]
+        public void BallOverlappingAdjacentRobotEscapesIntoItsFreeOrigin(float scale)
+        {
+            var source = BeginFreeOriginOverlap(scale);
+            Assert.IsFalse(_board.Model.IsOccupied(_origin));
+            Assert.IsTrue(_ball.GetComponent<Collider2D>().Distance(source.GetPhysicalCollider()).isOverlapped);
+            var start = _body.position;
+            _ball.ResolvePlacementOverlap(source, _board);
+            Assert.AreEqual(PlacementRecoveryState.Escaping, _ball.RecoveryState,
+                "球心在空格，球边缘与相邻机器人重叠时，应朝原格内部脱离。");
+            Assert.That(Vector2.Distance(start, _body.position), Is.LessThan(0.0001f), "有空位不能先跳到卡顿边线。");
+            Assert.Greater(_ball.CurrentDirection.x, 0f);
+            for (int i = 0; i < 30 && _ball.RecoveryState != PlacementRecoveryState.None; i++) Tick();
+            Assert.AreEqual(PlacementRecoveryState.None, _ball.RecoveryState);
+            Assert.AreEqual(RigidbodyType2D.Dynamic, _body.bodyType);
+            Assert.IsFalse(_ball.GetComponent<Collider2D>().Distance(source.GetPhysicalCollider()).isOverlapped);
+            Assert.IsFalse(Physics2D.GetIgnoreCollision(_ball.GetComponent<Collider2D>(), source.GetPhysicalCollider()));
+            Assert.AreEqual(1, _ball.ComboCount); Assert.AreEqual(1, _attacks);
+        }
+
+        private RobotView BeginFreeOriginOverlap(float scale)
+        {
+            _ball.Stop(); Set(_board, "_cellSize", 0.35f);
+            _board.transform.localScale = Vector3.one * scale;
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab");
+            var collider = _ball.GetComponent<CircleCollider2D>();
+            collider.radius = prefab.GetComponent<CircleCollider2D>().radius;
+            collider.offset = prefab.GetComponent<CircleCollider2D>().offset;
+            _ball.transform.localScale = prefab.transform.localScale;
+            Set(_ball, "speed", 3f);
+            _ball.BindBattle(1, scale < 1f ? BattleSide.Opponent : BattleSide.Player, () => _running);
+            _ball.BindCombo(_registry, NewObject("FreeOriginPopupRoot").transform);
+            var source = Robot(new BoardCoordinate(0, 1));
+            _board.Model.Release(source.InstanceId.ToString());
+            Assert.IsTrue(_board.Model.TryPlace(new BoardCoordinate(0, 1), new PlaceableDefinition(source.InstanceId.ToString(),
+                new[] { new BoardCoordinate(0, 0), new BoardCoordinate(1, 0), new BoardCoordinate(2, 0), new BoardCoordinate(1, 1) })));
+            // 2026-10-31暂停现场RobotImpact的真实轮廓，球心位于右上方空格的左边缘附近。
+            source.GetPhysicalCollider().SetPath(0, new[] { new Vector2(-.154f,-.154f), new Vector2(.854f,-.154f),
+                new Vector2(.854f,.154f), new Vector2(.504f,.154f), new Vector2(.504f,.504f),
+                new Vector2(.196f,.504f), new Vector2(.196f,.154f), new Vector2(-.154f,.154f) });
+            for (int row = 1; row <= 3; row++) for (int column = 1; column <= 3; column++)
+            {
+                var cell = new BoardCoordinate(column, row);
+                if (cell.Equals(_origin) || _board.Model.IsOccupied(cell)) continue;
+                AddGridObstacle(cell);
+                Assert.IsTrue(_board.Model.TryPlace(cell, new PlaceableDefinition("glass" + column + ":" + row, 1, 1)));
+            }
+            // 略向空格内部偏移，避免恰好落在分格边界时浮点舍入改变所属格。
+            var center = (Vector2)_board.GetCellWorldPosition(_origin) + new Vector2(-.17f, .0497775f) * scale;
+            _ball.LaunchAt(center - collider.offset * (Vector2)_ball.transform.lossyScale, 90f);
+            Physics2D.SyncTransforms();
+            return source;
         }
 
         [Test]
@@ -684,6 +906,152 @@ namespace GameLogic.Tests
             _fixture?.TearDown();
             _fixture = null;
             yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator RealFixedLoopEscapesFreeOriginFromPlacementAndSavedTrappedState()
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var type = typeof(BallPlacementRecoveryTests);
+            var path = System.IO.Path.Combine(Application.dataPath, "../Temp/BallFreeOriginPlayerLoop.json");
+            System.IO.File.WriteAllText(path, "{\"passed\":false,\"status\":\"running\"}");
+            int samples = 0, scenarios = 0;
+            foreach (float scale in new[] { 0.9f, 1.2f })
+            foreach (bool savedTrapped in new[] { false, true })
+            {
+                _fixture.TearDown(); _fixture.SetUp();
+                var source = (RobotView)type.GetMethod("BeginFreeOriginOverlap", flags).Invoke(_fixture, new object[] { scale });
+                var ball = (PhysicalCollisionBall)type.GetField("_ball", flags).GetValue(_fixture);
+                var board = (PlacementBoardView)type.GetField("_board", flags).GetValue(_fixture);
+                var collider = ball.GetComponent<CircleCollider2D>();
+                var body = ball.GetComponent<Rigidbody2D>();
+                ball.ResolvePlacementOverlap(source, board);
+                Assert.AreEqual(PlacementRecoveryState.Escaping, ball.RecoveryState);
+                if (savedTrapped)
+                {
+                    // 重建暂停现场已进入Trapped的状态，验证下一个物理步就能重新选中原格。
+                    var recovery = (BallPlacementRecovery)typeof(PhysicalCollisionBall).GetField("_placementRecovery", flags).GetValue(ball);
+                    var midpoint = recovery.EnterTrapped(3, true);
+                    var center = midpoint + Vector2.up * (.0497775f * scale);
+                    typeof(PhysicalCollisionBall).GetMethod("SetBallCenter", flags).Invoke(ball, new object[] { center });
+                    typeof(PhysicalCollisionBall).GetMethod("BeginTrappedMotion", flags).Invoke(ball, new object[] { center });
+                    Assert.AreEqual(RigidbodyType2D.Kinematic, body.bodyType);
+                }
+                var start = (Vector2)collider.bounds.center;
+                Physics2D.simulationMode = SimulationMode2D.FixedUpdate;
+                var until = Time.time + 0.6f;
+                while (Time.time < until && ball.RecoveryState != PlacementRecoveryState.None)
+                {
+                    yield return null;
+                    Assert.That(body.velocity.magnitude, Is.EqualTo(ball.EffectiveSpeed).Within(0.001f));
+                    samples++;
+                }
+                Assert.AreEqual(PlacementRecoveryState.None, ball.RecoveryState);
+                Assert.AreEqual(RigidbodyType2D.Dynamic, body.bodyType);
+                Assert.That(collider.bounds.center.x - start.x, Is.GreaterThan(0.04f * scale));
+                Assert.IsFalse(collider.Distance(source.GetPhysicalCollider()).isOverlapped);
+                Assert.IsFalse(Physics2D.GetIgnoreCollision(collider, source.GetPhysicalCollider()));
+                Assert.AreEqual(1, ball.ComboCount);
+                Assert.AreEqual(1, (int)type.GetField("_attacks", flags).GetValue(_fixture));
+                scenarios++;
+            }
+            System.IO.File.WriteAllText(path, "{\"passed\":true,\"scenarios\":" + scenarios + ",\"samples\":" + samples + "}");
+        }
+
+        [UnityTest]
+        public IEnumerator RealFixedLoopNarrowGlassRecoveryKeepsMoving()
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var type = typeof(BallPlacementRecoveryTests);
+            var path = System.IO.Path.Combine(Application.dataPath, "../Temp/BallNarrowGlassPlayerLoop.json");
+            System.IO.File.WriteAllText(path, "{\"passed\":false,\"status\":\"running\"}");
+            int samples = 0, scenarios = 0;
+            foreach (float scale in new[] { 0.9f, 1.2f })
+            foreach (bool freeCell in new[] { true, false })
+            {
+                _fixture.TearDown(); _fixture.SetUp();
+                var source = (RobotView)type.GetMethod("BeginTightGlassLayout", flags).Invoke(_fixture,
+                    new object[] { scale, freeCell ? 0.24f : 0.26f, freeCell });
+                var ball = (PhysicalCollisionBall)type.GetField("_ball", flags).GetValue(_fixture);
+                var board = (PlacementBoardView)type.GetField("_board", flags).GetValue(_fixture);
+                var body = ball.GetComponent<Rigidbody2D>();
+                var collider = ball.GetComponent<CircleCollider2D>();
+                var original = (Vector2)collider.bounds.center;
+                ball.ResolvePlacementOverlap(source, board);
+                Assert.AreEqual(freeCell ? PlacementRecoveryState.Escaping : PlacementRecoveryState.Trapped, ball.RecoveryState);
+                Physics2D.simulationMode = SimulationMode2D.FixedUpdate;
+                var start = (Vector2)collider.bounds.center;
+                float minX = start.x, maxX = start.x, minY = start.y, maxY = start.y;
+                var until = Time.time + (freeCell ? 1f : 0.6f);
+                while (Time.time < until && (!freeCell || ball.RecoveryState != PlacementRecoveryState.None))
+                {
+                    yield return null;
+                    var center = (Vector2)collider.bounds.center;
+                    minX = Mathf.Min(minX, center.x); maxX = Mathf.Max(maxX, center.x);
+                    minY = Mathf.Min(minY, center.y); maxY = Mathf.Max(maxY, center.y);
+                    Assert.That(body.velocity.magnitude, Is.EqualTo(ball.EffectiveSpeed).Within(0.001f));
+                    samples++;
+                }
+                if (freeCell)
+                {
+                    Assert.AreEqual(PlacementRecoveryState.None, ball.RecoveryState);
+                    Assert.That(Vector2.Distance(original, collider.bounds.center), Is.GreaterThan(0.15f * scale));
+                    Assert.IsFalse(Physics2D.GetIgnoreCollision(collider, source.GetPhysicalCollider()));
+                    Assert.AreEqual(RigidbodyType2D.Dynamic, body.bodyType);
+                    Assert.AreEqual(1, ball.ComboCount);
+                }
+                else
+                {
+                    Assert.AreEqual(PlacementRecoveryState.Trapped, ball.RecoveryState);
+                    Assert.That(Mathf.Max(maxX - minX, maxY - minY), Is.GreaterThan(0.012f * scale));
+                    Assert.That(Mathf.Min(maxX - minX, maxY - minY), Is.LessThan(0.002f));
+                    Assert.Greater(ball.ComboCount, 1);
+                }
+                Assert.AreEqual(1, (int)type.GetField("_attacks", flags).GetValue(_fixture));
+                scenarios++;
+            }
+            System.IO.File.WriteAllText(path, "{\"passed\":true,\"scenarios\":" + scenarios + ",\"samples\":" + samples + "}");
+        }
+
+        [UnityTest]
+        public IEnumerator RealFixedLoopNineNonEmptyCellsKeepMovingOnSelectedEdge()
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var type = typeof(BallPlacementRecoveryTests);
+            var path = System.IO.Path.Combine(Application.dataPath, "../Temp/BallNineNonEmptyPlayerLoop.json");
+            System.IO.File.WriteAllText(path, "{\"passed\":false,\"status\":\"running\"}");
+            int samples = 0, scenarios = 0;
+            foreach (float scale in new[] { 0.9f, 1.2f })
+            foreach (bool glassNeighbors in new[] { false, true })
+            for (int edge = 0; edge < 4; edge++)
+            {
+                _fixture.TearDown(); _fixture.SetUp();
+                type.GetMethod("BeginNineNonEmptyCells", flags).Invoke(_fixture, new object[] { edge, scale, glassNeighbors });
+                Physics2D.simulationMode = SimulationMode2D.FixedUpdate;
+                var ball = (PhysicalCollisionBall)type.GetField("_ball", flags).GetValue(_fixture);
+                var recovery = (BallPlacementRecovery)typeof(PhysicalCollisionBall).GetField("_placementRecovery", flags).GetValue(ball);
+                var a = recovery.EndpointA;
+                var tangent = (recovery.EndpointB - a).normalized;
+                var body = ball.GetComponent<Rigidbody2D>();
+                var collider = ball.GetComponent<CircleCollider2D>();
+                float minimum = float.PositiveInfinity, maximum = float.NegativeInfinity;
+                var until = Time.time + 0.45f;
+                while (Time.time < until)
+                {
+                    yield return null;
+                    var delta = (Vector2)collider.bounds.center - a;
+                    float along = Vector2.Dot(delta, tangent);
+                    Assert.That(Mathf.Abs(delta.x * tangent.y - delta.y * tangent.x), Is.LessThan(0.002f));
+                    Assert.That(body.velocity.magnitude, Is.EqualTo(ball.EffectiveSpeed).Within(0.001f));
+                    Assert.AreEqual(PlacementRecoveryState.Trapped, ball.RecoveryState);
+                    minimum = Mathf.Min(minimum, along); maximum = Mathf.Max(maximum, along);
+                    samples++;
+                }
+                Assert.That(maximum - minimum, Is.GreaterThan(0.03f));
+                Assert.Greater(ball.ComboCount, 1);
+                scenarios++;
+            }
+            System.IO.File.WriteAllText(path, "{\"passed\":true,\"scenarios\":" + scenarios + ",\"samples\":" + samples + "}");
         }
 
         [UnityTest]

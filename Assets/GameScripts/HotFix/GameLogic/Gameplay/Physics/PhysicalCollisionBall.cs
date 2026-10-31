@@ -61,6 +61,9 @@ namespace GameLogic
         private readonly List<RaycastHit2D> _placementHits = new List<RaycastHit2D>();
         private readonly Dictionary<int, GlassView> _recoveryGlassContacts = new Dictionary<int, GlassView>();
         private readonly List<int> _endedGlassContacts = new List<int>();
+        private readonly HashSet<Collider2D> _trappedOverlaps = new HashSet<Collider2D>();
+        private RigidbodyType2D _recoveryBodyType;
+        private bool _hasRecoveryBodyType;
         private int _recoveryVersion;
 
         private sealed class RobotContact
@@ -359,12 +362,15 @@ namespace GameLogic
         }
 
         private float PlacementClearance => Mathf.Max(0.001f * _mapScale, Physics2D.defaultContactOffset * 2f);
+        // 扫掠的接触预留量只用于发现候选碰撞体，不是路径两端必须额外留出的空隙。
+        private float PlacementMotionEpsilon => 0.0001f * _mapScale;
 
         private void SelectPlacementRoute(ref Vector2 center)
         {
             var start = center;
             if (_placementRecovery.TrySelectTarget(center, destination => CanUsePlacementTarget(start, destination)))
             {
+                ReleaseTrappedMotion();
                 _direction = (_placementRecovery.TargetPosition - center).normalized;
                 return;
             }
@@ -375,15 +381,36 @@ namespace GameLogic
                 center = midpoint;
                 // 中点与边另一侧的机器人也可能相交，仅本次实际接触者加入保护。
                 ProtectOverlappingRobots(_placementRecovery.Board.GetComponentsInChildren<RobotView>());
+                BeginTrappedMotion(center);
             }
             _direction = (_placementRecovery.Destination - center).normalized;
+        }
+
+        private void BeginTrappedMotion(Vector2 center)
+        {
+            // 球心沿真实格边时，球体可能与侧面的玻璃重叠；不能让动态求解器挤偏轨迹。
+            _recoveryBodyType = _body.bodyType;
+            _hasRecoveryBodyType = true;
+            _body.bodyType = RigidbodyType2D.Kinematic;
+            gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, WorldRadius,
+                new ContactFilter2D { useTriggers = false }, _placementOverlaps);
+            foreach (var collider in _placementOverlaps)
+                if (IsPlacementObstacle(collider)) _trappedOverlaps.Add(collider);
+        }
+
+        private void ReleaseTrappedMotion()
+        {
+            if (_hasRecoveryBodyType && _body != null) _body.bodyType = _recoveryBodyType;
+            _hasRecoveryBodyType = false;
+            _trappedOverlaps.Clear();
         }
 
         private bool CanUsePlacementTarget(Vector2 center, Vector2 destination)
         {
             if (!IsPlacementPositionFree(destination)) return false;
             var delta = destination - center;
-            return !CastPlacementObstacle(center, delta.normalized, delta.magnitude, out _);
+            return !CastPlacementObstacle(center, delta.normalized, delta.magnitude, out var hit) ||
+                hit.distance >= delta.magnitude;
         }
 
         private bool IsPlacementPositionFree(Vector2 center)
@@ -404,15 +431,48 @@ namespace GameLogic
             gameObject.scene.GetPhysicsScene2D().CircleCast(center, WorldRadius, direction,
                 distance + PlacementClearance, new ContactFilter2D { useTriggers = false }, _placementHits);
             float best = float.PositiveInfinity;
-            foreach (var hit in _placementHits)
+            foreach (var candidate in _placementHits)
             {
-                if (!IsPlacementObstacle(hit.collider) || Vector2.Dot(direction, hit.normal) >= -0.00001f) continue;
+                var hit = candidate;
+                if (!IsPlacementObstacle(hit.collider)) continue;
+                // 初始侧向重叠允许沿边滑动；其余障碍仍形成真实往返端点。
+                if (RecoveryState == PlacementRecoveryState.Trapped && _trappedOverlaps.Contains(hit.collider)) continue;
                 var robot = hit.collider.GetComponentInParent<RobotView>();
                 if (robot != null && _protectedContacts.TryGetValue(robot.InstanceId, out var contact) && contact.Collider == hit.collider) continue;
+                if (!RefinePlacementHit(center, direction, ref hit) || Vector2.Dot(direction, hit.normal) >= -0.00001f) continue;
                 if (hit.distance > best) continue;
                 best = hit.distance; closest = hit;
             }
             return closest.collider != null;
+        }
+
+        private bool RefinePlacementHit(Vector2 center, Vector2 direction, ref RaycastHit2D hit)
+        {
+            // CircleCast的接触容差与OverlapCircle/实际形状距离不同。
+            // 用碰撞体真实最近点细化首次接触，避免固定扣0.02吞掉窄通道的全部行程。
+            float radiusSquared = WorldRadius * WorldRadius;
+            var separation = center - hit.collider.ClosestPoint(center);
+            if (separation.sqrMagnitude <= radiusSquared)
+            {
+                hit.distance = 0f;
+                if (separation.sqrMagnitude > 0.0000000001f) hit.normal = separation.normalized;
+                return true;
+            }
+            float low = 0f, high = hit.distance;
+            var endpoint = center + direction * high;
+            if ((endpoint - hit.collider.ClosestPoint(endpoint)).sqrMagnitude > radiusSquared) return false;
+            for (int i = 0; i < 16 && high - low > PlacementMotionEpsilon * 0.25f; i++)
+            {
+                float middle = (low + high) * 0.5f;
+                var position = center + direction * middle;
+                if ((position - hit.collider.ClosestPoint(position)).sqrMagnitude <= radiusSquared) high = middle;
+                else low = middle;
+            }
+            hit.distance = low;
+            endpoint = center + direction * low;
+            hit.point = hit.collider.ClosestPoint(endpoint);
+            hit.normal = (endpoint - hit.point).normalized;
+            return true;
         }
 
         private void SetBallCenter(Vector2 center)
@@ -440,14 +500,14 @@ namespace GameLogic
                 if (endDistance <= 0.000001f)
                 {
                     if (RecoveryState == PlacementRecoveryState.Escaping) break;
-                    _placementRecovery.Turn(PlacementClearance);
+                    _placementRecovery.Turn(PlacementMotionEpsilon);
                     if (++turns > 64) break;
                     continue;
                 }
                 _direction = delta / endDistance;
                 var hit = default(RaycastHit2D);
                 if (CastPlacementObstacle(center, _direction, Mathf.Min(remaining, endDistance), out hit))
-                    endDistance = Mathf.Min(endDistance, Mathf.Max(0f, hit.distance - PlacementClearance));
+                    endDistance = Mathf.Min(endDistance, Mathf.Max(0f, hit.distance - PlacementMotionEpsilon));
                 float travel = Mathf.Min(remaining, endDistance);
                 center += _direction * travel;
                 remaining -= travel;
@@ -461,7 +521,7 @@ namespace GameLogic
                     if (++turns > 64) break;
                     continue;
                 }
-                bool count = _placementRecovery.Turn(PlacementClearance);
+                bool count = _placementRecovery.Turn(PlacementMotionEpsilon);
                 _direction = (_placementRecovery.Destination - center).normalized;
                 if (count)
                 {
@@ -552,6 +612,7 @@ namespace GameLogic
 
         private void ClearPlacementRecovery()
         {
+            ReleaseTrappedMotion();
             _placementRecovery.Clear();
             _recoveryGlassContacts.Clear();
             _recoveryVersion++;
