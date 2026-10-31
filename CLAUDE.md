@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 请使用中文写提案和回答
+Git 分支权限遵循项目根 `../AGENTS.md`：未经用户明确允许，不得自行新建分支；主会话、子代理、技能和 worktree 流程均须遵守，默认在当前分支工作。
 这个文件为 Claude Code (claude.ai/code) 提供指导，用于处理此代码库中的代码。
 
 TEngine 基于 HybridCLR + YooAsset + UniTask + Luban 构建。
