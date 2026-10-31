@@ -85,6 +85,7 @@ namespace GameLogic
             else if (result == GlassCollisionResult.Broken)
             {
                 // 先提交通行和部署事实，奖励通知可能同步结束整局。
+                var rewardOrigin = view.transform.position;
                 view.BeginBreak();
                 _byCell.Remove(view.Coordinate);
                 if (_board.Model.IsTerrainMap) _board.Model.TryRemoveObstacle(view.Coordinate);
@@ -92,7 +93,7 @@ namespace GameLogic
                 _board.RefreshAllCells();
                 var source = snapshot.GlassKind == GlassKind.Normal ? ShopRewardSource.NormalGlass : ShopRewardSource.ColoredGlass;
                 GameEvent.Send<BattleRewardEvent>(BattleRewardAdapter.REWARD_EVENT,
-                    new BattleRewardEvent(BattleId, snapshot.Side, source, snapshot.InstanceId));
+                    new BattleRewardEvent(BattleId, snapshot.Side, source, snapshot.InstanceId, rewardOrigin));
             }
             return result;
         }
