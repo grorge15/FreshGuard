@@ -29,26 +29,35 @@ namespace FreshGuard.Editor
                 var boards = UnityEngine.Object.FindObjectsOfType<PlacementBoardView>();
                 var positions = Array.ConvertAll(boards, board => board.transform.position);
                 var scales = Array.ConvertAll(boards, board => board.transform.lossyScale);
-                var cellPositions = Array.ConvertAll(boards,
-                    board => camera.WorldToScreenPoint(board.GetCellWorldPosition(new BoardCoordinate(0, 0))));
                 await host.InitializeAsync();
                 await UniTask.Yield();
-                Check();
+                RequireReady();
+                var adaptedPosition = camera.transform.position;
+                var adaptedZoom = camera.orthographicSize;
+                CheckWorld();
                 host.EndBattle();
-                Check();
+                if (camera.rect != viewport || camera.orthographicSize != zoom || camera.transform.position != cameraPosition)
+                    throw new InvalidOperationException("退场未恢复相机。");
+                CheckWorld();
                 await host.InitializeAsync();
-                Check();
+                RequireReady();
+                if (camera.transform.position != adaptedPosition || camera.orthographicSize != adaptedZoom)
+                    throw new InvalidOperationException("相同屏幕和战场重复初始化的相机结果不一致。");
+                CheckWorld();
                 passed = true;
-                details = "商店打开、关闭、重新打开均不改变相机视口、缩放、位置或棋盘位置、比例、屏幕格子坐标。";
+                details = "相同输入重复开局相机布局一致，棋盘世界位置和比例保持，退场恢复原始相机。";
 
-                void Check()
+                void RequireReady()
                 {
-                    if (camera.rect != viewport || camera.orthographicSize != zoom || camera.transform.position != cameraPosition)
-                        throw new InvalidOperationException("商店改变了战斗相机布局。");
+                    if (!host.IsReady || !host.GetComponent<BattleScreenLayoutController>().IsBound)
+                        throw new InvalidOperationException("屏幕适配未就绪。");
+                }
+
+                void CheckWorld()
+                {
                     for (var i = 0; i < boards.Length; i++)
-                        if (boards[i].transform.position != positions[i] || boards[i].transform.lossyScale != scales[i] ||
-                            Vector3.Distance(camera.WorldToScreenPoint(boards[i].GetCellWorldPosition(new BoardCoordinate(0, 0))), cellPositions[i]) > 0.01f)
-                            throw new InvalidOperationException("商店改变了棋盘布局或屏幕大小。");
+                        if (boards[i].transform.position != positions[i] || boards[i].transform.lossyScale != scales[i])
+                            throw new InvalidOperationException("屏幕适配改变了棋盘世界布局。");
                 }
             }
             catch (Exception e) { details = e.Message; Debug.LogError("[Shop Board Layout] " + e); }

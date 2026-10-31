@@ -18,6 +18,7 @@ namespace GameLogic
         [SerializeField] private PlacementBoardView _opponentBoard;
         [SerializeField] private PlacementBoardsBootstrap _bootstrap;
         [SerializeField] private EnemyBattleController _enemies;
+        [SerializeField] private BattleScreenLayoutController _screenLayout;
         [SerializeField] private int _layoutConfigId = 1;
         [SerializeField] private int[] _playerCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
         [SerializeField] private int[] _opponentCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
@@ -196,6 +197,12 @@ namespace GameLogic
                 CombatWindow = window;
                 ShopWindow = window.Shop;
                 _battleInfoWindow = window.Info;
+                if (_screenLayout == null) _screenLayout = GetComponent<BattleScreenLayoutController>();
+                if (_screenLayout == null) throw new InvalidOperationException("缺少主战场屏幕适配控制器。");
+                await _screenLayout.BindAsync(window, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (Context != context || generation != _initializationGeneration)
+                    throw new OperationCanceledException(cancellationToken);
                 PublishBattleProgress(true);
                 _preparationRemaining = 3f;
                 _running = _frozen = false;
@@ -636,6 +643,7 @@ namespace GameLogic
 
         private void Cleanup()
         {
+            if (_screenLayout != null) _screenLayout.Unbind();
             _matchEntry = null;
             _matchReleased = true;
             _checkingOperational = false;

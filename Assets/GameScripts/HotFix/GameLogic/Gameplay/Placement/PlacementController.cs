@@ -34,12 +34,27 @@ namespace GameLogic
         private BoardCoordinate _anchor;
         private BoardCoordinate _pointerCell;
         private BattleSide? _requiredSide;
+        private Rect? _screenInputRect;
+        private Vector2Int _inputScreenSize;
+        private Rect _inputSafeArea;
 
-        public bool IsReady => _ready && isActiveAndEnabled &&
+        public bool IsReady => _ready && isActiveAndEnabled && IsScreenInputCurrent &&
             _playerBoard != null && _enemyBoard != null && _playerBoard.isActiveAndEnabled && _enemyBoard.isActiveAndEnabled &&
             _playerBoard.IsInitialized && _enemyBoard.IsInitialized;
         public bool IsDragging => _dragging;
         public Camera SceneCamera => _sceneCamera;
+
+        // 尺寸变化后的 Update 可能早于布局 LateUpdate；此期间拒绝旧相机映射的输入。
+        private bool IsScreenInputCurrent => !_screenInputRect.HasValue ||
+            (_inputScreenSize == new Vector2Int(Screen.width, Screen.height) && _inputSafeArea == Screen.safeArea);
+
+        public void SetScreenInputRect(Rect screenRect)
+        {
+            _screenInputRect = screenRect;
+            _inputScreenSize = new Vector2Int(Screen.width, Screen.height);
+            _inputSafeArea = Screen.safeArea;
+        }
+        public void ClearScreenInputRect() { _screenInputRect = null; }
 
         public bool Initialize()
         {
@@ -127,6 +142,7 @@ namespace GameLogic
             worldPosition = default(Vector3);
             if (!IsReady || _sceneCamera == null || float.IsNaN(position.x) || float.IsNaN(position.y) ||
                 float.IsInfinity(position.x) || float.IsInfinity(position.y)) return false;
+            if (_screenInputRect.HasValue && !_screenInputRect.Value.Contains(position)) return false;
             var ray = _sceneCamera.ScreenPointToRay(position);
             float distance;
             if (!new Plane(Vector3.forward, Vector3.zero).Raycast(ray, out distance)) return false;
@@ -164,12 +180,8 @@ namespace GameLogic
             if (!_dragging) return;
             if (!IsReady) { CancelDrag(); return; }
             ClearPreview();
-            if (_sceneCamera == null || float.IsNaN(screenPosition.x) || float.IsNaN(screenPosition.y) ||
-                float.IsInfinity(screenPosition.x) || float.IsInfinity(screenPosition.y)) return;
-            var ray = _sceneCamera.ScreenPointToRay(screenPosition);
-            float distance;
-            if (!new Plane(Vector3.forward, Vector3.zero).Raycast(ray, out distance)) return;
-            var point = ray.GetPoint(distance);
+            Vector3 point;
+            if (!TryGetPointerWorldPosition(screenPosition, out point)) return;
             BoardCoordinate coordinate;
             if (_playerBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _playerBoard;
             else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _enemyBoard;

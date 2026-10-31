@@ -44,7 +44,7 @@ namespace GameLogic.Tests
             Set(_board, "_model", new BoardModel(5, 5)); Set(_board, "_initialized", true);
             var go = NewObject("Ball"); go.SetActive(false);
             _ball = go.AddComponent<PhysicalCollisionBall>();
-            Set(_ball, "radius", 0.1f); Set(_ball, "speed", 1f);
+            go.GetComponent<CircleCollider2D>().radius = 0.1f; Set(_ball, "speed", 1f);
             go.SetActive(true);
             if (Get(_ball, "_body") == null) Invoke(_ball, "Awake");
             _body = go.GetComponent<Rigidbody2D>();
@@ -73,6 +73,35 @@ namespace GameLogic.Tests
             }
             Physics2D.simulationMode = _simulationMode;
             UnityEngine.Random.state = _randomState;
+        }
+
+        [Test]
+        public void InitializationPreservesAuthoredColliderRadiusAndOffset()
+        {
+            var go = NewObject("AuthoredBall"); go.SetActive(false);
+            var collider = go.AddComponent<CircleCollider2D>();
+            collider.radius = 0.13f;
+            collider.offset = new Vector2(0.02f, -0.03f);
+            var ball = go.AddComponent<PhysicalCollisionBall>();
+            go.SetActive(true);
+            if (Get(ball, "_body") == null) Invoke(ball, "Awake");
+            Assert.That(collider.radius, Is.EqualTo(0.13f).Within(0.0001f));
+            Assert.AreEqual(new Vector2(0.02f, -0.03f), collider.offset);
+        }
+
+        [Test]
+        public void WorldRadiusFollowsColliderChangesAndWorldScaleBeforeInitialization()
+        {
+            var go = NewObject("AuthoredBall"); go.SetActive(false);
+            var collider = go.AddComponent<CircleCollider2D>();
+            collider.radius = 0.13f;
+            var ball = go.AddComponent<PhysicalCollisionBall>();
+            go.transform.SetParent(_board.transform, false);
+            _board.transform.localScale = Vector3.one * 1.5f;
+            go.transform.localScale = new Vector3(0.6f, 0.8f, 1f);
+            Assert.That(ball.WorldRadius, Is.EqualTo(0.156f).Within(0.0001f));
+            collider.radius = 0.07f;
+            Assert.That(ball.WorldRadius, Is.EqualTo(0.084f).Within(0.0001f));
         }
 
         [Test]
@@ -263,7 +292,7 @@ namespace GameLogic.Tests
             // 主场景格距0.35、地图倍率1.2，球半径0.14；右侧空格外还有障碍。
             Set(_board, "_cellSize", 0.35f);
             _board.transform.localScale = new Vector3(1.2f, 1.2f, 1f);
-            _ball.Stop(); Set(_ball, "radius", 0.14f); Set(_ball, "speed", 5f);
+            _ball.Stop(); Set(_ball, "speed", 5f);
             _ball.GetComponent<CircleCollider2D>().radius = 0.14f;
             _ball.SetMapScale(1.2f);
             _ball.LaunchAt(_board.GetCellWorldPosition(_origin), 45f);
@@ -330,7 +359,7 @@ namespace GameLogic.Tests
         {
             ConfigureScaledRecoveryBoard(0.9f);
             // 格子类型可通行并不表示球体能够穿过：0.18半径大于0.1575半格宽。
-            Set(_ball, "radius", 0.18f); _ball.GetComponent<CircleCollider2D>().radius = 0.18f;
+            _ball.GetComponent<CircleCollider2D>().radius = 0.18f;
             var recovery = (BallPlacementRecovery)Get(_ball, "_placementRecovery");
             recovery.Begin(_board, _body.position);
             var cell = new BoardCoordinate(1, 2);
@@ -345,7 +374,7 @@ namespace GameLogic.Tests
         {
             Set(_board, "_cellSize", 0.35f);
             _board.transform.localScale = new Vector3(scale, scale, 1f);
-            _ball.Stop(); Set(_ball, "radius", 0.14f); Set(_ball, "speed", 4f);
+            _ball.Stop(); Set(_ball, "speed", 4f);
             _ball.GetComponent<CircleCollider2D>().radius = 0.14f;
             _ball.BindBattle(1, BattleSide.Opponent, () => _running);
             _ball.BindCombo(_registry, NewObject("OpponentPopupRoot").transform);
