@@ -472,6 +472,17 @@ namespace GameLogic
             return true;
         }
 
+        /// <summary>击杀回调顺序可能先于死亡动画；两种状态都按实例身份读取位置。</summary>
+        internal Vector3? GetRewardOrigin(BattleSide side, int instanceId)
+        {
+            if (!OwnsBattle) return null;
+            if (TryGetDeathPosition(side, instanceId, out var position)) return position;
+            if (_active.TryGetValue(instanceId, out var entry) && entry.Group.Side == side &&
+                entry.View != null && entry.View.InstanceId == instanceId)
+                return entry.View.transform.position;
+            return null;
+        }
+
         /// <summary>逻辑实体已回收，死亡动画单独保留，不能再抵塔或被索敌。</summary>
         public void NotifyKilled(EntityRemovalSnapshot snapshot)
         {

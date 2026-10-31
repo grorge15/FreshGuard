@@ -151,7 +151,8 @@ namespace GameLogic
                 Context = new BattleShopContext(_rules, _playerCandidates, _opponentCandidates, tables.TbRobot.Get,
                     entry: _matchEntry);
                 if (_matchReleased) BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
-                _rewards = new BattleRewardAdapter(Context);
+                _rewards = new BattleRewardAdapter(Context,
+                    (side, id) => _enemies != null ? _enemies.GetRewardOrigin(side, id) : null);
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
                 GameEvent.AddEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
                 _listening = true;

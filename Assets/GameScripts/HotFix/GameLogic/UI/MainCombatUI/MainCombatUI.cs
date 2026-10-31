@@ -9,16 +9,19 @@ namespace GameLogic
         public BattleShopContext Context { get; private set; }
         public BattleShopSceneController Host { get; private set; }
         public BattleNoticeWidget Notices { get; private set; }
+        public GlassCurrencyFlightWidget CurrencyFlight { get; private set; }
 
         protected override void RegisterEvent()
         {
             AddUIEvent<long, string>(BattleNoticeEvents.Requested, OnNoticeRequested);
+            AddUIEvent<BattleCurrencyFlightEvent>(BattleRewardAdapter.CURRENCY_FLIGHT_EVENT, OnCurrencyGranted);
         }
 
         protected override void OnCreate()
         {
             Info = CreateWidget<BattleInfoUI>("BattleInfoUI");
             Shop = CreateWidget<BattleShopUI>("BattleShopUI");
+            CurrencyFlight = CreateWidget<GlassCurrencyFlightWidget>("GlassCurrencyFlight");
             Notices = CreateWidget<BattleNoticeWidget>("BattleNotices");
         }
 
@@ -29,6 +32,8 @@ namespace GameLogic
             Context = context;
             Host = UserDatas != null && UserDatas.Length > 1 ? UserDatas[1] as BattleShopSceneController : null;
             Shop.Bind(Context, Host);
+            CurrencyFlight.Bind(Context, Host != null && Host.Placement != null ? Host.Placement.SceneCamera : null,
+                Shop.transform.Find("m_rect_ShopPanel/EnergyBalance/m_img_EnergyCoin") as UnityEngine.RectTransform);
             if (UserDatas != null && UserDatas.Length > 2 && UserDatas[2] is BattleProgressSnapshot progress)
                 Info.Bind(progress);
         }
@@ -39,6 +44,7 @@ namespace GameLogic
             {
                 Shop?.Drag?.Cancel();
                 Notices?.Clear();
+                CurrencyFlight?.Clear();
             }
         }
 
@@ -49,6 +55,13 @@ namespace GameLogic
             Notices.Show(message);
         }
 
+        private void OnCurrencyGranted(BattleCurrencyFlightEvent reward)
+        {
+            if (Context == null || Context.BattleId != reward.BattleId || Context.IsEnded ||
+                Context.IsEndRequested || !Visible || reward.Recipient != BattleSide.Player) return;
+            CurrencyFlight.Show(reward.WorldOrigin, reward.IconCount);
+        }
+
         protected override void OnDestroy()
         {
             // 子 Widget 的监听、按钮和拖拽由框架统一销毁。
@@ -57,6 +70,7 @@ namespace GameLogic
             Context = null;
             Host = null;
             Notices = null;
+            CurrencyFlight = null;
             _userDatas = null;
         }
     }
