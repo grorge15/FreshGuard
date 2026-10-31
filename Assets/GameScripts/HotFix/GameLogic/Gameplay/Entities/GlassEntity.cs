@@ -34,7 +34,8 @@ namespace GameLogic
 
         internal GlassCollisionResult ApplyCollision(bool isBerserk)
         {
-            if (!IsAlive || isBerserk || DamageCooldownRemaining > 0f) return GlassCollisionResult.Ignored;
+            // 普通球和暴走球统一扣除配置耐久，并共享同一受击冷却。
+            if (!IsAlive || DamageCooldownRemaining > 0f) return GlassCollisionResult.Ignored;
             CurrentDurability = Math.Max(0, CurrentDurability - HitDurabilityLoss);
             DamageCooldownRemaining = CooldownInterval;
             return CurrentDurability == 0 ? GlassCollisionResult.Broken : GlassCollisionResult.Damaged;

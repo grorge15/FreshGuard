@@ -25,13 +25,14 @@ namespace GameLogic.Tests
             Assert.AreEqual(_initialUsingCount, PoolInfo().UsingMemoryCount, "玻璃必须全部归还框架池。");
         }
 
-        [Test]
-        public void NormalBallCollisionConsumesOneDurability()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void BallCollisionConsumesOneDurability(bool isBerserk)
         {
             var glass = CreateGlass();
             GlassBreakSnapshot snapshot;
             Assert.AreEqual(GlassCollisionResult.Damaged,
-                _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot));
+                _registry.ApplyGlassCollision(glass.InstanceId, isBerserk, out snapshot));
             Assert.AreEqual(3, glass.MaxDurability);
             Assert.AreEqual(2, glass.CurrentDurability);
             Assert.AreEqual(1, glass.HitDurabilityLoss);
@@ -54,9 +55,11 @@ namespace GameLogic.Tests
             Assert.AreEqual(2, glass.CurrentDurability);
         }
 
-        [TestCase(GlassKind.Normal, 3)]
-        [TestCase(GlassKind.Colored, 5)]
-        public void OnlyFinalEffectiveHitBreaksGlass(GlassKind kind, int durability)
+        [TestCase(GlassKind.Normal, 3, false)]
+        [TestCase(GlassKind.Normal, 3, true)]
+        [TestCase(GlassKind.Colored, 5, false)]
+        [TestCase(GlassKind.Colored, 5, true)]
+        public void OnlyFinalEffectiveHitBreaksGlass(GlassKind kind, int durability, bool isBerserk)
         {
             var glass = _registry.CreateGlass(1, BattleSide.Player, new BoardCoordinate(1, 1),
                 kind, durability, 0.25f);
@@ -65,14 +68,14 @@ namespace GameLogic.Tests
             {
                 GlassBreakSnapshot partial;
                 Assert.AreEqual(GlassCollisionResult.Damaged,
-                    _registry.ApplyGlassCollision(id, false, out partial));
+                    _registry.ApplyGlassCollision(id, isBerserk, out partial));
                 Assert.AreEqual(durability - hit, glass.CurrentDurability);
                 Assert.AreEqual(0, partial.InstanceId);
                 _registry.AdvanceTime(0.25f);
             }
             GlassBreakSnapshot snapshot;
             Assert.AreEqual(GlassCollisionResult.Broken,
-                _registry.ApplyGlassCollision(id, false, out snapshot));
+                _registry.ApplyGlassCollision(id, isBerserk, out snapshot));
             Assert.AreEqual(id, snapshot.InstanceId);
             Assert.AreEqual(kind, snapshot.GlassKind);
             Entity removed;
@@ -81,50 +84,29 @@ namespace GameLogic.Tests
             Assert.IsFalse(_registry.TryGetGlass(BattleSide.Player, new BoardCoordinate(1, 1), out indexed));
         }
 
-        [Test]
-        public void AllBallsShareCooldownAndIgnoredHitsDoNotRefreshIt()
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public void AllBallsShareCooldownAndIgnoredHitsDoNotRefreshIt(bool firstIsBerserk, bool nextIsBerserk)
         {
             var glass = CreateGlass();
             GlassBreakSnapshot snapshot;
             Assert.AreEqual(GlassCollisionResult.Damaged,
-                _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot));
+                _registry.ApplyGlassCollision(glass.InstanceId, firstIsBerserk, out snapshot));
             Assert.AreEqual(GlassCollisionResult.Ignored,
-                _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot));
+                _registry.ApplyGlassCollision(glass.InstanceId, nextIsBerserk, out snapshot));
             _registry.AdvanceTime(0.125f);
             Assert.AreEqual(GlassCollisionResult.Ignored,
-                _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot));
+                _registry.ApplyGlassCollision(glass.InstanceId, nextIsBerserk, out snapshot));
             Assert.AreEqual(0.125f, glass.DamageCooldownRemaining);
             Assert.AreEqual(2, glass.CurrentDurability);
             Assert.AreEqual(0, snapshot.InstanceId);
             _registry.AdvanceTime(0.125f);
             Assert.AreEqual(0f, glass.DamageCooldownRemaining);
             Assert.AreEqual(GlassCollisionResult.Damaged,
-                _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot));
+                _registry.ApplyGlassCollision(glass.InstanceId, nextIsBerserk, out snapshot));
             Assert.AreEqual(1, glass.CurrentDurability);
-        }
-
-        [Test]
-        public void BerserkBallNeitherConsumesDurabilityNorStartsOrRefreshesCooldown()
-        {
-            var glass = CreateGlass();
-            GlassBreakSnapshot snapshot;
-            Assert.AreEqual(GlassCollisionResult.Ignored,
-                _registry.ApplyGlassCollision(glass.InstanceId, true, out snapshot));
-            Assert.AreEqual(3, glass.CurrentDurability);
-            Assert.AreEqual(0f, glass.DamageCooldownRemaining);
-            Assert.AreEqual(0, snapshot.InstanceId);
-            _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot);
-            _registry.AdvanceTime(0.125f);
-            Assert.AreEqual(GlassCollisionResult.Ignored,
-                _registry.ApplyGlassCollision(glass.InstanceId, true, out snapshot));
-            Assert.AreEqual(2, glass.CurrentDurability);
-            Assert.AreEqual(0.125f, glass.DamageCooldownRemaining);
-            _registry.AdvanceTime(0.125f);
-            Assert.AreEqual(GlassCollisionResult.Ignored,
-                _registry.ApplyGlassCollision(glass.InstanceId, true, out snapshot));
-            Assert.AreEqual(0f, glass.DamageCooldownRemaining);
-            Assert.AreEqual(GlassCollisionResult.Damaged,
-                _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot));
         }
 
         [Test]
@@ -378,9 +360,11 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, CreateGlass().InstanceId);
         }
 
-        [TestCase(0, 3)]
-        [TestCase(1, 5)]
-        public void ConfigFactoryUsesConfiguredKindDurabilityAndHitLoss(int kind, int durability)
+        [TestCase(0, 3, false)]
+        [TestCase(0, 3, true)]
+        [TestCase(1, 5, false)]
+        [TestCase(1, 5, true)]
+        public void ConfigFactoryUsesConfiguredKindDurabilityAndHitLoss(int kind, int durability, bool isBerserk)
         {
             var config = MakeConfig(17, kind, durability, 2);
             var glass = _registry.CreateGlassFromConfig(config, BattleSide.Opponent,
@@ -393,25 +377,27 @@ namespace GameLogic.Tests
             Assert.AreEqual(2, glass.HitDurabilityLoss);
             GlassBreakSnapshot snapshot;
             Assert.AreEqual(GlassCollisionResult.Damaged,
-                _registry.ApplyGlassCollision(glass.InstanceId, false, out snapshot));
+                _registry.ApplyGlassCollision(glass.InstanceId, isBerserk, out snapshot));
             Assert.AreEqual(durability - 2, glass.CurrentDurability);
             Assert.AreEqual(0.25f, glass.DamageCooldownRemaining);
         }
 
-        [TestCase(3)]
-        [TestCase(int.MaxValue)]
-        public void ConfiguredDamageClampsAtZeroAndBreaksOnce(int loss)
+        [TestCase(3, false)]
+        [TestCase(3, true)]
+        [TestCase(int.MaxValue, false)]
+        [TestCase(int.MaxValue, true)]
+        public void ConfiguredDamageClampsAtZeroAndBreaksOnce(int loss, bool isBerserk)
         {
             var glass = _registry.CreateGlassFromConfig(MakeConfig(17, 1, 3, loss),
                 BattleSide.Player, new BoardCoordinate(1, 1), 0f);
             var id = glass.InstanceId;
             GlassBreakSnapshot snapshot;
-            Assert.AreEqual(GlassCollisionResult.Broken, _registry.ApplyGlassCollision(id, false, out snapshot));
+            Assert.AreEqual(GlassCollisionResult.Broken, _registry.ApplyGlassCollision(id, isBerserk, out snapshot));
             Assert.AreEqual(id, snapshot.InstanceId);
             Assert.AreEqual(17, snapshot.ConfigId);
             Assert.AreEqual(GlassKind.Colored, snapshot.GlassKind);
             Assert.AreEqual(0, glass.CurrentDurability, "归还池后不保留耐久状态。");
-            Assert.AreEqual(GlassCollisionResult.Ignored, _registry.ApplyGlassCollision(id, false, out snapshot));
+            Assert.AreEqual(GlassCollisionResult.Ignored, _registry.ApplyGlassCollision(id, isBerserk, out snapshot));
             Assert.AreEqual(0, snapshot.InstanceId);
         }
 
