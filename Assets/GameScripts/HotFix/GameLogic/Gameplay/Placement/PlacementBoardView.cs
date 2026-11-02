@@ -30,7 +30,6 @@ namespace GameLogic
         private const int PreviewSortingOrder = 5;
 
         private static readonly Color TrackTint = new Color(0.60f, 0.55f, 0.40f, 1f);
-        private static readonly Color OccupiedColor = new Color(0.30f, 0.45f, 0.65f, 0.98f);
         private static readonly Color ValidColor = new Color(0.20f, 0.80f, 0.35f, 0.98f);
         private static readonly Color InvalidColor = new Color(0.85f, 0.22f, 0.22f, 0.98f);
         private static readonly Color HighlightedColor = new Color(1f, 0.72f, 0.15f, 0.98f);
@@ -282,7 +281,6 @@ namespace GameLogic
         {
             if (!_initialized || !_model.IsInside(coordinate)) return;
             _slots[coordinate.Column, coordinate.Row].color = _model.IsHighlighted(coordinate) ? HighlightedColor :
-                _model.IsOccupied(coordinate) ? OccupiedColor :
                 _model.IsTerrainMap && _model.GetBaseTerrain(coordinate) == BaseTerrainType.Track
                     ? _slotBaseColors[coordinate.Column, coordinate.Row] * TrackTint : _slotBaseColors[coordinate.Column, coordinate.Row];
         }

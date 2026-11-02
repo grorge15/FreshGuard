@@ -229,6 +229,8 @@ namespace GameLogic.Tests
                 Assert.IsTrue(fixture.View.Model.TryPlace(cell, one));
                 fixture.View.RefreshOccupied(new[] { cell });
                 var occupied = fixture.Slot(1, 1).color;
+                Assert.AreEqual(normal, occupied,
+                    "机器人缩放回弹时不能露出深色占位底格。");
                 fixture.View.SetHighlighted(cell, true);
                 var highlighted = fixture.Slot(1, 1).color;
                 Assert.AreNotEqual(occupied, highlighted);

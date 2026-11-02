@@ -106,8 +106,36 @@ namespace GameLogic.Tests
                                 Is.GreaterThanOrEqualTo((bottom - 0.4f) * MapGridMath.REFERENCE_CELL_SIZE - 0.00001f), "星星底边必须在底板内。");
                         }
                     }
+                    var placementRootScale = instance.transform.localScale;
+                    var placementColliderBounds = view.GetPhysicalCollider().bounds;
+                    view.PlayPlacementFeedback();
+                    Assert.AreEqual(placementRootScale, instance.transform.localScale,
+                        "落位回弹不能缩放逻辑根节点。");
+                    Assert.AreEqual(placementColliderBounds, view.GetPhysicalCollider().bounds,
+                        "落位回弹不能改变碰撞范围。");
+                    view.AdvanceMergeFeedback(0.63f);
                     view.PlayMergeFeedback();
                     Assert.AreEqual(Color.white, portrait.color, "合成闪光不能给立绘染色。");
+                    var rootScale = instance.transform.localScale;
+                    var colliderBounds = view.GetPhysicalCollider().bounds;
+                    view.PlayMergeFeedback(instance.transform.position + Vector3.left, 4, 5);
+                    var sourceGhostField = typeof(RobotView).GetField("_mergeSourceGhost", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var ringField = typeof(RobotView).GetField("_mergeRing", BindingFlags.NonPublic | BindingFlags.Instance);
+                    Assert.IsNotNull(sourceGhostField.GetValue(view));
+                    Assert.IsNotNull(ringField.GetValue(view));
+                    var mergeRing = (GameObject)ringField.GetValue(view);
+                    Assert.AreEqual(view.GetPhysicalCollider().GetPath(0).Length,
+                        mergeRing.GetComponent<LineRenderer>().positionCount,
+                        "合成能量圈应沿机器人完整外形绘制，而不是固定单格圆形。");
+                    Assert.AreEqual(rootScale, instance.transform.localScale, "合成动画不能缩放逻辑根节点。");
+                    Assert.AreEqual(colliderBounds, view.GetPhysicalCollider().bounds, "合成动画不能改变碰撞范围。");
+                    Assert.Less(stars[4].transform.localPosition.y, stars[3].transform.localPosition.y,
+                        "新增星星应从最终位置下方入场。");
+                    view.AdvanceMergeFeedback(0.63f);
+                    Assert.IsNull(sourceGhostField.GetValue(view));
+                    Assert.IsNull(ringField.GetValue(view));
+                    Assert.AreEqual(originalStarSize, stars[4].transform.localScale);
+                    Assert.AreEqual(Color.white, stars[4].color);
                     robot.TrySetDragging(true);
                     view.Render(robot);
                     Assert.IsFalse(instance.GetComponentsInChildren<SpriteRenderer>(true).Any(renderer => renderer.enabled));

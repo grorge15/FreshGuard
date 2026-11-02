@@ -36,6 +36,23 @@ namespace GameLogic
         private float _collisionStartScale = 1f;
         private float _collisionCurrentScale = 1f;
         private bool _collisionPlaying;
+        private const float MergeConvergeDuration = 0.18f;
+        private const float MergePopDuration = 0.48f;
+        private const float MergeTotalDuration = 0.62f;
+        private bool _mergePlaying;
+        private float _mergeElapsed;
+        private CollisionVisual[] _mergeVisuals;
+        private Vector3 _mergeStartOffset;
+        private SpriteRenderer _mergeStar;
+        private Vector3 _mergeStarPosition;
+        private Vector3 _mergeStarScale;
+        private GameObject _mergeSourceGhost;
+        private Vector3 _mergeSourceStart;
+        private GameObject _mergeRing;
+        private LineRenderer _mergeRingRenderer;
+        private Material _mergeRingMaterial;
+        private Vector3[] _mergeRingPoints;
+        private Vector3 _mergeRingCenter;
 
         private struct CollisionVisual
         {
@@ -245,17 +262,140 @@ namespace GameLogic
         }
 
         public void SetMergeCandidate(bool candidate) { _mergeCandidate = candidate; if (_robot != null) Render(_robot); }
-        public void PlayMergeFeedback()
+
+        public void PlayPlacementFeedback()
         {
+            ResetMergeFeedback();
+            ResetCollisionFeedback();
+            if (!isActiveAndEnabled || _iconRenderer == null || !_iconRenderer.enabled) return;
+            _mergeVisuals = CaptureMergeVisuals();
+            _mergeStartOffset = Vector3.zero;
+            _mergeElapsed = 0f;
+            _mergePlaying = true;
+            ApplyMergeVisuals(0.75f, Vector3.zero);
+        }
+
+        public void PlayMergeFeedback() => PlayMergeFeedback(null, Mathf.Max(1, (_robot?.Level ?? 1) - 1), _robot?.Level ?? 1);
+
+        public void PlayMergeFeedback(Vector3? sourcePosition, int previousLevel, int level)
+        {
+            ResetMergeFeedback();
+            ResetCollisionFeedback();
             MergeFeedbackCount++;
-            _feedbackUntil = Time.unscaledTime + 0.4f;
+            _feedbackUntil = Time.unscaledTime + MergeTotalDuration;
             if (_robot != null) Render(_robot);
+            if (!isActiveAndEnabled || _iconRenderer == null || !_iconRenderer.enabled) return;
+            _mergeVisuals = CaptureMergeVisuals();
+            _mergeStartOffset = sourcePosition.HasValue
+                ? transform.InverseTransformVector(sourcePosition.Value - transform.position) * 0.08f
+                : Vector3.zero;
+            _mergeStar = level > previousLevel && _levelStars != null && level > 0 && level <= _levelStars.Length
+                ? _levelStars[level - 1] : null;
+            if (_mergeStar != null)
+            {
+                _mergeStarPosition = _mergeStar.transform.localPosition;
+                _mergeStarScale = _mergeStar.transform.localScale;
+            }
+            CreateMergeRing(level);
+            if (sourcePosition.HasValue) CreateSourceGhost(sourcePosition.Value);
+            _mergeElapsed = 0f;
+            _mergePlaying = true;
+            ApplyMergeVisuals(0.75f, _mergeStartOffset);
+            ApplyMergeStar(0f);
+        }
+
+        private CollisionVisual[] CaptureMergeVisuals()
+        {
+            var result = new List<CollisionVisual>();
+            foreach (var node in new[] { _iconRenderer != null ? _iconRenderer.transform : null,
+                _portraitRenderer != null ? _portraitRenderer.transform : null,
+                _levelFrameRenderer != null ? _levelFrameRenderer.transform : null, _starsRoot })
+            {
+                if (node == null) continue;
+                result.Add(new CollisionVisual { Transform = node, Position = node.localPosition,
+                    Scale = node.localScale, Pivot = Vector3.zero });
+            }
+            return result.ToArray();
+        }
+
+        private void CreateSourceGhost(Vector3 sourcePosition)
+        {
+            _mergeSourceStart = sourcePosition;
+            _mergeSourceGhost = new GameObject("MergeSourceGhost");
+            _mergeSourceGhost.transform.SetParent(transform.parent, true);
+            _mergeSourceGhost.transform.position = sourcePosition;
+            _mergeSourceGhost.transform.rotation = transform.rotation;
+            _mergeSourceGhost.transform.localScale = transform.localScale * 0.9f;
+            foreach (var source in new[] { _iconRenderer, _levelFrameRenderer, _portraitRenderer })
+            {
+                if (source == null || source.sprite == null) continue;
+                var child = new GameObject(source.gameObject.name).AddComponent<SpriteRenderer>();
+                child.transform.SetParent(_mergeSourceGhost.transform, false);
+                child.transform.localPosition = source.transform.localPosition;
+                child.transform.localRotation = source.transform.localRotation;
+                child.transform.localScale = source.transform.localScale;
+                child.sprite = source.sprite;
+                child.color = source.color;
+                child.sharedMaterial = source.sharedMaterial;
+                child.sortingLayerID = source.sortingLayerID;
+                child.sortingOrder = source.sortingOrder + 20;
+                child.maskInteraction = source.maskInteraction;
+            }
+            var group = GetComponent<BattleSideRenderGroup>();
+            if (group != null) BattleSideRenderGroup.BindRoot(_mergeSourceGhost, group.Registry, group.Side);
+        }
+
+        private void CreateMergeRing(int level)
+        {
+            _mergeRing = new GameObject("MergeEnergyRing");
+            _mergeRing.transform.SetParent(transform.parent, true);
+            _mergeRing.transform.position = transform.position;
+            _mergeRing.transform.rotation = transform.rotation;
+            _mergeRing.transform.localScale = transform.localScale;
+            _mergeRingRenderer = _mergeRing.AddComponent<LineRenderer>();
+            var ringShader = Shader.Find("Sprites/Default");
+            if (ringShader == null)
+            {
+                DestroyMergeObject(ref _mergeRing);
+                _mergeRingRenderer = null;
+                return;
+            }
+            _mergeRingMaterial = new Material(ringShader);
+            _mergeRingRenderer.sharedMaterial = _mergeRingMaterial;
+            _mergeRingRenderer.loop = true;
+            _mergeRingRenderer.useWorldSpace = false;
+            _mergeRingRenderer.widthMultiplier = 0.04f;
+            _mergeRingRenderer.sortingLayerID = _iconRenderer.sortingLayerID;
+            _mergeRingRenderer.sortingOrder = _iconRenderer.sortingOrder + 30;
+            _mergeRingRenderer.startColor = _mergeRingRenderer.endColor = RobotLevelStyle.FrameColorForLevel(level);
+            var collider = GetPhysicalCollider();
+            if (collider == null || collider.pathCount == 0)
+            {
+                DestroyMergeObject(ref _mergeRing);
+                _mergeRingRenderer = null;
+                if (Application.isPlaying) Destroy(_mergeRingMaterial); else DestroyImmediate(_mergeRingMaterial);
+                _mergeRingMaterial = null;
+                return;
+            }
+            var path = collider.GetPath(0);
+            _mergeRingPoints = new Vector3[path.Length];
+            _mergeRingCenter = Vector3.zero;
+            for (var i = 0; i < path.Length; i++)
+            {
+                _mergeRingPoints[i] = path[i] + collider.offset;
+                _mergeRingCenter += _mergeRingPoints[i];
+            }
+            _mergeRingCenter /= Mathf.Max(1, _mergeRingPoints.Length);
+            _mergeRingRenderer.positionCount = _mergeRingPoints.Length;
+            UpdateMergeRing(0f);
+            var group = GetComponent<BattleSideRenderGroup>();
+            if (group != null) BattleSideRenderGroup.BindRoot(_mergeRing, group.Registry, group.Side);
         }
 
         /// <summary>同步缩放底板、立绘和星星，保持碰撞、占格节点和攻击原点不变。</summary>
         public void PlayCollisionFeedback()
         {
-            if (!isActiveAndEnabled || _robot == null || !_robot.CanParticipate) return;
+            if (!isActiveAndEnabled || _robot == null || !_robot.CanParticipate || _mergePlaying) return;
             if (_collisionVisuals == null)
             {
                 if (_iconRenderer == null || _iconRenderer.sprite == null) return;
@@ -283,6 +423,95 @@ namespace GameLogic
         {
             if (_host != null && _host.IsFrozen) return;
             AdvanceCollisionFeedback(Time.deltaTime);
+            AdvanceMergeFeedback(Time.unscaledDeltaTime);
+        }
+
+        internal void AdvanceMergeFeedback(float deltaTime)
+        {
+            if (!_mergePlaying) return;
+            _mergeElapsed += Mathf.Max(0f, deltaTime);
+            var converge = Mathf.Clamp01(_mergeElapsed / MergeConvergeDuration);
+            if (_mergeSourceGhost != null)
+            {
+                _mergeSourceGhost.transform.position = Vector3.Lerp(_mergeSourceStart, transform.position,
+                    Mathf.SmoothStep(0f, 1f, converge));
+                if (converge >= 1f) DestroyMergeObject(ref _mergeSourceGhost);
+            }
+            float scale;
+            if (_mergeElapsed <= MergeConvergeDuration)
+                scale = Mathf.Lerp(0.75f, 1.15f, Mathf.SmoothStep(0f, 1f, converge));
+            else
+                scale = Mathf.Lerp(1.15f, 1f, Mathf.SmoothStep(0f, 1f,
+                    (_mergeElapsed - MergeConvergeDuration) / (MergePopDuration - MergeConvergeDuration)));
+            ApplyMergeVisuals(scale, Vector3.Lerp(_mergeStartOffset, Vector3.zero, converge));
+            ApplyMergeStar(Mathf.Clamp01((_mergeElapsed - 0.08f) / 0.4f));
+            UpdateMergeRing(Mathf.Clamp01(_mergeElapsed / 0.5f));
+            if (_mergeElapsed >= MergeTotalDuration) ResetMergeFeedback();
+        }
+
+        private void ApplyMergeVisuals(float scale, Vector3 offset)
+        {
+            if (_mergeVisuals == null) return;
+            foreach (var visual in _mergeVisuals)
+            {
+                if (visual.Transform == null) continue;
+                visual.Transform.localPosition = visual.Position + offset;
+                visual.Transform.localScale = new Vector3(visual.Scale.x * scale, visual.Scale.y * scale, visual.Scale.z);
+            }
+        }
+
+        private void ApplyMergeStar(float progress)
+        {
+            if (_mergeStar == null) return;
+            var rise = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / 0.65f));
+            var bounce = progress < 0.65f ? Mathf.Lerp(0.5f, 1.2f, rise) :
+                Mathf.Lerp(1.2f, 1f, Mathf.SmoothStep(0f, 1f, (progress - 0.65f) / 0.35f));
+            _mergeStar.transform.localPosition = _mergeStarPosition + Vector3.down * (0.07f * (1f - rise));
+            _mergeStar.transform.localScale = _mergeStarScale * bounce;
+            _mergeStar.color = new Color(1f, Mathf.Lerp(0.65f, 1f, progress), Mathf.Lerp(0.15f, 1f, progress), progress);
+        }
+
+        private void UpdateMergeRing(float progress)
+        {
+            if (_mergeRingRenderer == null || _mergeRingPoints == null) return;
+            var expansion = Mathf.Lerp(0.98f, 1.18f, Mathf.SmoothStep(0f, 1f, progress));
+            for (var i = 0; i < _mergeRingPoints.Length; i++)
+                _mergeRingRenderer.SetPosition(i,
+                    _mergeRingCenter + (_mergeRingPoints[i] - _mergeRingCenter) * expansion);
+            var color = RobotLevelStyle.FrameColorForLevel(_robot?.Level ?? 1);
+            color.a = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((progress - 0.35f) / 0.65f));
+            _mergeRingRenderer.startColor = _mergeRingRenderer.endColor = color;
+        }
+
+        private void ResetMergeFeedback()
+        {
+            if (_mergeVisuals != null) ApplyMergeVisuals(1f, Vector3.zero);
+            if (_mergeStar != null)
+            {
+                _mergeStar.transform.localPosition = _mergeStarPosition;
+                _mergeStar.transform.localScale = _mergeStarScale;
+                _mergeStar.color = Color.white;
+            }
+            _mergePlaying = false;
+            _mergeElapsed = 0f;
+            _mergeVisuals = null;
+            _mergeStar = null;
+            DestroyMergeObject(ref _mergeSourceGhost);
+            DestroyMergeObject(ref _mergeRing);
+            _mergeRingRenderer = null;
+            _mergeRingPoints = null;
+            if (_mergeRingMaterial != null)
+            {
+                if (Application.isPlaying) Destroy(_mergeRingMaterial); else DestroyImmediate(_mergeRingMaterial);
+                _mergeRingMaterial = null;
+            }
+        }
+
+        private static void DestroyMergeObject(ref GameObject instance)
+        {
+            if (instance == null) return;
+            if (Application.isPlaying) Destroy(instance); else DestroyImmediate(instance);
+            instance = null;
         }
 
         private void AdvanceCollisionFeedback(float deltaTime)
@@ -319,7 +548,7 @@ namespace GameLogic
             ApplyCollisionScale(1f);
         }
 
-        private void OnDisable() { ResetCollisionFeedback(); }
+        private void OnDisable() { ResetCollisionFeedback(); ResetMergeFeedback(); }
 
         private void Update()
         {

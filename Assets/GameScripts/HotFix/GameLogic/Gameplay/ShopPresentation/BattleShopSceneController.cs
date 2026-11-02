@@ -408,7 +408,7 @@ namespace GameLogic
                 // 同步通知可以终局；已提交结果仍为成功，不激活已清理对局的视图。
                 if (this == null || Context != context || context.IsEnded || robot.IsRemoved) return ShopOperationResult.Success;
                 var instance = existing != null ? existing : prepared;
-                BindDeployedRobotView(context, robot, instance, target);
+                BindDeployedRobotView(context, robot, instance, target, existing == null);
                 prepared = null;
                 return ShopOperationResult.Success;
             }
@@ -418,7 +418,7 @@ namespace GameLogic
         }
 
         private void BindDeployedRobotView(BattleShopContext context, RobotEntity robot, GameObject instance,
-            BoardPlacementTarget target)
+            BoardPlacementTarget target, bool playPlacementFeedback = false)
         {
             var view = instance.GetComponent<RobotView>();
             // Bind 会启用碰撞体；双方同步同一套碰撞、视图和战斗注册流程。
@@ -432,6 +432,7 @@ namespace GameLogic
             _views[robot.InstanceId] = instance;
             instance.SetActive(true);
             view.Render(robot);
+            if (playPlacementFeedback) view.PlayPlacementFeedback();
             SyncRobotCollisionMode(view, robot.Side);
             ResolveRobotPlacementOverlap(view, robot.Side);
             _combat?.SyncRobots();
@@ -476,6 +477,8 @@ namespace GameLogic
                 view.ApplyBoardScale(target.Board);
                 _views.Add(instanceId, prepared);
                 prepared.SetActive(true);
+                view.Render(robot);
+                view.PlayPlacementFeedback();
                 SyncRobotCollisionMode(view, robot.Side);
                 ResolveRobotPlacementOverlap(view, robot.Side);
                 _combat?.SyncRobots();
@@ -596,10 +599,15 @@ namespace GameLogic
         private void OnRobotMerged(RobotMergeSnapshot snapshot)
         {
             if (Context == null || Context.BattleId != snapshot.BattleId || Context.IsEnded) return;
+            Vector3? sourcePosition = null;
+            if (snapshot.Source.Kind == RobotDragSourceKind.OwnedRobot &&
+                _views.TryGetValue(snapshot.Source.InstanceId, out var sourceView) && sourceView != null)
+                sourcePosition = sourceView.transform.position;
             OnShopChanged((int)snapshot.Side);
             GameObject view;
             if (_views.TryGetValue(snapshot.TargetInstanceId, out view) && view != null)
-                view.GetComponent<RobotView>()?.PlayMergeFeedback();
+                view.GetComponent<RobotView>()?.PlayMergeFeedback(sourcePosition, snapshot.PreviousLevel, snapshot.Level);
+            if (snapshot.Side == BattleSide.Player) HapticFeedbackService.PlayMergePulse();
         }
 
         public void EndBattle()

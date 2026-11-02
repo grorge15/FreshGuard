@@ -54,6 +54,17 @@ namespace GameLogic.Tests
                         "Cell_" + cell.Column + "_" + cell.Row)).ToArray();
                     var cellPositions = cells.Select(cell => cell.position).ToArray();
 
+                    view.PlayPlacementFeedback();
+                    Assert.Less(icon.localScale.x, initialScale.x);
+                    view.PlayCollisionFeedback();
+                    var collisionPlaying = typeof(RobotView).GetField("_collisionPlaying",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsFalse((bool)collisionPlaying.GetValue(view),
+                        "落位或合成回弹期间不能叠加碰撞缩放。");
+                    view.AdvanceMergeFeedback(0.63f);
+                    Assert.AreEqual(initialScale, icon.localScale,
+                        "落位期间受到球碰撞后仍必须恢复原始尺寸。");
+
                     view.PlayCollisionFeedback();
                     Advance(view, 0.055f);
                     Assert.Greater(icon.localScale.x, initialScale.x * 1.05f);
