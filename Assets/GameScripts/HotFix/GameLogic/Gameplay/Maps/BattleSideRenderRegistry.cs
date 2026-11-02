@@ -15,7 +15,7 @@ namespace GameLogic
             new Dictionary<Renderer, BattleSideRenderGroup>();
         private readonly Dictionary<Renderer, bool> _originalFlags = new Dictionary<Renderer, bool>();
         private readonly List<Camera> _renderStack = new List<Camera>();
-        private readonly List<Renderer> _removed = new List<Renderer>();
+        private readonly HashSet<Renderer> _affected = new HashSet<Renderer>();
         private Camera _playerCamera;
         private Camera _opponentCamera;
         private bool _subscribed;
@@ -43,40 +43,51 @@ namespace GameLogic
 
         internal void Refresh(BattleSideRenderGroup group)
         {
-            _groups[group] = group.GetComponentsInChildren<Renderer>(true);
-            RebuildOwners();
+            _affected.Clear();
+            if (_groups.TryGetValue(group, out var previous)) CollectAffected(previous);
+            var current = group.GetComponentsInChildren<Renderer>(true);
+            _groups[group] = current;
+            CollectAffected(current);
+            RefreshAffectedOwners();
         }
 
         internal void Detach(BattleSideRenderGroup group)
         {
+            if (!_groups.TryGetValue(group, out var previous)) return;
             _groups.Remove(group);
-            RebuildOwners();
+            _affected.Clear();
+            CollectAffected(previous);
+            RefreshAffectedOwners();
         }
 
-        private void RebuildOwners()
+        private void CollectAffected(Renderer[] renderers)
         {
-            _owners.Clear();
-            foreach (var pair in _groups)
+            foreach (var renderer in renderers) _affected.Add(renderer);
+        }
+
+        private void RefreshAffectedOwners()
+        {
+            // 启用/回收一个动态对象只更新其旧、新子树的并集，不能重扫整张静态棋盘。
+            foreach (var renderer in _affected)
             {
-                var group = pair.Key;
-                if (group == null || !group.isActiveAndEnabled) continue;
-                foreach (var renderer in pair.Value)
+                var owner = renderer != null ? FindOwner(renderer.transform) : null;
+                // 最近的独立子组优先；禁用子组不能回退到祖先。解绑后则允许归还祖先。
+                if (owner != null && owner.Registry == this && owner.isActiveAndEnabled && _groups.ContainsKey(owner))
                 {
-                    if (renderer == null) continue;
-                    // 独立子组优先；禁用的池对象也不能退回祖先组而携带临时隐藏状态。
-                    var owner = FindOwner(renderer.transform);
-                    if (owner == group) _owners[renderer] = group;
+                    _owners[renderer] = owner;
+                    ApplyMask(renderer, owner);
+                }
+                else
+                {
+                    _owners.Remove(renderer);
+                    if (_originalFlags.TryGetValue(renderer, out var original))
+                    {
+                        if (renderer != null) renderer.forceRenderingOff = original;
+                        _originalFlags.Remove(renderer);
+                    }
                 }
             }
-            _removed.Clear();
-            foreach (var pair in _originalFlags)
-                if (!_owners.ContainsKey(pair.Key))
-                {
-                    if (pair.Key != null) pair.Key.forceRenderingOff = pair.Value;
-                    _removed.Add(pair.Key);
-                }
-            foreach (var renderer in _removed) _originalFlags.Remove(renderer);
-            ApplyMask();
+            _affected.Clear();
         }
 
         private static BattleSideRenderGroup FindOwner(Transform node)
@@ -133,19 +144,21 @@ namespace GameLogic
         private void ApplyMask()
         {
             if (_renderStack.Count == 0) return;
+            foreach (var pair in _owners) ApplyMask(pair.Key, pair.Value);
+        }
+
+        private void ApplyMask(Renderer renderer, BattleSideRenderGroup owner)
+        {
+            if (_renderStack.Count == 0 || renderer == null || owner == null) return;
             var camera = _renderStack[_renderStack.Count - 1];
             var isSideCamera = camera == _playerCamera || camera == _opponentCamera;
             var side = camera == _playerCamera ? BattleSide.Player : BattleSide.Opponent;
-            foreach (var pair in _owners)
+            if (!_originalFlags.TryGetValue(renderer, out var original))
             {
-                if (pair.Key == null || pair.Value == null) continue;
-                if (!_originalFlags.TryGetValue(pair.Key, out var original))
-                {
-                    original = pair.Key.forceRenderingOff;
-                    _originalFlags.Add(pair.Key, original);
-                }
-                pair.Key.forceRenderingOff = original || isSideCamera && pair.Value.Side != side;
+                original = renderer.forceRenderingOff;
+                _originalFlags.Add(renderer, original);
             }
+            renderer.forceRenderingOff = original || isSideCamera && owner.Side != side;
         }
 
         private void RestorePending()
@@ -167,9 +180,11 @@ namespace GameLogic
         {
             UnbindCameras();
             var groups = new List<BattleSideRenderGroup>(_groups.Keys);
-            foreach (var group in groups) if (group != null && group.Registry == this) group.Unbind();
+            // 已恢复全部临时标志，批量清理无需为每组反复寻找祖先归属。
             _groups.Clear();
             _owners.Clear();
+            _affected.Clear();
+            foreach (var group in groups) if (group != null && group.Registry == this) group.Unbind();
         }
     }
 }

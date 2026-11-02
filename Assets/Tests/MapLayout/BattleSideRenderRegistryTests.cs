@@ -168,6 +168,74 @@ namespace GameLogic.Tests
             Assert.IsFalse(renderer.forceRenderingOff);
         }
 
+        [Test]
+        public void PoolChurnDoesNotRescanUnrelatedStaticBoard()
+        {
+            var board = Create("StaticBoard");
+            for (var i = 0; i < 600; i++)
+            {
+                var cell = new GameObject("Cell_" + i);
+                cell.transform.SetParent(board.transform);
+                cell.AddComponent<SpriteRenderer>();
+            }
+            Call("RegisterRoot", board, BattleSide.Player);
+            var pooled = Renderer("Pooled", BattleSide.Opponent).gameObject;
+            pooled.SetActive(false);
+            pooled.SetActive(true);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            for (var i = 0; i < 32; i++)
+            {
+                pooled.SetActive(false);
+                pooled.SetActive(true);
+            }
+            watch.Stop();
+            TestContext.WriteLine("64 次对象池切换耗时：" + watch.Elapsed.TotalMilliseconds + "ms");
+            Assert.Less(watch.Elapsed.TotalMilliseconds, 100,
+                "单个对象的回收/启用不应反复扫描 600 个无关的静态格子。");
+        }
+
+        [Test]
+        public void DisabledIndependentChildDoesNotFallBackToAncestorSide()
+        {
+            var parent = Create("Parent");
+            var child = Create("Child");
+            child.transform.SetParent(parent.transform);
+            var renderer = child.AddComponent<SpriteRenderer>();
+            Call("RegisterRoot", parent, BattleSide.Opponent);
+            Call("RegisterRoot", child, BattleSide.Player);
+            child.GetComponent<BattleSideRenderGroup>().enabled = false;
+            Call("OnCameraPreCull", _player);
+            Assert.IsFalse(renderer.forceRenderingOff, "禁用独立子组时不能按祖先阵营隐藏。");
+            Call("OnCameraPostRender", _player);
+            Call("UnregisterRoot", child);
+            Call("OnCameraPreCull", _player);
+            Assert.IsTrue(renderer.forceRenderingOff, "解绑子组后应重新归属祖先。");
+            Call("OnCameraPostRender", _player);
+        }
+
+        [Test]
+        public void ReparentedRendererMovesToNewSideAndPreservesOriginalHiddenFlag()
+        {
+            var player = Create("PlayerRoot");
+            var opponent = Create("OpponentRoot");
+            var child = Create("MovingRenderer");
+            child.transform.SetParent(player.transform);
+            var renderer = child.AddComponent<SpriteRenderer>();
+            Call("RegisterRoot", player, BattleSide.Player);
+            Call("RegisterRoot", opponent, BattleSide.Opponent);
+            Call("OnCameraPreCull", _player);
+            child.transform.SetParent(opponent.transform);
+            Assert.IsTrue(renderer.forceRenderingOff);
+            Call("OnCameraPostRender", _player);
+            Assert.IsFalse(renderer.forceRenderingOff);
+            renderer.forceRenderingOff = true;
+            Call("OnCameraPreCull", _player);
+            Call("UnregisterRoot", opponent);
+            Assert.IsTrue(renderer.forceRenderingOff, "移除登记也必须保留原有隐藏状态。");
+            Call("OnCameraPostRender", _player);
+            Assert.IsTrue(renderer.forceRenderingOff);
+        }
+
         private SpriteRenderer Renderer(string name, BattleSide side)
         {
             var renderer = Create(name).AddComponent<SpriteRenderer>();
