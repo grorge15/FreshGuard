@@ -591,6 +591,30 @@ PrefabInstance:
       propertyPath: m_Name
       value: BattleShopUI
       objectReference: {fileID: 0}
+    - target: {fileID: 2383778795266920369, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2383778795266920369, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2383778795266920369, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2383778795266920369, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2383778795266920369, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2383778795266920369, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3518249346223234436, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
       propertyPath: m_Pivot.x
       value: 0.5

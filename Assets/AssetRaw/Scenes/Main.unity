@@ -215,6 +215,7 @@ GameObject:
   - component: {fileID: 164109969}
   - component: {fileID: 164109971}
   - component: {fileID: 164109972}
+  - component: {fileID: 164109973}
   m_Layer: 0
   m_Name: BattleShop
   m_TagString: Untagged
@@ -322,6 +323,24 @@ MonoBehaviour:
   - {fileID: 1832132061}
   - {fileID: 1519177349}
   - {fileID: 1519177348}
+  _playerWorldRoot: {fileID: 1207411599}
+  _opponentWorldRoot: {fileID: 1140416279}
+  _renderRegistry: {fileID: 164109973}
+  _opponentMaxSizeRatio: 1
+  _playerClearColor: {r: 0.12941177, g: 0.68235296, b: 0.84705883, a: 1}
+  _opponentClearColor: {r: 0.91764706, g: 0.69803923, b: 0.30980393, a: 1}
+--- !u!114 &164109973
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 164109968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1434a0a728c36b6429182635beb21109, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &207628316
 GameObject:
   m_ObjectHideFlags: 0
