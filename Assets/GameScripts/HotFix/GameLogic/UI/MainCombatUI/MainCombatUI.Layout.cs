@@ -11,6 +11,8 @@ namespace GameLogic
         private Vector3 _shopBaseScale;
         private Vector3 _infoBasePosition;
         private Vector3 _infoBaseScale;
+        private Vector2 _shopDesignSize;
+        private Vector2 _infoUnitDesignSize;
         private readonly Vector3[] _layoutCorners = new Vector3[4];
 
         public float ScreenLayoutScale => Canvas.rootCanvas.scaleFactor;
@@ -47,22 +49,61 @@ namespace GameLogic
         }
 
         public Rect GetShopScreenRect() => GetScreenRect(Shop.rectTransform);
+        public Rect GetInfoScreenRect() => GetScreenRect(Info.rectTransform);
+
+        public Vector2 ShopDesignSize
+        {
+            get
+            {
+                if (_shopDesignSize == Vector2.zero)
+                    _shopDesignSize = GetDesignSize(_layoutShop, _shopBaseScale);
+                return _shopDesignSize;
+            }
+        }
+
+        public bool TryCalculateShopLayout(Rect safeArea, out Rect shopScreenRect, out Vector3 position, out Vector3 scale)
+        {
+            shopScreenRect = default;
+            position = scale = default;
+            if (_layoutShop == null || safeArea.width <= 24f * ScreenLayoutScale || safeArea.height <= 0f) return false;
+            // 固定设计尺寸，避免从已移动节点的投影四角相减引入舍入漂移。
+            var baseline = ShopDesignSize * ScreenLayoutScale;
+            if (baseline.x <= 0f) return false;
+            var fit = Mathf.Min(1f, (safeArea.width - 24f * ScreenLayoutScale) / baseline.x);
+            scale = new Vector3(_shopBaseScale.x * fit, _shopBaseScale.y * fit, _shopBaseScale.z);
+            var size = baseline * fit;
+            shopScreenRect = new Rect(safeArea.center.x - size.x * 0.5f, safeArea.yMin + 12f * ScreenLayoutScale, size.x, size.y);
+            return shopScreenRect.yMax < safeArea.yMax && TryPreparePosition(_layoutShop, scale, shopScreenRect.center, out position);
+        }
+
+        public bool TryCalculateInfoLayout(Rect screenRect, out Vector3 position, out Vector3 scale)
+        {
+            position = scale = default;
+            if (_layoutInfo == null || screenRect.width <= 0 || screenRect.height <= 0) return false;
+            if (_infoUnitDesignSize == Vector2.zero)
+                _infoUnitDesignSize = GetDesignSize(_layoutInfo, Vector3.one);
+            var baseline = _infoUnitDesignSize * ScreenLayoutScale;
+            if (baseline.x <= 0 || baseline.y <= 0) return false;
+            var fit = Mathf.Min(screenRect.width / baseline.x, screenRect.height / baseline.y);
+            scale = new Vector3(fit, fit, _infoBaseScale.z);
+            return TryPreparePosition(_layoutInfo, scale, screenRect.center, out position);
+        }
+
+        public void ApplyScreenLayout(Vector3 shopPosition, Vector3 shopScale, Vector3 infoPosition, Vector3 infoScale)
+        {
+            _layoutShop.localScale = shopScale;
+            _layoutShop.localPosition = shopPosition;
+            _layoutInfo.localScale = infoScale;
+            _layoutInfo.localPosition = infoPosition;
+        }
 
         public bool TryLayoutShop(Rect safeArea, out Rect shopScreenRect)
         {
-            shopScreenRect = default;
-            if (_layoutShop == null || safeArea.width <= 24f * ScreenLayoutScale || safeArea.height <= 0f) return false;
-            _layoutShop.localScale = _shopBaseScale;
-            var baseline = GetScreenRect(_layoutShop);
-            if (baseline.width <= 0f) return false;
-            var fit = Mathf.Min(1f, (safeArea.width - 24f * ScreenLayoutScale) / baseline.width);
-            _layoutShop.localScale = new Vector3(_shopBaseScale.x * fit, _shopBaseScale.y * fit, _shopBaseScale.z);
-            shopScreenRect = GetScreenRect(_layoutShop);
-            var delta = new Vector2(safeArea.center.x - shopScreenRect.center.x,
-                safeArea.yMin + 12f * ScreenLayoutScale - shopScreenRect.yMin);
-            if (!MoveInScreen(_layoutShop, delta)) return false;
-            shopScreenRect = GetScreenRect(_layoutShop);
-            return shopScreenRect.yMax < safeArea.yMax;
+            Vector3 position, scale;
+            if (!TryCalculateShopLayout(safeArea, out shopScreenRect, out position, out scale)) return false;
+            _layoutShop.localScale = scale;
+            _layoutShop.localPosition = position;
+            return true;
         }
 
         public bool TryLayoutInfo(Camera sceneCamera, Bounds upper, Bounds lower, Rect safeArea)
@@ -93,6 +134,46 @@ namespace GameLogic
                 max = Vector2.Max(max, point);
             }
             return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        }
+
+        private Rect GetScreenRect(RectTransform rect, Vector3 localScale)
+        {
+            var min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+            var max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+            for (var i = 0; i < 4; i++)
+            {
+                var corner = new Vector3((i & 1) == 0 ? rect.rect.xMin : rect.rect.xMax,
+                    (i & 2) == 0 ? rect.rect.yMin : rect.rect.yMax, 0);
+                var world = rect.parent.TransformPoint(rect.localPosition + rect.localRotation * Vector3.Scale(corner, localScale));
+                var screen = RectTransformUtility.WorldToScreenPoint(LayoutEventCamera, world);
+                min = Vector2.Min(min, screen);
+                max = Vector2.Max(max, screen);
+            }
+            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        }
+
+        private Vector2 GetDesignSize(RectTransform rect, Vector3 localScale)
+        {
+            var x = rect.localRotation * Vector3.Scale(Vector3.right * rect.rect.width, localScale);
+            var y = rect.localRotation * Vector3.Scale(Vector3.up * rect.rect.height, localScale);
+            // 仅累计到根Canvas的线性变换，不让节点位置或UI相机浮点投影参与参考尺寸。
+            for (var parent = rect.parent; parent != null && parent != Canvas.rootCanvas.transform; parent = parent.parent)
+            {
+                x = parent.localRotation * Vector3.Scale(x, parent.localScale);
+                y = parent.localRotation * Vector3.Scale(y, parent.localScale);
+            }
+            return new Vector2(Mathf.Abs(x.x) + Mathf.Abs(y.x), Mathf.Abs(x.y) + Mathf.Abs(y.y));
+        }
+
+        private bool TryPreparePosition(RectTransform target, Vector3 scale, Vector2 screenCenter, out Vector3 position)
+        {
+            var delta = screenCenter - GetScreenRect(target, scale).center;
+            var pivot = RectTransformUtility.WorldToScreenPoint(LayoutEventCamera, target.position);
+            Vector2 local;
+            var success = RectTransformUtility.ScreenPointToLocalPointInRectangle(target.parent as RectTransform,
+                pivot + delta, LayoutEventCamera, out local);
+            position = new Vector3(local.x, local.y, target.localPosition.z);
+            return success;
         }
 
         private bool MoveInScreen(RectTransform target, Vector2 delta)

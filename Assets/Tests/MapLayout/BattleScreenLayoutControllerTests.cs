@@ -67,8 +67,8 @@ namespace GameLogic.Tests
             yield return _layout.BindAsync(_window, CancellationToken.None).ToCoroutine();
             Assert.IsTrue(_layout.IsBound);
             Assert.That(_layout.PlayerBounds.max.x, Is.GreaterThanOrEqualTo(3), "未激活的塔必须参与边界。");
-            AssertBounds(_layout.PlayerBounds);
-            AssertBounds(_layout.OpponentBounds);
+            AssertBounds(_layout.PlayerBounds, _camera, _layout.PlayerScreenRect);
+            AssertBounds(_layout.OpponentBounds, _layout.OpponentCamera, _layout.OpponentScreenRect);
             var adaptedPosition = _camera.transform.position;
             var adaptedSize = _camera.orthographicSize;
             Assert.IsTrue(_layout.RefreshLayout());
@@ -83,6 +83,10 @@ namespace GameLogic.Tests
             Assert.IsTrue(_placement.TryGetPointerCell(_camera.WorldToScreenPoint(world), out board, out hit));
             Assert.AreSame(_player, board);
             Assert.AreEqual(cell, hit);
+            var enemyWorld = _opponent.GetCellWorldPosition(cell);
+            Assert.IsTrue(_placement.TryGetPointerCell(_layout.OpponentCamera.WorldToScreenPoint(enemyWorld), out board, out hit));
+            Assert.AreSame(_opponent, board);
+            Assert.AreEqual(cell, hit);
             Vector3 ignored;
             Assert.IsFalse(_placement.TryGetPointerWorldPosition(Vector2.zero, out ignored));
             Set(_placement, "_inputScreenSize", Vector2Int.zero);
@@ -90,11 +94,41 @@ namespace GameLogic.Tests
             Assert.IsFalse(_placement.TryGetPointerCell(_camera.WorldToScreenPoint(world), out board, out hit));
             Assert.IsTrue(_layout.RefreshLayout());
             Assert.IsTrue(_placement.IsReady);
+            var shopRect = _window.GetShopScreenRect();
+            var infoRect = _window.GetInfoScreenRect();
+            Set(_layout, "_opponentMaxSizeRatio", 0f);
+            Assert.IsFalse(_layout.RefreshLayout());
+            Assert.AreEqual(shopRect, _window.GetShopScreenRect(), "无效布局不能部分修改商店。");
+            Assert.AreEqual(infoRect, _window.GetInfoScreenRect());
+            Assert.AreEqual(adaptedPosition, _camera.transform.position);
+            Assert.IsFalse(_placement.IsReady);
+            Set(_layout, "_opponentMaxSizeRatio", 1f);
+            Assert.IsTrue(_layout.RefreshLayout());
             _layout.Unbind();
             _layout.Unbind();
             Assert.That(_camera.transform.position, Is.EqualTo(originalPosition));
             Assert.That(_camera.orthographicSize, Is.EqualTo(originalSize));
             Assert.IsTrue(_placement.TryGetPointerWorldPosition(Vector2.zero, out ignored));
+        }
+
+        [UnityTest]
+        public IEnumerator RebindingPreservesIndependentDynamicSideAndFinalUnbindClearsIt()
+        {
+            yield return _layout.BindAsync(_window, CancellationToken.None).ToCoroutine();
+            var registry = _root.GetComponent<BattleSideRenderRegistry>();
+            var independent = Child("IndependentOpponent").AddComponent<SpriteRenderer>();
+            independent.sprite = _sprite;
+            registry.RegisterRoot(independent.gameObject, BattleSide.Opponent);
+            yield return _layout.BindAsync(_window, CancellationToken.None).ToCoroutine();
+            var group = independent.GetComponent<BattleSideRenderGroup>();
+            Assert.AreSame(registry, group.Registry, "同局重绑不能丢失独立球和现存动态对象的归属。");
+            typeof(BattleSideRenderRegistry).GetMethod("OnCameraPreCull", PRIVATE).Invoke(registry, new object[] { _camera });
+            Assert.IsTrue(independent.forceRenderingOff);
+            typeof(BattleSideRenderRegistry).GetMethod("OnCameraPostRender", PRIVATE).Invoke(registry, new object[] { _camera });
+            Assert.IsFalse(independent.forceRenderingOff);
+            _layout.Unbind();
+            Assert.IsNull(group.Registry);
+            Assert.IsFalse(independent.forceRenderingOff);
         }
 
         [UnityTest]
@@ -130,13 +164,12 @@ namespace GameLogic.Tests
             Assert.AreEqual(original, _camera.transform.position);
         }
 
-        private void AssertBounds(Bounds bounds)
+        private void AssertBounds(Bounds bounds, Camera camera, Rect area)
         {
             for (var i = 0; i < 4; i++)
             {
-                var point = _camera.WorldToScreenPoint(new Vector3((i & 1) == 0 ? bounds.min.x : bounds.max.x,
+                var point = camera.WorldToScreenPoint(new Vector3((i & 1) == 0 ? bounds.min.x : bounds.max.x,
                     (i & 2) == 0 ? bounds.min.y : bounds.max.y, 0));
-                var area = _layout.AvailableScreenRect;
                 Assert.That(point.x, Is.InRange(area.xMin - 0.01f, area.xMax + 0.01f));
                 Assert.That(point.y, Is.InRange(area.yMin - 0.01f, area.yMax + 0.01f));
             }

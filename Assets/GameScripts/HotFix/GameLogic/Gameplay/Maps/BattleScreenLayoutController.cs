@@ -7,7 +7,7 @@ namespace GameLogic
 {
     /// <summary>只控制显示相机与窗口区域，保留世界玩法和物理布局。</summary>
     [DisallowMultipleComponent]
-    public sealed class BattleScreenLayoutController : MonoBehaviour
+    public sealed partial class BattleScreenLayoutController : MonoBehaviour
     {
         [SerializeField] private PlacementController _placement;
         [SerializeField] private PlacementBoardView _playerBoard;
@@ -37,17 +37,25 @@ namespace GameLogic
 
         public async UniTask BindAsync(MainCombatUI window, CancellationToken token)
         {
-            Unbind();
+            // 同局重绑保留已创建动态对象的所属方，只替换相机和UI绑定。
+            Unbind(false);
             if (window == null || window.IsDestroyed || _placement == null ||
                 _playerBoard == null || _opponentBoard == null || !_playerBoard.IsInitialized || !_opponentBoard.IsInitialized)
+            {
+                if (_renderRegistry != null) _renderRegistry.Clear();
                 throw new InvalidOperationException("屏幕适配缺少就绪的窗口、棋盘或摆放控制器。");
+            }
             _sceneCamera = _placement.SceneCamera;
             if (_sceneCamera == null || !_sceneCamera.orthographic ||
                 Quaternion.Angle(_sceneCamera.transform.rotation, Quaternion.identity) > 0.01f)
+            {
+                if (_renderRegistry != null) _renderRegistry.Clear();
                 throw new InvalidOperationException("屏幕适配需要正对世界XY平面的正交相机。");
+            }
             _originalPosition = _sceneCamera.transform.position;
             _originalSize = _sceneCamera.orthographicSize;
             _originalRect = _sceneCamera.rect;
+            _cameraState = new CameraState(_sceneCamera);
             var generation = ++_bindingGeneration;
             try
             {
@@ -62,6 +70,9 @@ namespace GameLogic
                 if (generation != _bindingGeneration || _window != window || window.IsDestroyed || window.gameObject == null)
                     throw new OperationCanceledException(token);
                 Canvas.ForceUpdateCanvases();
+                if (!BattleScreenLayout.TryCalculateReference(_playerBounds, _opponentBounds, window.ShopDesignSize,
+                    out _referencePixelsPerUnit, out _referenceInfoScale))
+                    throw new InvalidOperationException("无法从16:9战场和Prefab基准计算参考显示比例。");
                 if (!RefreshLayout()) throw new InvalidOperationException("屏幕适配没有可容纳战场与信息栏的有效区域。");
             }
             catch
@@ -77,73 +88,47 @@ namespace GameLogic
             if (_window.IsDestroyed || _window.gameObject == null) { Unbind(); return; }
             if (!_hasLayout) return;
             if (_lastScreenSize == new Vector2Int(Screen.width, Screen.height) && _lastSafeArea == Screen.safeArea &&
-                Mathf.Approximately(_lastCanvasScale, _window.ScreenLayoutScale) && _lastShopRect == _window.GetShopScreenRect()) return;
+                Mathf.Approximately(_lastCanvasScale, _window.ScreenLayoutScale) && _lastShopRect == _window.GetShopScreenRect() &&
+                _lastInfoRect == _window.GetInfoScreenRect()) return;
             RefreshLayout();
         }
 
         public bool RefreshLayout()
         {
-            if (_window == null || Screen.width <= 0 || Screen.height <= 0) return false;
-            var screenSize = new Vector2(Screen.width, Screen.height);
-            var safe = BattleScreenLayout.Intersect(new Rect(Vector2.zero, screenSize), Screen.safeArea);
-            if (safe.width <= 0 || safe.height <= 0) return false;
-            var window = _window;
-            var generation = _bindingGeneration;
-            window.Shop.Drag?.Cancel();
-            // CancelInteraction 会同步通知监听器，监听器可以终局、销毁窗口或开始新绑定。
-            if (_window != window || generation != _bindingGeneration || window.IsDestroyed || window.gameObject == null) return false;
-            _placement.CancelDrag();
-            Rect shop;
-            if (!_window.TryLayoutShop(safe, out shop)) return false;
-            var margin = 16f * _window.ScreenLayoutScale;
-            var available = Rect.MinMaxRect(safe.xMin + margin, Mathf.Max(safe.yMin, shop.yMax) + margin,
-                safe.xMax - margin, safe.yMax - margin);
-            Vector2 center;
-            float size;
-            if (!BattleScreenLayout.TryCalculate(screenSize, available, _combinedBounds, out center, out size)) return false;
-            var previousPosition = _sceneCamera.transform.position;
-            var previousSize = _sceneCamera.orthographicSize;
-            var previousRect = _sceneCamera.rect;
-            _sceneCamera.rect = new Rect(0, 0, 1, 1);
-            _sceneCamera.orthographicSize = size;
-            _sceneCamera.transform.position = new Vector3(center.x, center.y, _originalPosition.z);
-            if (!_window.TryLayoutInfo(_sceneCamera, _opponentBounds, _playerBounds, safe))
-            {
-                _sceneCamera.transform.position = previousPosition;
-                _sceneCamera.orthographicSize = previousSize;
-                _sceneCamera.rect = previousRect;
-                return false;
-            }
-            _availableScreenRect = available;
-            _placement.SetScreenInputRect(available);
-            _lastScreenSize = new Vector2Int(Screen.width, Screen.height);
-            _lastSafeArea = Screen.safeArea;
-            _lastCanvasScale = _window.ScreenLayoutScale;
-            _lastShopRect = _window.GetShopScreenRect();
-            _hasLayout = true;
-            return true;
+            return RefreshSplitLayout();
         }
 
-        public void Unbind()
+        public void Unbind() => Unbind(true);
+
+        private void Unbind(bool clearRenderGroups)
         {
             ++_bindingGeneration;
             var window = _window;
             _window = null;
+            if (_renderRegistry != null)
+            {
+                if (clearRenderGroups) _renderRegistry.Clear();
+                else _renderRegistry.UnbindCameras();
+            }
             if (window != null)
             {
                 _placement?.CancelDrag();
-                if (_placement != null) _placement.ClearScreenInputRect();
+                if (_placement != null) _placement.ClearScreenViews();
+                DestroyCamera(ref _opponentCamera);
+                DestroyCamera(ref _backgroundCamera);
                 if (_sceneCamera != null)
                 {
                     _sceneCamera.transform.position = _originalPosition;
                     _sceneCamera.orthographicSize = _originalSize;
                     _sceneCamera.rect = _originalRect;
+                    _cameraState.Restore(_sceneCamera);
                 }
                 window.DetachScreenLayout(this);
             }
             _hasLayout = false;
             _sceneCamera = null;
             _availableScreenRect = default;
+            _layout = default;
         }
 
         private static Bounds CalculateBounds(PlacementBoardView board, SpriteRenderer[] renderers)

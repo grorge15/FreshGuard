@@ -19,7 +19,7 @@ namespace GameLogic.Tests
     public sealed class BattleScreenPlaybackTests
     {
         [UnityTest]
-        public IEnumerator RealBattleFitsThreeResolutionsAndCancelsReentrantDragSafely()
+        public IEnumerator RealBattleFitsSplitViewsAndCancelsReentrantDragSafely()
         {
             var host = Object.FindObjectOfType<BattleShopSceneController>();
             if (host == null || ConfigSystem.Instance.Tables == null || UIModule.UIRoot == null)
@@ -38,7 +38,12 @@ namespace GameLogic.Tests
             var camera = host.Placement.SceneCamera;
             var original = camera.transform.position;
             var originalSize = camera.orthographicSize;
-            var resolutions = new[] { new Vector2Int(1080, 1920), new Vector2Int(1080, 2380), new Vector2Int(540, 1190) };
+            var originalRect = camera.rect;
+            var originalColor = camera.backgroundColor;
+            var originalDepth = camera.depth;
+            var originalMask = camera.cullingMask;
+            var resolutions = new[] { new Vector2Int(1080, 1920), new Vector2Int(1080, 2160),
+                new Vector2Int(1080, 2380), new Vector2Int(540, 1190), new Vector2Int(1080, 3000) };
             using (var gameView = new GameViewResolutionScope())
             {
                 yield return host.InitializeAsync().ToCoroutine();
@@ -56,8 +61,9 @@ namespace GameLogic.Tests
                 var positions = Array.ConvertAll(boards, board => board.transform.position);
                 var scales = Array.ConvertAll(boards, board => board.transform.localScale);
                 var reports = new List<string>();
-                Vector3 longPosition = default;
-                float longSize = 0;
+                Vector2 playerReference = default;
+                Vector2 longPlayer = default, longOpponent = default;
+                Vector2 previousOpponent = default;
                 for (var index = 0; index < resolutions.Length; index++)
                 {
                     var resolution = resolutions[index];
@@ -68,9 +74,35 @@ namespace GameLogic.Tests
                     Assert.AreEqual(resolution.y, Screen.height);
                     yield return null;
                     yield return null;
-                    AssertProjected(camera, layout.PlayerBounds, layout.AvailableScreenRect);
-                    AssertProjected(camera, layout.OpponentBounds, layout.AvailableScreenRect);
-                    Assert.That(layout.AvailableScreenRect.yMin, Is.GreaterThan(host.CombatWindow.GetShopScreenRect().yMax));
+                    Assert.That(host.CombatWindow.Info.rectTransform.localScale.x, Is.EqualTo(1f).Within(0.00001f),
+                        "宽度充足时信息栏应保持Prefab的1倍缩放。");
+                    AssertProjected(camera, layout.PlayerBounds, layout.PlayerScreenRect);
+                    AssertProjected(layout.OpponentCamera, layout.OpponentBounds, layout.OpponentScreenRect);
+                    var playerPixels = layout.Layout.PlayerTarget.size;
+                    var opponentPixels = layout.Layout.OpponentTarget.size;
+                    if (index == 0) playerReference = playerPixels;
+                    if (resolution.x == 1080)
+                    {
+                        Assert.That(Vector2.Distance(playerReference, playerPixels), Is.LessThan(0.02f), "同宽长屏我方显示大小不变。");
+                        Assert.That(opponentPixels.x + 0.02f, Is.GreaterThanOrEqualTo(previousOpponent.x));
+                        Assert.That(opponentPixels.y + 0.02f, Is.GreaterThanOrEqualTo(previousOpponent.y));
+                        previousOpponent = opponentPixels;
+                    }
+                    Assert.That(opponentPixels.x, Is.LessThanOrEqualTo(playerPixels.x + 0.02f));
+                    Assert.That(opponentPixels.y, Is.LessThanOrEqualTo(playerPixels.y + 0.02f));
+                    Assert.That(layout.Layout.PlayerTarget.yMin - host.CombatWindow.GetShopScreenRect().yMax,
+                        Is.EqualTo(16 * host.CombatWindow.ScreenLayoutScale).Within(0.05f));
+                    if (index == 2) { longPlayer = playerPixels; longOpponent = opponentPixels; }
+                    if (index == 3)
+                    {
+                        Assert.That(Vector2.Distance(longPlayer * 0.5f, playerPixels), Is.LessThan(0.02f));
+                        Assert.That(Vector2.Distance(longOpponent * 0.5f, opponentPixels), Is.LessThan(0.02f));
+                    }
+                    if (index == 4)
+                    {
+                        Assert.That(Mathf.Min(playerPixels.x / opponentPixels.x, playerPixels.y / opponentPixels.y), Is.EqualTo(1).Within(0.001f));
+                        Assert.That(layout.Layout.OpponentTarget.yMax, Is.LessThan(layout.OpponentScreenRect.yMax - 1));
+                    }
                     var canvas = host.CombatWindow.Canvas.rootCanvas;
                     var uiCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
                     var corners = new Vector3[4];
@@ -78,7 +110,7 @@ namespace GameLogic.Tests
                     var infoBottom = RectTransformUtility.WorldToScreenPoint(uiCamera, corners[0]).y;
                     var infoTop = RectTransformUtility.WorldToScreenPoint(uiCamera, corners[2]).y;
                     Assert.That(infoBottom, Is.GreaterThan(camera.WorldToScreenPoint(layout.PlayerBounds.max).y));
-                    Assert.That(infoTop, Is.LessThan(camera.WorldToScreenPoint(layout.OpponentBounds.min).y));
+                    Assert.That(infoTop, Is.LessThan(layout.OpponentCamera.WorldToScreenPoint(layout.OpponentBounds.min).y));
                     for (var b = 0; b < boards.Length; b++)
                     {
                         Assert.AreEqual(positions[b], boards[b].transform.position);
@@ -86,25 +118,30 @@ namespace GameLogic.Tests
                         var cell = new BoardCoordinate(4, 3);
                         PlacementBoardView hitBoard;
                         BoardCoordinate hit;
-                        Assert.IsTrue(host.Placement.TryGetPointerCell(camera.WorldToScreenPoint(boards[b].GetCellWorldPosition(cell)), out hitBoard, out hit));
+                        var boardCamera = host.Placement.GetSceneCamera(host.Placement.GetBoardSide(boards[b]));
+                        Assert.IsTrue(host.Placement.TryGetPointerCell(boardCamera.WorldToScreenPoint(boards[b].GetCellWorldPosition(cell)), out hitBoard, out hit));
                         Assert.AreSame(boards[b], hitBoard);
                         Assert.AreEqual(cell, hit);
                     }
                     var adaptedPosition = camera.transform.position;
                     var adaptedSize = camera.orthographicSize;
                     Assert.IsTrue(layout.RefreshLayout(), "稳定分辨率下应能重复刷新布局。");
-                    Assert.AreEqual(adaptedPosition, camera.transform.position);
-                    Assert.AreEqual(adaptedSize, camera.orthographicSize);
-                    if (index == 1) { longPosition = adaptedPosition; longSize = adaptedSize; }
-                    if (index == 2)
-                    {
-                        Assert.That(Vector3.Distance(longPosition, adaptedPosition), Is.LessThan(0.0001f));
-                        Assert.That(adaptedSize, Is.EqualTo(longSize).Within(0.0001f));
-                    }
-                    var screenshot = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/BattleScreen-" + resolution.x + "x" + resolution.y + ".png"));
+                    Assert.AreEqual(adaptedPosition, camera.transform.position, "重复刷新相机位置发生变化：" + resolution);
+                    Assert.AreEqual(adaptedSize, camera.orthographicSize, "重复刷新相机尺寸发生变化：" + resolution);
+                    var screenshot = Path.GetFullPath(Path.Combine(Application.dataPath, "../Library/BattleScreenV2-" + resolution.x + "x" + resolution.y + ".png"));
+                    host.CombatWindow.Notices.Clear();
                     ScreenCapture.CaptureScreenshot(screenshot);
                     for (var frame = 0; frame < 4; frame++) yield return null;
-                    reports.Add(resolution + ": size=" + adaptedSize + ", camera=" + adaptedPosition + ", available=" + layout.AvailableScreenRect);
+                    host.CombatWindow.CurrencyFlight.Clear();
+                    var playerBoard = Array.Find(boards, board => host.Placement.GetBoardSide(board) == BattleSide.Player);
+                    var worldOrigin = playerBoard.GetCellWorldPosition(new BoardCoordinate(4, 3));
+                    host.CombatWindow.CurrencyFlight.Show(worldOrigin, 1);
+                    var coin = host.CombatWindow.CurrencyFlight.transform.Find("FlyingEnergyCoin");
+                    Assert.IsNotNull(coin);
+                    Assert.That(Vector2.Distance(camera.WorldToScreenPoint(worldOrigin),
+                        RectTransformUtility.WorldToScreenPoint(uiCamera, coin.position)), Is.LessThan(0.15f), "飞币应从我方相机投影位置出现。");
+                    host.CombatWindow.CurrencyFlight.Clear();
+                    reports.Add(resolution + ": player=" + layout.Layout.PlayerTarget + ", opponent=" + layout.Layout.OpponentTarget + ", info=" + layout.Layout.InfoTarget);
                 }
                 // 运行中的屏幕变化必须撤销真实商店手势与事务。
                 host.SetFrozen(false);
@@ -123,6 +160,7 @@ namespace GameLogic.Tests
                 Assert.IsTrue(layout.RefreshLayout());
                 var restartPosition = camera.transform.position;
                 var restartSize = camera.orthographicSize;
+                var restartData = DescribeLayout(layout, host.CombatWindow, camera);
                 Assert.IsTrue(host.ShopWindow.Drag.Press(source, -1, Vector2.zero, Time.unscaledTime, new BoardCoordinate(0, 0)), "调整完成后应能再次预留商店手势。");
                 Action<int> endOnCancel = side => { if (host.IsReady && !host.Context.IsBusy) host.EndBattle(); };
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, endOnCancel);
@@ -131,15 +169,24 @@ namespace GameLogic.Tests
                 Assert.IsFalse(layout.IsBound);
                 Assert.AreEqual(original, camera.transform.position);
                 Assert.AreEqual(originalSize, camera.orthographicSize);
+                Assert.AreEqual(originalRect, camera.rect);
+                Assert.AreEqual(originalColor, camera.backgroundColor);
+                Assert.AreEqual(originalDepth, camera.depth);
+                Assert.AreEqual(originalMask, camera.cullingMask);
+                Assert.IsNull(layout.OpponentCamera);
                 yield return host.InitializeAsync().ToCoroutine();
                 Assert.IsTrue(host.IsReady, host.InitializationError?.ToString());
-                Assert.AreEqual(restartPosition, camera.transform.position, "相同输入重新开局应得到相同相机位置。");
-                Assert.AreEqual(restartSize, camera.orthographicSize, "相同输入重新开局应得到相同缩放。");
+                File.WriteAllText(Path.Combine(Application.dataPath, "../Library/BattleScreenV2Restart.txt"),
+                    restartData + "\nAfter restart:\n" + DescribeLayout(layout, host.CombatWindow, camera));
+                // 地图还原/重新应用会使Bounds产生约2e-7世界单位的浮点差，按小于0.001像素比较重开结果。
+                Assert.That(Vector3.Distance(restartPosition, camera.transform.position) * layout.Layout.PlayerPixelsPerUnit,
+                    Is.LessThan(0.001f), "重新开局相机位置应在亚像素精度内一致。");
+                Assert.That(camera.orthographicSize, Is.EqualTo(restartSize).Within(0.000001f), "重新开局缩放应一致。");
                 host.EndBattle();
                 Assert.AreEqual(original, camera.transform.position);
                 Assert.AreEqual(originalSize, camera.orthographicSize);
                 reports.Add("尺寸变化取消预留手势、取消通知内终局、相同输入重开和二次退场恢复：通过。");
-                File.WriteAllLines(Path.Combine(Application.dataPath, "../Library/BattleScreenPlaybackVerification.txt"), reports);
+                File.WriteAllLines(Path.Combine(Application.dataPath, "../Library/BattleScreenV2PlaybackVerification.txt"), reports);
             }
         }
 
@@ -152,6 +199,15 @@ namespace GameLogic.Tests
                 Assert.That(screen.x, Is.InRange(area.xMin - 0.05f, area.xMax + 0.05f));
                 Assert.That(screen.y, Is.InRange(area.yMin - 0.05f, area.yMax + 0.05f));
             }
+        }
+
+        private static string DescribeLayout(BattleScreenLayoutController layout, MainCombatUI window, Camera camera)
+        {
+            return "camera=" + camera.transform.position.ToString("R") + ", size=" + camera.orthographicSize.ToString("R") +
+                ", playerBounds=" + layout.PlayerBounds.ToString("R") + ", opponentBounds=" + layout.OpponentBounds.ToString("R") +
+                ", playerTarget=" + layout.Layout.PlayerTarget.ToString("R") + ", ppu=" + layout.Layout.PlayerPixelsPerUnit.ToString("R") +
+                ", shopDesign=" + window.ShopDesignSize.ToString("R") + ", shop=" + window.GetShopScreenRect().ToString("R") +
+                ", scale=" + window.ScreenLayoutScale.ToString("R");
         }
 
         /// <summary>只在测试期间添加固定像素预设，退出时恢复原选项并移除所加预设。</summary>

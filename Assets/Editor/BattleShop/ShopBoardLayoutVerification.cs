@@ -34,18 +34,27 @@ namespace FreshGuard.Editor
                 RequireReady();
                 var adaptedPosition = camera.transform.position;
                 var adaptedZoom = camera.orthographicSize;
+                var layout = host.GetComponent<BattleScreenLayoutController>();
+                var adaptedEnemyPosition = layout.OpponentCamera.transform.position;
+                var adaptedEnemyZoom = layout.OpponentCamera.orthographicSize;
+                var playerArea = layout.PlayerScreenRect;
+                var opponentArea = layout.OpponentScreenRect;
                 CheckWorld();
                 host.EndBattle();
                 if (camera.rect != viewport || camera.orthographicSize != zoom || camera.transform.position != cameraPosition)
                     throw new InvalidOperationException("退场未恢复相机。");
+                if (layout.OpponentCamera != null) throw new InvalidOperationException("退场未清理敌方相机。");
                 CheckWorld();
                 await host.InitializeAsync();
                 RequireReady();
                 if (camera.transform.position != adaptedPosition || camera.orthographicSize != adaptedZoom)
                     throw new InvalidOperationException("相同屏幕和战场重复初始化的相机结果不一致。");
+                if (layout.OpponentCamera.transform.position != adaptedEnemyPosition || layout.OpponentCamera.orthographicSize != adaptedEnemyZoom ||
+                    layout.PlayerScreenRect != playerArea || layout.OpponentScreenRect != opponentArea)
+                    throw new InvalidOperationException("相同输入重复初始化的敌方相机或输入区域不一致。");
                 CheckWorld();
                 passed = true;
-                details = "相同输入重复开局相机布局一致，棋盘世界位置和比例保持，退场恢复原始相机。";
+                details = "相同输入重复开局双方相机和输入区域一致，棋盘世界位置和比例保持，退场恢复原始相机并清理新增相机。";
 
                 void RequireReady()
                 {

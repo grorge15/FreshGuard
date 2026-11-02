@@ -37,6 +37,12 @@ namespace GameLogic
         private Rect? _screenInputRect;
         private Vector2Int _inputScreenSize;
         private Rect _inputSafeArea;
+        private Camera _playerViewCamera;
+        private Camera _opponentViewCamera;
+        private Rect _playerScreenRect;
+        private Rect _opponentScreenRect;
+        private bool _hasScreenViews;
+        private bool _screenInputBlocked;
 
         public bool IsReady => _ready && isActiveAndEnabled && IsScreenInputCurrent &&
             _playerBoard != null && _enemyBoard != null && _playerBoard.isActiveAndEnabled && _enemyBoard.isActiveAndEnabled &&
@@ -45,16 +51,40 @@ namespace GameLogic
         public Camera SceneCamera => _sceneCamera;
 
         // 尺寸变化后的 Update 可能早于布局 LateUpdate；此期间拒绝旧相机映射的输入。
-        private bool IsScreenInputCurrent => !_screenInputRect.HasValue ||
-            (_inputScreenSize == new Vector2Int(Screen.width, Screen.height) && _inputSafeArea == Screen.safeArea);
+        private bool IsScreenInputCurrent => !_screenInputBlocked && (!_screenInputRect.HasValue ||
+            (_inputScreenSize == new Vector2Int(Screen.width, Screen.height) && _inputSafeArea == Screen.safeArea));
+
+        public Camera GetSceneCamera(BattleSide side) => !_hasScreenViews ? _sceneCamera :
+            side == BattleSide.Player ? _playerViewCamera : side == BattleSide.Opponent ? _opponentViewCamera : null;
+
+        public void SetScreenViews(Camera playerCamera, Rect playerRect, Camera opponentCamera, Rect opponentRect)
+        {
+            SetScreenInputRect(Rect.MinMaxRect(Mathf.Min(playerRect.xMin, opponentRect.xMin), playerRect.yMin,
+                Mathf.Max(playerRect.xMax, opponentRect.xMax), opponentRect.yMax));
+            _playerViewCamera = playerCamera;
+            _opponentViewCamera = opponentCamera;
+            _playerScreenRect = playerRect;
+            _opponentScreenRect = opponentRect;
+            _hasScreenViews = true;
+        }
+
+        public void InvalidateScreenViews() { _screenInputBlocked = true; CancelDrag(); }
+        public void ClearScreenViews()
+        {
+            _hasScreenViews = false;
+            _screenInputBlocked = false;
+            _playerViewCamera = _opponentViewCamera = null;
+            _screenInputRect = null;
+        }
 
         public void SetScreenInputRect(Rect screenRect)
         {
             _screenInputRect = screenRect;
+            _screenInputBlocked = false;
             _inputScreenSize = new Vector2Int(Screen.width, Screen.height);
             _inputSafeArea = Screen.safeArea;
         }
-        public void ClearScreenInputRect() { _screenInputRect = null; }
+        public void ClearScreenInputRect() { ClearScreenViews(); }
 
         public bool Initialize()
         {
@@ -132,6 +162,13 @@ namespace GameLogic
             coordinate = default(BoardCoordinate);
             Vector3 point;
             if (!TryGetPointerWorldPosition(position, out point)) return false;
+            if (_hasScreenViews)
+            {
+                board = _playerScreenRect.Contains(position) ? _playerBoard : _enemyBoard;
+                if (board.TryGetCoordinate(point, out coordinate)) return true;
+                board = null;
+                return false;
+            }
             if (_playerBoard.TryGetCoordinate(point, out coordinate)) board = _playerBoard;
             else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) board = _enemyBoard;
             return board != null;
@@ -143,7 +180,15 @@ namespace GameLogic
             if (!IsReady || _sceneCamera == null || float.IsNaN(position.x) || float.IsNaN(position.y) ||
                 float.IsInfinity(position.x) || float.IsInfinity(position.y)) return false;
             if (_screenInputRect.HasValue && !_screenInputRect.Value.Contains(position)) return false;
-            var ray = _sceneCamera.ScreenPointToRay(position);
+            var camera = _sceneCamera;
+            if (_hasScreenViews)
+            {
+                if (_playerScreenRect.Contains(position)) camera = _playerViewCamera;
+                else if (_opponentScreenRect.Contains(position)) camera = _opponentViewCamera;
+                else return false;
+            }
+            if (camera == null) return false;
+            var ray = camera.ScreenPointToRay(position);
             float distance;
             if (!new Plane(Vector3.forward, Vector3.zero).Raycast(ray, out distance)) return false;
             worldPosition = ray.GetPoint(distance);
@@ -183,9 +228,7 @@ namespace GameLogic
             Vector3 point;
             if (!TryGetPointerWorldPosition(screenPosition, out point)) return;
             BoardCoordinate coordinate;
-            if (_playerBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _playerBoard;
-            else if (_enemyBoard.TryGetCoordinate(point, out coordinate)) _previewBoard = _enemyBoard;
-            if (_previewBoard == null) return;
+            if (!TryGetPointerCell(screenPosition, out _previewBoard, out coordinate)) return;
             _pointerCell = coordinate;
             _anchor = MapGridMath.GetCenteredAnchor(_previewBoard.transform.InverseTransformPoint(point),
                 _previewBoard.Columns, _previewBoard.Rows, _previewBoard.CellSize, _footprintCenter);
