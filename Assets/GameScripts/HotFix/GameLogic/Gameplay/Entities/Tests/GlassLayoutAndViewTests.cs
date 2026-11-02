@@ -55,10 +55,9 @@ namespace GameLogic.Tests
             Assert.IsFalse(board.Evaluate(new BoardCoordinate(7, 3), new PlaceableDefinition("wide", 2, 1)).IsValid);
         }
 
-        [TestCase(1, 3, 2, 2, 1)]
-        [TestCase(2, 5, 4, 3, 1)]
-        public void PrefabStagesMatchTableAndBreakingDisablesColliderImmediately(int configId,
-            int full, int second, int light, int heavy)
+        [TestCase(1)]
+        [TestCase(2)]
+        public void PrefabStagesMatchTableAndBreakingDisablesColliderImmediately(int configId)
         {
             var tables = ReadTables();
             var config = tables.TbGlass.Get(configId);
@@ -72,23 +71,28 @@ namespace GameLogic.Tests
                 {
                     var owner = ownerRoot.AddComponent<GlassBoardController>();
                     var entity = registry.CreateGlassFromConfig(config, BattleSide.Player, new BoardCoordinate(2, 2), 0.25f);
-                    Assert.AreEqual(full, entity.MaxDurability);
+                    Assert.AreEqual(config.MaxDurability, entity.MaxDurability);
                     var view = root.GetComponent<GlassView>();
                     view.Bind(owner, entity, config, 0.35f);
-                    Assert.AreEqual(2, view.StageIndex);
-                    Assert.AreEqual(config.StageSprites[2], view.CurrentSprite.name);
-                    view.ShowDurability(second);
-                    Assert.AreEqual(configId == 1 ? 1 : 2, view.StageIndex);
-                    view.ShowDurability(light);
-                    Assert.AreEqual(1, view.StageIndex);
-                    view.ShowDurability(heavy);
-                    Assert.AreEqual(0, view.StageIndex);
+                    for (var durability = 1; durability <= entity.MaxDurability; durability++)
+                    {
+                        view.ShowDurability(durability, false);
+                        var ratio = (float)durability / entity.MaxDurability;
+                        var expected = System.Array.FindIndex(config.StageUpperRatios, upper => ratio <= upper);
+                        Assert.AreEqual(expected, view.StageIndex);
+                        Assert.AreEqual(config.StageSprites[expected], view.CurrentSprite.name);
+                    }
                     Assert.IsNull(root.GetComponent<Rigidbody2D>());
                     Assert.AreEqual(Vector2.one * 0.35f, root.GetComponent<BoxCollider2D>().size);
                     view.BeginBreak();
                     Assert.IsFalse(root.GetComponent<BoxCollider2D>().enabled);
                     Assert.IsFalse(view.Advance(0f), "冻结时不推进淡出。");
-                    Assert.IsTrue(view.Advance(0.15f));
+                    Assert.IsFalse(view.Advance(0.08f));
+                    Assert.IsFalse(view.Advance(0.041f));
+                    Assert.AreEqual(6, root.GetComponentsInChildren<MeshRenderer>(true).Length,
+                        "破碎时应使用当前玻璃图片生成六块运行时碎片。");
+                    Assert.IsTrue(view.Advance(0.28f));
+                    Assert.AreEqual(0, root.GetComponentsInChildren<MeshRenderer>(true).Length);
                 }
             }
             finally { Object.DestroyImmediate(root); Object.DestroyImmediate(ownerRoot); }

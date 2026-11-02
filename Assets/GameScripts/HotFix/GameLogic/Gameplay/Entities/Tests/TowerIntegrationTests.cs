@@ -144,8 +144,24 @@ namespace GameLogic.Tests
                     var view = root.GetComponent("TowerView");
                     var type = view.GetType();
                     type.GetMethod("Bind").Invoke(view, new object[] { tower });
+                    var body = root.transform.Find("Body");
+                    var health = root.transform.Find("HealthFill");
+                    var bodyPosition = body.localPosition;
+                    var healthPosition = health.localPosition;
+                    var rootPosition = root.transform.localPosition;
+                    var colliderBounds = root.GetComponent<BoxCollider2D>().bounds;
                     registry.ApplyTowerDamage(tower.InstanceId, 25);
                     Assert.AreEqual(0.75f, type.GetProperty("HealthFraction").GetValue(view));
+                    type.GetMethod("AdvanceHitFeedback", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(view, new object[] { 0.04f });
+                    Assert.AreNotEqual(bodyPosition, body.localPosition, "基地受击后身体应左右晃动。");
+                    Assert.AreEqual(healthPosition, health.localPosition, "基地血条不能跟随身体晃动。");
+                    Assert.AreEqual(rootPosition, root.transform.localPosition, "基地逻辑根节点不能移动。");
+                    Assert.AreEqual(colliderBounds, root.GetComponent<BoxCollider2D>().bounds,
+                        "基地受击反馈不能改变碰撞范围。");
+                    type.GetMethod("AdvanceHitFeedback", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(view, new object[] { 0.3f });
+                    Assert.AreEqual(bodyPosition, body.localPosition, "基地晃动结束后必须准确复位。");
                     registry.ApplyTowerDamage(tower.InstanceId, 100);
                     Assert.AreEqual(0f, type.GetProperty("HealthFraction").GetValue(view));
                     Assert.AreEqual(true, type.GetProperty("IsDead").GetValue(view));

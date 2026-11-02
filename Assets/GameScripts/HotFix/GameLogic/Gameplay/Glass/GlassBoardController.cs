@@ -86,7 +86,7 @@ namespace GameLogic
             {
                 // 先提交通行和部署事实，奖励通知可能同步结束整局。
                 var rewardOrigin = view.transform.position;
-                view.BeginBreak();
+                view.BeginBreak(ball.CurrentDirection);
                 _byCell.Remove(view.Coordinate);
                 if (_board.Model.IsTerrainMap) _board.Model.TryRemoveObstacle(view.Coordinate);
                 else _board.Model.SetOpen(view.Coordinate, true);

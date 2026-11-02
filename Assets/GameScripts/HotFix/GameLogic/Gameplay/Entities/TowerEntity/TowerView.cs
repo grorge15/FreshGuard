@@ -10,8 +10,13 @@ namespace GameLogic
     {
         [SerializeField] private SpriteRenderer _body;
         [SerializeField] private SpriteRenderer _healthFill;
+        [SerializeField, Min(0.01f)] private float _hitShakeAmplitude = 0.07f;
+        [SerializeField, Min(0.05f)] private float _hitShakeDuration = 0.22f;
         private TowerEntity _tower;
         private Vector3 _fullFillScale;
+        private Vector3 _bodyBasePosition;
+        private float _hitShakeElapsed;
+        private bool _hitShakePlaying;
         private bool _cached;
         public int InstanceId => _tower != null ? _tower.InstanceId : 0;
         public float HealthFraction { get; private set; } = 1f;
@@ -36,7 +41,12 @@ namespace GameLogic
             if (_tower == tower) return;
             if (_body == null || _healthFill == null) throw new InvalidOperationException("塔视图缺少身体或血条引用。");
             Unbind();
-            if (!_cached) { _fullFillScale = _healthFill.transform.localScale; _cached = true; }
+            if (!_cached)
+            {
+                _fullFillScale = _healthFill.transform.localScale;
+                _bodyBasePosition = _body.transform.localPosition;
+                _cached = true;
+            }
             _tower = tower;
             _tower.HealthChanged += OnHealthChanged;
             _tower.Died += OnHealthChanged;
@@ -57,6 +67,35 @@ namespace GameLogic
         {
             if (_tower == null || snapshot.InstanceId != _tower.InstanceId) return;
             Render(snapshot.CurrentHp, snapshot.MaxHp, snapshot.Side);
+            if (snapshot.CurrentHp < snapshot.PreviousHp) PlayHitShake();
+        }
+
+        private void PlayHitShake()
+        {
+            if (_body == null) return;
+            _body.transform.localPosition = _bodyBasePosition;
+            _hitShakeElapsed = 0f;
+            _hitShakePlaying = true;
+        }
+
+        private void LateUpdate() => AdvanceHitFeedback(Time.unscaledDeltaTime);
+
+        internal void AdvanceHitFeedback(float deltaTime)
+        {
+            if (!_hitShakePlaying || _body == null) return;
+            _hitShakeElapsed += Mathf.Max(0f, deltaTime);
+            var duration = Mathf.Max(0.05f, _hitShakeDuration);
+            var progress = Mathf.Clamp01(_hitShakeElapsed / duration);
+            var offset = Mathf.Sin(progress * Mathf.PI * 6f) * (1f - progress) * _hitShakeAmplitude;
+            _body.transform.localPosition = _bodyBasePosition + Vector3.right * offset;
+            if (progress >= 1f) ResetHitShake();
+        }
+
+        private void ResetHitShake()
+        {
+            _hitShakePlaying = false;
+            _hitShakeElapsed = 0f;
+            if (_body != null && _cached) _body.transform.localPosition = _bodyBasePosition;
         }
 
         private void Render(int hp, int maxHp, BattleSide side)
@@ -69,7 +108,7 @@ namespace GameLogic
             _healthFill.color = color;
         }
 
-        private void OnDisable() { Unbind(); }
-        private void OnDestroy() { Unbind(); }
+        private void OnDisable() { ResetHitShake(); Unbind(); }
+        private void OnDestroy() { ResetHitShake(); Unbind(); }
     }
 }
