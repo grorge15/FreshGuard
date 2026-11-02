@@ -220,6 +220,7 @@ namespace GameLogic
             reserve.Ready = null;
             bullet.Bind(state);
             instance.transform.SetParent(_flightRoot, true);
+            BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), reserve.Robot.Side);
             _context.Battle.Bullets.Add(state, bullet.Present, () => Release(instance));
             instance.SetActive(true);
             PrepareNextAsync(reserve).Forget();

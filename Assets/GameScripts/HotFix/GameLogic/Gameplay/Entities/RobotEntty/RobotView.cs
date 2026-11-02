@@ -75,6 +75,9 @@ namespace GameLogic
         public void BindInput(BattleShopSceneController host)
         {
             _host = host;
+            if (_robot != null)
+                BattleSideRenderGroup.BindRoot(gameObject,
+                    host != null ? host.GetComponent<BattleSideRenderRegistry>() : null, _robot.Side);
             var input = GetComponent<RobotBoardPointerInput>();
             if (input != null) input.Bind(host, InstanceId);
         }

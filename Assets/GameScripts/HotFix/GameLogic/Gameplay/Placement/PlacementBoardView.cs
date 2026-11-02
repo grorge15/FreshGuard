@@ -219,6 +219,8 @@ namespace GameLogic
                 var cell = new GameObject("PreviewCell_" + index, typeof(SpriteRenderer));
                 cell.transform.SetParent(_previewRoot, false);
                 _previewCells.Add(cell.GetComponent<SpriteRenderer>());
+                var group = GetComponent<BattleSideRenderGroup>();
+                if (group != null) BattleSideRenderGroup.BindRoot(cell, group.Registry, group.Side);
             }
             var renderer = _previewCells[index];
             var slot = _slots[coordinate.Column, coordinate.Row];

@@ -284,6 +284,7 @@ namespace GameLogic
                         instanceId = context.Registry.CreateEnemyFromConfig(group.Config, group.Side, group.Schedule.Cycle);
                         instance.transform.SetParent(transform, true);
                         instance.transform.position = group.Points[0];
+                        BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), group.Side);
                         instance.SetActive(true);
                         var view = instance.GetComponent<EnemyView>();
                         view.Bind(context.Registry, instanceId);
@@ -409,6 +410,7 @@ namespace GameLogic
                 var number = instance.GetComponent<DamageNumberView>();
                 if (number == null) number = instance.AddComponent<DamageNumberView>();
                 number.Initialize(damage, instance.transform.position);
+                BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
                 _damageNumbers.Add(number);
             }
             else
@@ -417,6 +419,7 @@ namespace GameLogic
                 instance.transform.SetParent(transform, true);
                 var number = instance.AddComponent<DamageNumberView>();
                 number.Initialize(damage, entry.View.transform.position + Vector3.up * 0.25f);
+                BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
                 _damageNumbers.Add(number);
             }
             return true;

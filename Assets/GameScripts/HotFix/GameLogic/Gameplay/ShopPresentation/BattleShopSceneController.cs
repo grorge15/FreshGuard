@@ -644,6 +644,9 @@ namespace GameLogic
         private void Cleanup()
         {
             if (_screenLayout != null) _screenLayout.Unbind();
+            // 球和表现可在UI绑定前登记，初始化中途失败也必须解除这一局的归属。
+            var renderRegistry = GetComponent<BattleSideRenderRegistry>();
+            if (renderRegistry != null) renderRegistry.Clear();
             _matchEntry = null;
             _matchReleased = true;
             _checkingOperational = false;

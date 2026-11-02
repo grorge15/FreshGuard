@@ -133,6 +133,13 @@ namespace GameLogic
             return ball;
         }
 
+        internal void CopyRenderBindingTo(PhysicalCollisionBall ball)
+        {
+            var group = GetComponent<BattleSideRenderGroup>();
+            if (group != null && ball != null)
+                BattleSideRenderGroup.BindRoot(ball.gameObject, group.Registry, Side);
+        }
+
         public float SampleLaunchAngle() => _rules == null
             ? UnityEngine.Random.Range(Mathf.Min(initialAngleMin, initialAngleMax), Mathf.Max(initialAngleMin, initialAngleMax))
             : UnityEngine.Random.Range((float)_rules.LaunchAngleMin, _rules.LaunchAngleMax);
@@ -252,6 +259,7 @@ namespace GameLogic
             _comboRegistry = registry;
             _comboPopupRoot = popupRoot;
             _comboEnabled = true;
+            BattleSideRenderGroup.BindRoot(gameObject, popupRoot.GetComponentInParent<BattleSideRenderRegistry>(), Side);
         }
 
         public void BindRobotContacts(BattleEntityRegistry registry)
@@ -935,6 +943,8 @@ namespace GameLogic
                 popup = Instantiate(_comboPopupPrefab, transform.position + Vector3.up * _comboPopupOffset,
                     Quaternion.identity, _comboPopupRoot);
                 popup.Initialize(ComboCount, popup.transform.position);
+                var group = GetComponent<BattleSideRenderGroup>();
+                if (group != null) BattleSideRenderGroup.BindRoot(popup.gameObject, group.Registry, Side);
                 _comboPopups.Add(popup);
             }
             catch (Exception e)

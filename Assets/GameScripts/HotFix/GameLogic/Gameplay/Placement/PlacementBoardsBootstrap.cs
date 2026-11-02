@@ -83,6 +83,7 @@ namespace GameLogic
                     ball.gameObject.SetActive(false);
                     if (_rules != null) ball.Configure(_rules);
                     ball.BindBattle(_battleId, main.Side, _runningGate);
+                    main.CopyRenderBindingTo(ball);
                     ball.BindRobotContacts(registry);
                     ball.RobotContactDetected += ForwardContact;
                 }
