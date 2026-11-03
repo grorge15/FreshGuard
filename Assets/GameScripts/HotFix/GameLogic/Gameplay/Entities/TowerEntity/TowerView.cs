@@ -14,6 +14,8 @@ namespace GameLogic
         [SerializeField, Min(0.05f)] private float _hitShakeDuration = 0.22f;
         private TowerEntity _tower;
         private Vector3 _fullFillScale;
+        private Vector3 _fullFillPosition;
+        private Vector3 _fullFillLeftOffset;
         private Vector3 _bodyBasePosition;
         private float _hitShakeElapsed;
         private bool _hitShakePlaying;
@@ -44,6 +46,11 @@ namespace GameLogic
             if (!_cached)
             {
                 _fullFillScale = _healthFill.transform.localScale;
+                _fullFillPosition = _healthFill.transform.localPosition;
+                var bounds = _healthFill.localBounds;
+                var left = _fullFillScale.x >= 0f ? bounds.min.x : bounds.max.x;
+                _fullFillLeftOffset = _healthFill.transform.localRotation *
+                    new Vector3(left * _fullFillScale.x, 0f, 0f);
                 _bodyBasePosition = _body.transform.localPosition;
                 _cached = true;
             }
@@ -101,6 +108,8 @@ namespace GameLogic
             HealthFraction = Mathf.Clamp01((float)hp / maxHp);
             IsDead = hp == 0;
             _healthFill.transform.localScale = new Vector3(_fullFillScale.x * HealthFraction, _fullFillScale.y, _fullFillScale.z);
+            // 血条左边缘固定，只让右端随剩余血量向左收缩。
+            _healthFill.transform.localPosition = _fullFillPosition + _fullFillLeftOffset * (1f - HealthFraction);
             var color = side == BattleSide.Player ? new Color(0.3f, 0.75f, 1f) : new Color(1f, 0.4f, 0.3f);
             _body.color = IsDead ? new Color(0.35f, 0.35f, 0.35f) : color;
             _healthFill.color = color;
