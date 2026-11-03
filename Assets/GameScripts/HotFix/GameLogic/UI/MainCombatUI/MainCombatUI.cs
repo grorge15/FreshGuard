@@ -1,15 +1,42 @@
+using UnityEngine;
+using UnityEngine.UI;
+
 namespace GameLogic
 {
     /// <summary>全屏战斗窗口；Prefab 提供基准布局，屏幕适配只调整区域根节点。</summary>
     [Window(UILayer.UI, "MainCombatUI", fullScreen: true)]
     public sealed partial class MainCombatUI : UIWindow
     {
+        private Text _preparationCountdown;
+        private int _preparationDigit;
+        private Vector3 _preparationBaseScale;
+        private Color _preparationBaseColor;
+        // x 为每个数字内的进度，y 为缩放，z 为透明度。
+        private static readonly Vector3[] _preparationAnimationKeys =
+        {
+            new Vector3(0f, 0.45f, 0f),
+            new Vector3(0.09f, 1.24f, 1f),
+            new Vector3(0.17f, 0.93f, 1f),
+            new Vector3(0.25f, 1f, 1f),
+            new Vector3(0.73f, 1f, 1f),
+            new Vector3(0.86f, 1.08f, 0.85f),
+            new Vector3(1f, 0.82f, 0f)
+        };
+
         public BattleInfoUI Info { get; private set; }
         public BattleShopUI Shop { get; private set; }
         public BattleShopContext Context { get; private set; }
         public BattleShopSceneController Host { get; private set; }
         public BattleNoticeWidget Notices { get; private set; }
         public GlassCurrencyFlightWidget CurrencyFlight { get; private set; }
+
+        protected override void ScriptGenerator()
+        {
+            _preparationCountdown = FindChildComponent<Text>("m_text_PreparationCountdown");
+            if (_preparationCountdown == null) return;
+            _preparationBaseScale = _preparationCountdown.rectTransform.localScale;
+            _preparationBaseColor = _preparationCountdown.color;
+        }
 
         protected override void RegisterEvent()
         {
@@ -36,6 +63,52 @@ namespace GameLogic
                 Shop.transform.Find("m_rect_ShopPanel/EnergyBalance/m_img_EnergyCoin") as UnityEngine.RectTransform);
             if (UserDatas != null && UserDatas.Length > 2 && UserDatas[2] is BattleProgressSnapshot progress)
                 Info.Bind(progress);
+            RefreshPreparationCountdown();
+        }
+
+        protected override void OnUpdate() { RefreshPreparationCountdown(); }
+
+        private void RefreshPreparationCountdown()
+        {
+            if (_preparationCountdown == null) return;
+            // 共用战斗准备计时；匹配加载期间不显示，暂停时随原计时停留。
+            var remaining = Host != null && ReferenceEquals(Host.Context, Context) && Host.IsReady &&
+                !Host.IsWaitingForMatch ? Host.PreparationRemaining : 0f;
+            var digit = Mathf.CeilToInt(remaining);
+            if (_preparationCountdown.gameObject.activeSelf != (digit > 0))
+            {
+                _preparationCountdown.gameObject.SetActive(digit > 0);
+                if (digit <= 0) ResetPreparationAppearance();
+            }
+            if (_preparationDigit != digit)
+            {
+                _preparationDigit = digit;
+                _preparationCountdown.text = digit > 0 ? digit.ToString() : string.Empty;
+            }
+            if (digit > 0) AnimatePreparationCountdown(Mathf.Clamp01(digit - remaining));
+        }
+
+        private void AnimatePreparationCountdown(float progress)
+        {
+            // 直接由准备剩余时间求动画进度，暂停、掉帧与数字切换都不产生额外计时。
+            for (var i = 1; i < _preparationAnimationKeys.Length; i++)
+            {
+                var previous = _preparationAnimationKeys[i - 1];
+                var next = _preparationAnimationKeys[i];
+                if (progress > next.x) continue;
+                var blend = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(previous.x, next.x, progress));
+                _preparationCountdown.rectTransform.localScale = _preparationBaseScale * Mathf.Lerp(previous.y, next.y, blend);
+                var color = _preparationBaseColor;
+                color.a *= Mathf.Lerp(previous.z, next.z, blend);
+                _preparationCountdown.color = color;
+                return;
+            }
+        }
+
+        private void ResetPreparationAppearance()
+        {
+            _preparationCountdown.rectTransform.localScale = _preparationBaseScale;
+            _preparationCountdown.color = _preparationBaseColor;
         }
 
         protected override void OnSetVisible(bool visible)
@@ -45,7 +118,13 @@ namespace GameLogic
                 Shop?.Drag?.Cancel();
                 Notices?.Clear();
                 CurrencyFlight?.Clear();
+                if (_preparationCountdown != null)
+                {
+                    _preparationCountdown.gameObject.SetActive(false);
+                    ResetPreparationAppearance();
+                }
             }
+            else RefreshPreparationCountdown();
         }
 
         private void OnNoticeRequested(long battleId, string message)
@@ -72,6 +151,7 @@ namespace GameLogic
             Host = null;
             Notices = null;
             CurrencyFlight = null;
+            _preparationCountdown = null;
             _userDatas = null;
         }
     }

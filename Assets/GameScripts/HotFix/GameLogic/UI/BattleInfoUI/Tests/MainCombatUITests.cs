@@ -41,13 +41,15 @@ namespace GameLogic.Tests
                 shop.anchoredPosition = new Vector2(-19, 95);
                 shop.sizeDelta = new Vector2(960, 230);
                 shop.localScale = Vector3.one * 0.9f;
+                typeof(MainCombatUI).GetMethod("ScriptGenerator", PRIVATE).Invoke(window, null);
                 typeof(MainCombatUI).GetMethod("OnCreate", PRIVATE).Invoke(window, null);
                 foreach (var text in root.GetComponentsInChildren<Text>(true))
                 {
                     Assert.That(AssetDatabase.GetAssetPath(text.font), Does.StartWith("Assets/AssetRaw/Fonts/MiSans-UI-"),
                         "窗口创建时应保留预制体字体，不能回退到系统字体：" + text.name);
-                    Assert.AreEqual(text.transform.parent.name == "Notice" ? FontStyle.Bold : FontStyle.Normal,
-                        text.fontStyle, "只有战斗提示使用指定的白色粗体，其余文本保留现有字重。");
+                    var bold = text.transform.parent.name == "Notice" || text.name == "m_text_PreparationCountdown";
+                    Assert.AreEqual(bold ? FontStyle.Bold : FontStyle.Normal,
+                        text.fontStyle, "战斗提示和开局倒计时使用粗体，其余文本保留现有字重。");
                 }
                 typeof(UIBase).GetField("_userDatas", PRIVATE).SetValue(window,
                     new object[] { null, null, new BattleProgressSnapshot(17, 4, 125d) });
