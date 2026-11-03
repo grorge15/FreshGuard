@@ -110,9 +110,10 @@ namespace GameLogic.Tests
         [Test]
         public void ReflectionCornerPersistsAndTeleportOrBerserkClearsNormalTrail()
         {
-            _feedback.RecordCorner(new Vector2(-0.3f, 0.3f));
+            BeginBounceAcceleration();
+            _feedback.RecordCorner(new Vector2(-0.06f, 0.06f));
             _feedback.RecordCorner(Vector2.zero);
-            _ball.transform.position = new Vector3(0.3f, 0.3f, 0f);
+            _ball.transform.position = new Vector3(0.06f, 0.06f, 0f);
             Physics2D.SyncTransforms();
             _feedback.Advance(0.04f);
             Assert.GreaterOrEqual(_feedback.TrailPointCount, 3);
@@ -130,6 +131,8 @@ namespace GameLogic.Tests
         [Test]
         public void TemporaryBallOwnsItsMeshesAndCannotDestroyTheMainBallTrail()
         {
+            BeginBounceAcceleration();
+            _feedback.RecordCorner(Vector2.left * 0.1f);
             _feedback.Advance(0.02f);
             var mainMesh = _root.transform.Find("GoldenBallTrail").GetComponent<MeshFilter>().sharedMesh;
             var temporary = _ball.CreateTemporary();
@@ -143,6 +146,70 @@ namespace GameLogic.Tests
             finally { Object.DestroyImmediate(temporary.gameObject); }
             Assert.IsNotNull(mainMesh);
             Assert.Greater(mainMesh.vertexCount, 0);
+        }
+
+        [Test]
+        public void OrdinaryMotionAndZeroAccelerationHaveNoTrailOrGlow()
+        {
+            _ball.transform.position = Vector3.right * 0.2f;
+            Physics2D.SyncTransforms();
+            _feedback.Advance(0.04f);
+            var renderer = _root.transform.Find("GoldenBallTrail").GetComponent<MeshRenderer>();
+            Assert.IsFalse(renderer.enabled);
+            Assert.AreEqual(0, _feedback.TrailPointCount);
+            BeginBounceAcceleration(0f);
+            _feedback.RecordCorner(Vector2.zero);
+            _ball.transform.position = Vector3.right * 0.4f;
+            Physics2D.SyncTransforms();
+            _feedback.Advance(0.04f);
+            Assert.IsFalse(renderer.enabled, "反弹未增加球速时不能显示短尾。");
+            Assert.AreEqual(0, _feedback.TrailPointCount);
+            Assert.IsFalse(_root.transform.Find("NormalTrail").GetComponent<ParticleSystem>().isPlaying);
+        }
+
+        [Test]
+        public void AcceleratedTrailStaysShortFreezesAndFadesWithAcceleration()
+        {
+            BeginBounceAcceleration();
+            var tick = typeof(PhysicalCollisionBall).GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
+            for (var frame = 0; frame < 7; frame++)
+            {
+                _ball.transform.position = Vector3.right * (frame * 0.09f);
+                Physics2D.SyncTransforms();
+                tick.Invoke(_ball, null);
+                _feedback.Advance(0.02f);
+            }
+            var trail = _root.transform.Find("GoldenBallTrail");
+            var renderer = trail.GetComponent<MeshRenderer>();
+            var mesh = trail.GetComponent<MeshFilter>().sharedMesh;
+            Assert.IsTrue(renderer.enabled);
+            var world = mesh.vertices.Select(vertex => trail.TransformPoint(vertex)).ToArray();
+            var length = world.Max(vertex => vertex.x) - world.Min(vertex => vertex.x);
+            Assert.LessOrEqual(length, _ball.WorldRadius * 3.5f + 0.0001f);
+            Assert.Greater(length, _ball.WorldRadius * 2f);
+            var peakAlpha = mesh.colors32.Max(color => color.a);
+            Assert.GreaterOrEqual(peakAlpha, 240, "加速初期应保持清晰可见。");
+            var progress = _ball.BounceAccelerationProgress;
+            _ball.SetFrozen(true);
+            tick.Invoke(_ball, null);
+            _feedback.Advance(1f);
+            Assert.AreEqual(progress, _ball.BounceAccelerationProgress);
+            Assert.AreEqual(peakAlpha, mesh.colors32.Max(color => color.a));
+            _ball.SetFrozen(false);
+            for (var frame = 0; frame < 11; frame++) tick.Invoke(_ball, null);
+            _feedback.Advance(0.02f);
+            Assert.Less(mesh.colors32.Max(color => color.a), peakAlpha / 2, "加速末期短尾应整体变透明。");
+            for (var frame = 0; frame < 10; frame++) tick.Invoke(_ball, null);
+            _feedback.Advance(0.02f);
+            Assert.IsFalse(renderer.enabled);
+            Assert.AreEqual(0, _feedback.TrailPointCount);
+        }
+
+        private void BeginBounceAcceleration(float increase = 1f)
+        {
+            _ball.GlobalValueProvider = id => id == 11 ? increase : id == 12 ? 0.5f : id == 13 || id == 14 ? 1f : 0f;
+            typeof(PhysicalCollisionBall).GetMethod("ApplyBounceAcceleration", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(_ball, new object[] { false });
         }
 
         [TestCase(502)]

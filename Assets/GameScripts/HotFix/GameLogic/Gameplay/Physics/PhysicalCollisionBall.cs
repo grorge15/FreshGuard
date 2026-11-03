@@ -19,7 +19,7 @@ namespace GameLogic
         [SerializeField] private Sprite _normalSprite;
         [Tooltip("暴走状态使用的 Sprite；未配置时使用普通状态图片。")]
         [SerializeField] private Sprite _berserkSprite;
-        [Tooltip("普通球移动时播放的橙黄色粒子拖尾；暂停时冻结。")]
+        [Tooltip("旧版普通粒子拖尾保持关闭；反弹加速时由 BallImpactFeedback 绘制金色短尾。")]
         [SerializeField] private ParticleSystem _normalTrail;
         [Tooltip("暴走移动时播放的彩虹粒子拖尾；暂停时冻结，切换状态或重新发射时清理。")]
         [SerializeField] private ParticleSystem _berserkTrail;
@@ -95,6 +95,8 @@ namespace GameLogic
         public int ComboCount { get; private set; }
         public Func<int, float> GlobalValueProvider { get; set; }
         public Vector2 CurrentDirection => _direction;
+        internal float BounceAccelerationProgress => _bounceSpeedIncrease > 0f && _bounceSpeedDuration > 0f
+            ? Mathf.Clamp01(_bounceSpeedRemaining / _bounceSpeedDuration) : 0f;
         public float Speed => _rules == null ? speed : IsBerserk ? _rules.RageSpeed : _rules.NormalSpeed;
         public float EffectiveSpeed
         {
@@ -335,7 +337,7 @@ namespace GameLogic
         private void RefreshBallTrails(bool moving)
         {
             _impactFeedback?.SetMotion(moving, IsBerserk);
-            RefreshTrail(_normalTrail, _impactFeedback == null && !IsBerserk, moving);
+            RefreshTrail(_normalTrail, false, moving);
             RefreshTrail(_berserkTrail, IsBerserk, moving);
         }
 
