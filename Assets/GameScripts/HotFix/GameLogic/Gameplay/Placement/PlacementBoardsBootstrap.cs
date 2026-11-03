@@ -81,6 +81,8 @@ namespace GameLogic
                     var ball = i < authoredCount ? temporary[i] : main.CreateTemporary();
                     session.Temporary[i] = ball;
                     ball.gameObject.SetActive(false);
+                    ball.SetMapScale(main.MapScale);
+                    ball.SetBattleSpeedScale(main.BattleSpeedScale);
                     if (_rules != null) ball.Configure(_rules);
                     ball.BindBattle(_battleId, main.Side, _runningGate);
                     main.CopyRenderBindingTo(ball);
@@ -206,7 +208,12 @@ namespace GameLogic
                 var ball = session.Temporary[i];
                 if (ball == null) continue;
                 ball.RobotContactDetected -= ForwardContact;
-                if (i < session.AuthoredCount) continue;
+                if (i < session.AuthoredCount)
+                {
+                    ball.SetMapScale(1f);
+                    ball.SetBattleSpeedScale(1f);
+                    continue;
+                }
                 if (Application.isPlaying) Destroy(ball.gameObject);
                 else DestroyImmediate(ball.gameObject);
             }

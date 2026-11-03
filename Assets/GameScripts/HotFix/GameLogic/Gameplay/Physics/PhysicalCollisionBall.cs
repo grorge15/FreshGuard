@@ -78,7 +78,9 @@ namespace GameLogic
 
         private Vector3? _mapOriginalScale;
         private float _mapScale = 1f;
+        private float _battleSpeedScale = 1f;
         public float MapScale => _mapScale;
+        public float BattleSpeedScale => _battleSpeedScale;
         public float WorldRadius
         {
             get
@@ -100,7 +102,7 @@ namespace GameLogic
             {
                 float increase = _bounceSpeedRemaining > 0f
                     ? _bounceSpeedIncrease * Mathf.Clamp01(_bounceSpeedRemaining / _bounceSpeedDuration) : 0f;
-                return (Speed + increase) * _mapScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
+                return (Speed + increase) * _mapScale * _battleSpeedScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
             }
         }
         public int BounceCount { get; private set; }
@@ -129,6 +131,7 @@ namespace GameLogic
             if (ball.gameObject.scene != gameObject.scene)
                 UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(ball.gameObject, gameObject.scene);
             ball._mapScale = _mapScale;
+            ball._battleSpeedScale = _battleSpeedScale;
             ball._mapOriginalScale = _mapOriginalScale;
             ball.GlobalValueProvider = GlobalValueProvider;
             return ball;
@@ -158,6 +161,15 @@ namespace GameLogic
                 throw new ArgumentOutOfRangeException(nameof(scale), "能源球缩放超出有效数值范围。");
             transform.localScale = scaled;
             _mapScale = scale;
+        }
+
+        /// <summary>按战场原始格距折算移动速度，不改变球的尺寸；只能在发射前设置。</summary>
+        public void SetBattleSpeedScale(float scale)
+        {
+            if (_launched) throw new InvalidOperationException("能源球运行中不能修改战场速度倍率。");
+            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(scale));
+            _battleSpeedScale = scale;
         }
 
         private float ReadDraggingMultiplier()
@@ -222,7 +234,7 @@ namespace GameLogic
                     }
                     if (_rules != null)
                     {
-                        _lowSpeedElapsed = _body.velocity.magnitude < _rules.LowSpeedThreshold * _mapScale
+                        _lowSpeedElapsed = _body.velocity.magnitude < _rules.LowSpeedThreshold * _mapScale * _battleSpeedScale
                             ? _lowSpeedElapsed + Time.fixedDeltaTime : 0f;
                         if (_lowSpeedElapsed >= _rules.LowSpeedDuration ||
                             SecondsSinceEffectiveInteraction >= _rules.NoInteractionDuration)
