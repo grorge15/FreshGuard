@@ -24,17 +24,19 @@ namespace GameLogic
         internal bool Consumed { get; set; }
         internal IReadOnlyDictionary<CombatModifierGroup, double> Percents { get; private set; }
         public IReadOnlyList<CombatBuffApplication> HitBuffs { get; }
+        public float KnockbackDistance { get; }
 
         public CombatActionSnapshot(long battleId, int sourceInstanceId, BattleSide sourceSide, int skillId,
             IReadOnlyList<int> targetInstanceIds, CombatOutcomeTag outcomeTags, int baseDamage,
             Vector3 origin, Vector3 aimPoint, long sequence, CombatSourceKind sourceKind = CombatSourceKind.Robot,
-            IReadOnlyList<CombatBuffApplication> hitBuffs = null)
+            IReadOnlyList<CombatBuffApplication> hitBuffs = null, float knockbackDistance = 0f)
         {
             if (battleId <= 0 || sequence <= 0) throw new ArgumentOutOfRangeException(nameof(battleId));
             EntityValidation.RequirePositive(sourceInstanceId, nameof(sourceInstanceId));
             EntityValidation.RequireSide(sourceSide);
             if (skillId < 0 || baseDamage < 0) throw new ArgumentOutOfRangeException(nameof(baseDamage));
             if (outcomeTags == CombatOutcomeTag.None) throw new ArgumentOutOfRangeException(nameof(outcomeTags));
+            EntityValidation.RequireFiniteNonNegative(knockbackDistance, nameof(knockbackDistance));
             if (!Finite(origin) || !Finite(aimPoint)) throw new ArgumentOutOfRangeException(nameof(origin));
             if (targetInstanceIds == null) throw new ArgumentNullException(nameof(targetInstanceIds));
             var targets = new List<int>();
@@ -48,12 +50,13 @@ namespace GameLogic
             SourceKind = sourceKind; SkillId = skillId; TargetInstanceIds = targets.AsReadOnly();
             OutcomeTags = outcomeTags; BaseDamage = baseDamage; Origin = origin; AimPoint = aimPoint; Sequence = sequence;
             HitBuffs = new List<CombatBuffApplication>(hitBuffs ?? Array.Empty<CombatBuffApplication>()).AsReadOnly();
+            KnockbackDistance = knockbackDistance;
         }
 
         internal CombatActionSnapshot Lock(object owner, long sequence, CombatOutcomeDraft draft)
         {
             return new CombatActionSnapshot(BattleId, SourceInstanceId, SourceSide, SkillId, TargetInstanceIds,
-                OutcomeTags, BaseDamage, Origin, AimPoint, sequence, SourceKind, HitBuffs)
+                OutcomeTags, BaseDamage, Origin, AimPoint, sequence, SourceKind, HitBuffs, KnockbackDistance)
             {
                 Owner = owner, Percents = draft.CopyPercents()
             };

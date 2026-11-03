@@ -10,7 +10,7 @@ namespace GameLogic
         public BulletState State { get; private set; }
         public long BattleId => Action?.BattleId ?? 0;
         public BattleSide Side => Action?.SourceSide ?? default(BattleSide);
-        public int TargetInstanceId => Action?.TargetInstanceIds[0] ?? 0;
+        public int TargetInstanceId => Action != null && Action.TargetInstanceIds.Count > 0 ? Action.TargetInstanceIds[0] : 0;
         public int Damage => Action?.LockedDamage ?? 0;
         public long Sequence => Action?.Sequence ?? 0;
         public float Elapsed => State?.Elapsed ?? 0f;
@@ -19,7 +19,13 @@ namespace GameLogic
         public void Bind(BulletState state)
         { State = state ?? throw new ArgumentNullException(nameof(state)); Present(state); }
         public void Present(BulletState state)
-        { if (this != null) transform.position = state.Position; }
+        {
+            if (this == null || state == null) return;
+            transform.position = state.Position;
+            if (state.Direction.sqrMagnitude > 0f)
+                transform.rotation = Quaternion.Euler(0f, 0f,
+                    Mathf.Atan2(state.Direction.y, state.Direction.x) * Mathf.Rad2Deg);
+        }
         public void Initialize(BattleShopSceneController host, BattleShopContext context, EnemyBattleController enemies,
             CombatActionSnapshot action, float flightTime, float arcHeight)
         {
