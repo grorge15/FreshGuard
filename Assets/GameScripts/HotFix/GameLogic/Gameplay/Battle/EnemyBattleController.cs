@@ -20,6 +20,11 @@ namespace GameLogic
         [Header("敌方战场路线：按数组顺序移动")]
         [Tooltip("把自行摆放的节点 Transform 按顺序拖入。Element 0 为出生点；同侧 Tower 自动作为终点，不必填入。修改在下一次初始化对局时生效。")]
         [SerializeField] private Transform[] _opponentRoutePoints;
+        [Header("敌人生成父节点")]
+        [Tooltip("我方战场的 Battle_playerBelt；敌人保留预制体局部缩放并继承该节点比例。留空沿用控制器节点。")]
+        [SerializeField] private Transform _playerEnemyRoot;
+        [Tooltip("敌方战场的 Battle_enemyBelt；敌人保留预制体局部缩放并继承该节点比例。留空沿用控制器节点。")]
+        [SerializeField] private Transform _opponentEnemyRoot;
         [Header("战斗反馈")]
         [Tooltip("机器人命中时显示的世界空间伤害数字预制体。未指定时使用运行时后备样式。")]
         [SerializeField] private GameObject _damageNumberPrefab;
@@ -282,7 +287,11 @@ namespace GameLogic
                     try
                     {
                         instanceId = context.Registry.CreateEnemyFromConfig(group.Config, group.Side, group.Schedule.Cycle);
-                        instance.transform.SetParent(transform, true);
+                        var parent = group.Side == BattleSide.Player ? _playerEnemyRoot : _opponentEnemyRoot;
+                        var prefabScale = instance.transform.localScale;
+                        instance.transform.SetParent(parent != null ? parent : transform, true);
+                        // 保留预制体自身比例，让同侧 Belt 的缩放作用于首批和后续出兵。
+                        if (parent != null) instance.transform.localScale = prefabScale;
                         instance.transform.position = group.Points[0];
                         BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), group.Side);
                         instance.SetActive(true);

@@ -18,6 +18,45 @@ namespace GameLogic.Tests
 
         [TearDown] public void TearDown() { _fixture?.Dispose(); _fixture = null; }
 
+        [TestCase(2001)]
+        [TestCase(2002)]
+        [TestCase(2003)]
+        public void InitialAndLaterEnemiesInheritTheirOwnBeltScale(int enemyId)
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 2, enemyId, 2) }));
+            var f = _fixture;
+            var playerBelt = new GameObject("Battle_playerBelt").transform;
+            playerBelt.SetParent(f.Root.transform, false);
+            playerBelt.localScale = new Vector3(0.8f, 0.8f, 1f);
+            var opponentBelt = new GameObject("Battle_enemyBelt").transform;
+            opponentBelt.SetParent(f.Root.transform, false);
+            opponentBelt.localScale = new Vector3(0.6f, 0.6f, 1f);
+            SetField(f.Controller, "_playerEnemyRoot", playerBelt);
+            SetField(f.Controller, "_opponentEnemyRoot", opponentBelt);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Enemy/Prefabs/" +
+                f.Tables.TbEnemy.Get(enemyId).EnemyPrefab + ".prefab");
+            var authoredScale = prefab.transform.localScale;
+            f.Prepare(); f.Start();
+            Assert.AreEqual(2, f.Views.Length);
+            Assert.That(Vector3.Distance(f.PlayerView.transform.position, new Vector3(-3f, 1f, 0f)), Is.LessThan(0.0001f));
+            f.Advance(1f);
+            Assert.AreEqual(4, f.Views.Length, "后续出兵也必须使用同侧 Belt");
+            foreach (var view in f.Views)
+            {
+                var belt = f.Side(view) == BattleSide.Player ? playerBelt : opponentBelt;
+                Assert.AreSame(belt, view.transform.parent);
+                Assert.That(Vector3.Distance(authoredScale, view.transform.localScale), Is.LessThan(0.0001f));
+                Assert.That(Vector3.Distance(Vector3.Scale(authoredScale, belt.localScale), view.transform.lossyScale),
+                    Is.LessThan(0.0001f));
+            }
+            var latest = f.Views.Where(v => f.Side(v) == BattleSide.Player).OrderBy(v => v.InstanceId).Last();
+            Assert.That(Vector3.Distance(latest.transform.position, new Vector3(-3f, 1f, 0f)), Is.LessThan(0.0001f));
+            f.Clear();
+            Assert.AreEqual(0, playerBelt.childCount);
+            Assert.AreEqual(0, opponentBelt.childCount);
+        }
+
         [Test]
         public void NewWaveStartsWhilePreviousEnemiesKeepTheirIdentityAndPosition()
         {
