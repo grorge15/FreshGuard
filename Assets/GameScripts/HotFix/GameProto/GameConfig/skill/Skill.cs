@@ -23,6 +23,7 @@ public sealed partial class Skill : Luban.BeanBase
         Cooldown = _buf.ReadFloat();
         TargetRule = _buf.ReadInt();
         {int n0 = _buf.ReadSize(); PassiveBuffIds = new System.Collections.Generic.List<int>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { int _e0;  _e0 = _buf.ReadInt(); PassiveBuffIds.Add(_e0);}}
+        BulletId = _buf.ReadInt();
     }
 
     public static Skill DeserializeSkill(ByteBuf _buf)
@@ -58,6 +59,10 @@ public sealed partial class Skill : Luban.BeanBase
     /// passiveBuffIds
     /// </summary>
     public readonly System.Collections.Generic.List<int> PassiveBuffIds;
+    /// <summary>
+    /// 弹丸配置ID，0表示不使用弹丸
+    /// </summary>
+    public readonly int BulletId;
    
     public const int __ID__ = 1155715156;
     public override int GetTypeId() => __ID__;
@@ -76,6 +81,7 @@ public sealed partial class Skill : Luban.BeanBase
         + "cooldown:" + Cooldown + ","
         + "targetRule:" + TargetRule + ","
         + "passiveBuffIds:" + Luban.StringUtil.CollectionToString(PassiveBuffIds) + ","
+        + "bulletId:" + BulletId + ","
         + "}";
     }
 }

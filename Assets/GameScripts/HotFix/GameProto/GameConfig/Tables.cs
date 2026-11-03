@@ -15,26 +15,8 @@ public partial class Tables
 {
     #region The Tables
 
-    private item.TbItem m_TbItem;
-    public item.TbItem TbItem 
-    {
-        get
-        {
-            if (m_TbItem == null)
-            {
-                m_TbItem = new item.TbItem(defaultLoader("item_tbitem"));
-                m_TbItem.ResolveRef(this);
-            }
-            return m_TbItem;
-        }
-        set
-        {
-            m_TbItem = value;
-            m_TbItem.ResolveRef(this);
-        }
-    }
     private globalcfg.TbGlobal m_TbGlobal;
-    public globalcfg.TbGlobal TbGlobal 
+    public globalcfg.TbGlobal TbGlobal
     {
         get
         {
@@ -55,7 +37,7 @@ public partial class Tables
     /// 机器人
     /// </summary>
     private robot.TbRobot m_TbRobot;
-    public robot.TbRobot TbRobot 
+    public robot.TbRobot TbRobot
     {
         get
         {
@@ -76,7 +58,7 @@ public partial class Tables
     /// 机器人占格形状
     /// </summary>
     private robot.TbRobotShape m_TbRobotShape;
-    public robot.TbRobotShape TbRobotShape 
+    public robot.TbRobotShape TbRobotShape
     {
         get
         {
@@ -97,7 +79,7 @@ public partial class Tables
     /// 掉落配置
     /// </summary>
     private drop.TbDrop m_TbDrop;
-    public drop.TbDrop TbDrop 
+    public drop.TbDrop TbDrop
     {
         get
         {
@@ -118,7 +100,7 @@ public partial class Tables
     /// 玻璃配置
     /// </summary>
     private glass.TbGlass m_TbGlass;
-    public glass.TbGlass TbGlass 
+    public glass.TbGlass TbGlass
     {
         get
         {
@@ -139,7 +121,7 @@ public partial class Tables
     /// 棋盘布局配置
     /// </summary>
     private board.TbBoardLayout m_TbBoardLayout;
-    public board.TbBoardLayout TbBoardLayout 
+    public board.TbBoardLayout TbBoardLayout
     {
         get
         {
@@ -160,7 +142,7 @@ public partial class Tables
     /// 敌人配置
     /// </summary>
     private enemy.TbEnemy m_TbEnemy;
-    public enemy.TbEnemy TbEnemy 
+    public enemy.TbEnemy TbEnemy
     {
         get
         {
@@ -181,7 +163,7 @@ public partial class Tables
     /// 防御塔配置
     /// </summary>
     private tower.TbTower m_TbTower;
-    public tower.TbTower TbTower 
+    public tower.TbTower TbTower
     {
         get
         {
@@ -202,7 +184,7 @@ public partial class Tables
     /// 波次出兵配置
     /// </summary>
     private wave.TbWaveSpawn m_TbWaveSpawn;
-    public wave.TbWaveSpawn TbWaveSpawn 
+    public wave.TbWaveSpawn TbWaveSpawn
     {
         get
         {
@@ -223,7 +205,7 @@ public partial class Tables
     /// 道具基础表
     /// </summary>
     private item.TbItemBase m_TbItemBase;
-    public item.TbItemBase TbItemBase 
+    public item.TbItemBase TbItemBase
     {
         get
         {
@@ -244,7 +226,7 @@ public partial class Tables
     /// 结算奖励表
     /// </summary>
     private settlement.TbResultAward m_TbResultAward;
-    public settlement.TbResultAward TbResultAward 
+    public settlement.TbResultAward TbResultAward
     {
         get
         {
@@ -265,7 +247,7 @@ public partial class Tables
     /// 波次方案（演示20波，数值可由策划调整）
     /// </summary>
     private wave.TbWavePlan m_TbWavePlan;
-    public wave.TbWavePlan TbWavePlan 
+    public wave.TbWavePlan TbWavePlan
     {
         get
         {
@@ -286,7 +268,7 @@ public partial class Tables
     /// Skill
     /// </summary>
     private skill.TbSkill m_TbSkill;
-    public skill.TbSkill TbSkill 
+    public skill.TbSkill TbSkill
     {
         get
         {
@@ -307,7 +289,7 @@ public partial class Tables
     /// SkillLevel
     /// </summary>
     private skill.TbSkillLevel m_TbSkillLevel;
-    public skill.TbSkillLevel TbSkillLevel 
+    public skill.TbSkillLevel TbSkillLevel
     {
         get
         {
@@ -328,7 +310,7 @@ public partial class Tables
     /// Buff
     /// </summary>
     private buff.TbBuff m_TbBuff;
-    public buff.TbBuff TbBuff 
+    public buff.TbBuff TbBuff
     {
         get
         {
@@ -343,6 +325,27 @@ public partial class Tables
         {
             m_TbBuff = value;
             m_TbBuff.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 弹丸配置
+    /// </summary>
+    private bullet.TbBullet m_TbBullet;
+    public bullet.TbBullet TbBullet
+    {
+        get
+        {
+            if (m_TbBullet == null)
+            {
+                m_TbBullet = new bullet.TbBullet(defaultLoader("bullet_tbbullet"));
+                m_TbBullet.ResolveRef(this);
+            }
+            return m_TbBullet;
+        }
+        set
+        {
+            m_TbBullet = value;
+            m_TbBullet.ResolveRef(this);
         }
     }
 
