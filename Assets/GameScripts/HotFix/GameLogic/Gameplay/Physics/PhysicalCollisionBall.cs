@@ -30,6 +30,7 @@ namespace GameLogic
         private Rigidbody2D _body;
         private CircleCollider2D _collider;
         private SpriteRenderer _spriteRenderer;
+        private BallImpactFeedback _impactFeedback;
         private Sprite _defaultSprite;
         private Vector2 _direction;
         private bool _launched;
@@ -174,6 +175,12 @@ namespace GameLogic
             _spriteRenderer = GetComponent<SpriteRenderer>();
             if (_spriteRenderer != null) _defaultSprite = _spriteRenderer.sprite;
             RefreshSprite();
+            if (_spriteRenderer != null && _spriteRenderer.sprite != null)
+            {
+                _impactFeedback = GetComponent<BallImpactFeedback>();
+                if (_impactFeedback == null) _impactFeedback = gameObject.AddComponent<BallImpactFeedback>();
+                if (!_impactFeedback.Initialize(this, _spriteRenderer)) _impactFeedback = null;
+            }
             ClearBallTrails();
             _body.gravityScale = 0f;
             _body.drag = 0f;
@@ -306,6 +313,7 @@ namespace GameLogic
 
         private void ClearBallTrails()
         {
+            _impactFeedback?.Clear();
             if (_normalTrail != null)
                 _normalTrail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (_berserkTrail != null)
@@ -314,7 +322,8 @@ namespace GameLogic
 
         private void RefreshBallTrails(bool moving)
         {
-            RefreshTrail(_normalTrail, !IsBerserk, moving);
+            _impactFeedback?.SetMotion(moving, IsBerserk);
+            RefreshTrail(_normalTrail, _impactFeedback == null && !IsBerserk, moving);
             RefreshTrail(_berserkTrail, IsBerserk, moving);
         }
 
@@ -578,10 +587,16 @@ namespace GameLogic
         {
             // Combo可同步进入狂暴并在主球位置生成临时球，通知前必须先提交实际端点。
             SetBallCenter(center);
+            _impactFeedback?.RecordCorner(center);
             BounceCount++;
             SecondsSinceEffectiveInteraction = 0f;
             var glass = obstacle != null ? obstacle.GetComponent<GlassView>() : null;
             if (glass != null) ProcessRecoveryGlass(glass);
+            else if (obstacle != null && obstacle.GetComponentInParent<PhysicalCollisionBoundary>() != null)
+            {
+                var point = obstacle.ClosestPoint(center);
+                _impactFeedback?.PlayWall(point, center - point);
+            }
             if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
             gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, WorldRadius + PlacementClearance * 1.5f,
                 new ContactFilter2D { useTriggers = false }, _placementOverlaps);
@@ -796,6 +811,8 @@ namespace GameLogic
                     glass.Owner.Side != Side || glass.Owner.BattleId != BattleId)) return;
                 ValidateConfig();
                 var bounced = false;
+                var impactPoint = Vector2.zero;
+                var impactNormal = Vector2.up;
                 for (int i = 0; i < collision.contactCount; i++)
                 {
                     Vector2 normal = collision.GetContact(i).normal.normalized;
@@ -805,11 +822,16 @@ namespace GameLogic
                         GlobalValueProvider(IsBerserk ? 7 : 6), UnityEngine.Random.value < 0.5f);
                     BounceCount++;
                     bounced = true;
+                    impactPoint = collision.GetContact(i).point;
+                    impactNormal = normal;
+                    _impactFeedback?.RecordCorner(impactPoint + normal * WorldRadius);
                     break;
                 }
                 var robot = collision.collider.GetComponentInParent<RobotView>();
                 if (robot != null) ProcessRobotCombo(robot, collision.collider, bounced);
-                if (bounced && glass != null) ApplyGlassCollision(glass);
+                if (bounced && glass != null) ApplyGlassCollision(glass, impactPoint, impactNormal);
+                else if (bounced && robot == null && collision.collider.GetComponentInParent<PhysicalCollisionBoundary>() != null)
+                    _impactFeedback?.PlayWall(impactPoint, impactNormal);
                 if (bounced) ApplyBounceAcceleration(robot != null);
                 ApplyEffectiveVelocity();
             }
@@ -880,12 +902,16 @@ namespace GameLogic
             if (ComboCount == (_rules?.ComboTriggerCount ?? 50)) ComboThresholdReached?.Invoke(this);
         }
 
-        private void ApplyGlassCollision(GlassView glass)
+        private void ApplyGlassCollision(GlassView glass, Vector2? contactPoint = null, Vector2? contactNormal = null)
         {
             if (glass == null || glass.Owner == null || !glass.Owner.IsRunning || glass.Owner.Side != Side ||
                 glass.Owner.BattleId != BattleId || !_glassHitsThisStep.Add(glass.InstanceId)) return;
+            var center = (Vector2)_collider.bounds.center;
+            var point = contactPoint ?? glass.GetComponent<Collider2D>().ClosestPoint(center);
+            var normal = contactNormal ?? (center - point).normalized;
             var result = glass.Collide(this);
             if (result == GlassCollisionResult.Ignored) return;
+            _impactFeedback?.PlayGlass(point, normal);
             SecondsSinceEffectiveInteraction = 0f;
             EffectiveInteraction?.Invoke(this);
         }
