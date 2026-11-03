@@ -523,34 +523,35 @@ namespace GameLogic
                     startedThisFrame = true;
                 }
                 var frameContext = Context;
-                try
-                {
-                    frameContext.Battle.AdvanceBeforeEnemyMovement(deltaTime);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogException(e, this);
-                    if (Context == frameContext) EndBattle();
-                    return;
-                }
-                if (Context != frameContext || !IsCombatRunning) return;
                 _bootstrap.AdvanceBerserk(deltaTime);
                 if (!IsCombatRunning) return;
                 _playerGlass?.Advance(deltaTime);
                 _opponentGlass?.Advance(deltaTime);
-                if (!startedThisFrame && IsCombatRunning)
+                var remaining = deltaTime;
+                var firstStep = true;
+                while ((firstStep || remaining > 0f) && Context == frameContext && IsCombatRunning)
                 {
-                    try { _enemies?.Advance(deltaTime); }
-                    catch (Exception e) { Debug.LogException(e, this); }
-                }
-                if (IsCombatRunning)
-                {
+                    firstStep = false;
+                    // 节点边界前只推进已存在的弹丸；节点发出的新弹丸从该时刻开始计时。
+                    var step = Mathf.Min(remaining, frameContext.Battle.Timelines.TimeUntilNextNode);
                     try
                     {
-                        _combat?.AdvanceExistingBullets(deltaTime);
-                        if (IsCombatRunning) _combat?.AdvanceAttacks(deltaTime);
+                        frameContext.Battle.AdvanceBeforeEnemyMovement(step, false);
+                        if (Context != frameContext || !IsCombatRunning) return;
+                        if (!startedThisFrame) _enemies?.Advance(step);
+                        if (Context != frameContext || !IsCombatRunning) return;
+                        _combat?.AdvanceExistingBullets(step);
+                        if (Context != frameContext || !IsCombatRunning) return;
+                        frameContext.Battle.Timelines.Advance(step);
+                        if (IsCombatRunning) _combat?.AdvanceAttacks(step);
                     }
-                    catch (Exception e) { Debug.LogException(e, this); EndBattle(); }
+                    catch (Exception e)
+                    {
+                        Debug.LogException(e, this);
+                        if (Context == frameContext) EndBattle();
+                        return;
+                    }
+                    remaining = Mathf.Max(0f, remaining - step);
                 }
                 TryCompleteWaveClear(frameContext);
             }

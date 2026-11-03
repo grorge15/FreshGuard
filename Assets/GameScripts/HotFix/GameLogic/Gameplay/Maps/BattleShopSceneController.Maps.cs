@@ -15,6 +15,16 @@ namespace GameLogic
         public string MapLocation => _mapLocation;
         public bool UsesTerrainMap => _usingTerrainMap;
 
+        public Bounds GetBulletBounds(BattleSide side)
+        {
+            EntityValidation.RequireSide(side);
+            if (_screenLayout == null) throw new InvalidOperationException("直线弹缺少战场世界边界配置。");
+            var bounds = side == BattleSide.Player ? _screenLayout.PlayerBounds : _screenLayout.OpponentBounds;
+            if (bounds.size.x <= 0f || bounds.size.y <= 0f)
+                throw new InvalidOperationException("直线弹战场边界尚未初始化。");
+            return bounds;
+        }
+
         private async UniTask<BoardLayoutRules> ReadBoardLayoutAsync(Tables tables, CancellationToken token)
         {
             _usingTerrainMap = !string.IsNullOrWhiteSpace(_mapLocation);

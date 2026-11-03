@@ -37,6 +37,11 @@ namespace GameLogic
     }
     /// <summary>使用单个预备表现槽的动作，一次施法只允许一个节点，禁止接受后静默漏发。</summary>
     public interface ISingleUseTimelineAction : ITimelineAction { }
+    /// <summary>准备时预留资源；未接受、取消或正常结束都由时间轴统一归还未用部分。</summary>
+    public interface IReleasableTimelineAction : ITimelineAction
+    {
+        bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute, out Action release);
+    }
     public sealed class TimelineObj
     {
         public TimelineModel Model { get; }
@@ -46,7 +51,17 @@ namespace GameLogic
         public bool IsFinished { get; internal set; }
         public bool IsCancelled { get; internal set; }
         internal readonly Action[] Actions;
-        internal TimelineObj(TimelineModel model, SkillCastSnapshot cast, Action[] actions)
-        { Model = model; Cast = cast; Actions = actions; }
+        private Action[] _releases;
+        internal TimelineObj(TimelineModel model, SkillCastSnapshot cast, Action[] actions, Action[] releases)
+        { Model = model; Cast = cast; Actions = actions; _releases = releases; }
+        internal void ReleasePreparation()
+        {
+            var releases = _releases; _releases = null;
+            if (releases == null) return;
+            Exception failure = null;
+            foreach (var release in releases)
+                try { release?.Invoke(); } catch (Exception e) { if (failure == null) failure = e; }
+            if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        }
     }
 }
