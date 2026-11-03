@@ -124,30 +124,33 @@ namespace GameLogic.EditorTools
                 await UniTask.Delay(600,ignoreTimeScale:true);
                 Require(Math.Abs(session.MatchingSeconds-paused)<.02f,"后台暂停期间匹配时长不增加");
                 appState.SendMessage("OnApplicationPause",false);
-                await Wait(()=>UnityEngine.Object.FindObjectOfType<BattleShopSceneController>()?.IsReady==true);
-                host=UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
-                if(host.IsWaitingForMatch)
-                {
-                    Require(Math.Abs(host.PreparationRemaining-3f)<.01f&&!host.IsCombatRunning,"Ready后匹配放行前开局倒计时保持3秒");
-                    Require(!host.CanInteractWithRobots,"匹配放行前双方机器人交互保持关闭");
-                    Require(host.Context.GetState(BattleSide.Opponent).EnergyCoins==host.Context.Rules.InitialCoins,"匹配期间AI尚未消费金币");
-                }
+                Require(typeof(GameApp).GetField("_matchController",Private).GetValue(null)==null,"匹配阶段尚未开始准备战斗");
                 await Wait(()=>GameApp.CurrentMatch?.Phase==BattleMatchPhase.Success&&
                     GameModule.UI.GetUI<BattleLoadingUI>().transform.Find("m_rect_Success").gameObject.activeInHierarchy);
                 var successStart=Time.realtimeSinceStartup;
                 GameApp.CancelBattleMatch();
                 Require(GameApp.CurrentMatch==session&&session.Phase==BattleMatchPhase.Success,"匹配成功后取消被拒绝");
-                Require(session.MatchingSeconds>=2f,"匹配至少累计2秒前台时间");
+                Require(session.MatchingDuration>=1f&&session.MatchingDuration<=2f&&
+                    Math.Abs(session.MatchingSeconds-session.MatchingDuration)<.01f,"匹配按本局固定的1至2秒前台时长结束");
                 var successWindow=GameModule.UI.GetUI<BattleLoadingUI>();
                 Require(!successWindow.transform.Find("m_rect_Matching").gameObject.activeInHierarchy,"成功时匹配中容器隐藏且成功容器可见");
                 await Wait(()=>Array.TrueForAll(successWindow.gameObject.GetComponentsInChildren<Image>(false),i=>i.name!="m_img_Icon"||i.sprite!=null),1);
                 var buffSlots=successWindow.transform.Find("m_rect_Success/m_item_Player/m_rect_BuffSlots");
                 var visibleBuffs=0;
                 for(var i=0;i<buffSlots.childCount;i++)if(buffSlots.GetChild(i).gameObject.activeSelf)visibleBuffs++;
-                Require(host.Context.Entry.PlayerBuffs.Count==2&&visibleBuffs==2,"BUFF携带数据传入战斗且双方容器按种类生成");
+                Require(visibleBuffs==2,"匹配成功时按种类生成BUFF容器");
                 await Capture("success-buffs");
+                await Wait(()=>UnityEngine.Object.FindObjectOfType<BattleShopSceneController>()?.IsReady==true);
+                host=UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
+                Require(host.Context.Entry.PlayerBuffs.Count==2,"成功界面加载的战斗收到BUFF携带数据");
+                if(host.IsWaitingForMatch)
+                {
+                    Require(Math.Abs(host.PreparationRemaining-3f)<.01f&&!host.IsCombatRunning,"Ready后匹配放行前开局倒计时保持3秒");
+                    Require(!host.CanInteractWithRobots,"匹配放行前双方机器人交互保持关闭");
+                    Require(host.Context.GetState(BattleSide.Opponent).EnergyCoins==host.Context.Rules.InitialCoins,"匹配期间AI尚未消费金币");
+                }
                 await Wait(()=>GameApp.CurrentMatch==null);
-                Require(Time.realtimeSinceStartup-successStart>=.9f,"匹配成功展示约1秒后才放行");
+                Require(Time.realtimeSinceStartup-successStart>=.9f&&session.SuccessSeconds>=1f,"匹配成功至少展示1秒且等待加载完成后才放行");
                 Require(!host.IsCombatRunning&&host.PreparationRemaining>2.8f,"界面关闭后才开始原3秒开局倒计时");
                 await Wait(()=>host.IsCombatOperational,40);
                 await Capture("combat");

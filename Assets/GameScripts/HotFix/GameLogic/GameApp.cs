@@ -111,44 +111,39 @@ public partial class GameApp
             _playerRecord.BeginEntry(PlayerState,entry.EntryId,DateTimeOffset.UtcNow);
             await SavePlayerStateAsync();
             lifetime.ThrowIfCancellationRequested();
-            session = new BattleMatchSession(entry.EntryId);
+            session = new BattleMatchSession(entry.EntryId, UnityEngine.Random.Range(1f, 2f));
             _matchSession = session;
             loading = await GameModule.UI.ShowUIAsyncAwait<BattleLoadingUI>();
             lifetime.ThrowIfCancellationRequested();
             if (loading == null) throw new InvalidOperationException("匹配窗口加载失败。");
             loading.Bind(entry,session,CancelBattleMatch);
-            preparation = PrepareBattleForMatchAsync(entry,loading,session,lifetime).Preserve();
-            while (preparation.Value.Status == UniTaskStatus.Pending)
-            {
-                lifetime.ThrowIfCancellationRequested();
-                if (session.Phase == BattleMatchPhase.Matching)
-                {
-                    session.Advance(Time.unscaledDeltaTime,MatchApplicationState.IsForeground);
-                    loading.Render();
-                }
-                await UniTask.Yield();
-            }
-            var controller = await preparation.Value;
-            lifetime.ThrowIfCancellationRequested();
-            if (session.Phase == BattleMatchPhase.Cancelled) throw new OperationCanceledException();
-            if (controller == null || !controller.IsReady)
-                throw controller?.InitializationError ?? new InvalidOperationException("战斗初始化未完成。");
-            session.MarkReady();
             while (session.Phase == BattleMatchPhase.Matching)
             {
+                await UniTask.Yield();
                 lifetime.ThrowIfCancellationRequested();
                 session.Advance(Time.unscaledDeltaTime,MatchApplicationState.IsForeground);
-                if (session.Phase == BattleMatchPhase.Matching)
-                {
-                    loading.Render();
-                    await UniTask.Yield();
-                }
+                if (session.Phase != BattleMatchPhase.Cancelled) loading.Render();
             }
             if (session.Phase == BattleMatchPhase.Cancelled) throw new OperationCanceledException();
+            // 先显示并绘制匹配成功，再启动场景及战斗资源加载。
+            loading.Render();
+            await UniTask.NextFrame(lifetime);
             _playerRecord.CommitSuccess(entry.EntryId);
             await SavePlayerStateAsync();
             lifetime.ThrowIfCancellationRequested();
-            loading.Render();
+            preparation = PrepareBattleForMatchAsync(entry,loading,session,lifetime).Preserve();
+            while (preparation.Value.Status == UniTaskStatus.Pending)
+            {
+                await UniTask.Yield();
+                lifetime.ThrowIfCancellationRequested();
+                session.Advance(Time.unscaledDeltaTime,MatchApplicationState.IsForeground);
+                loading.Render();
+            }
+            var controller = await preparation.Value;
+            lifetime.ThrowIfCancellationRequested();
+            if (controller == null || !controller.IsReady)
+                throw controller?.InitializationError ?? new InvalidOperationException("战斗初始化未完成。");
+            session.MarkReady();
             while (session.Phase == BattleMatchPhase.Success)
             {
                 await UniTask.Yield();

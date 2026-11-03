@@ -48,9 +48,10 @@ namespace GameLogic.EditorTools
                     Text(cancel.transform,"m_text_Label","取消匹配",Vector2.zero,new Vector2(420,110),46,new Color(.33f,.18f,.03f));
                     var success=Rect(root.transform,"m_rect_Success",Vector2.zero,new Vector2(1080,1920));
                     var banner=Image(success,"m_rect_Banner","MatchUI/Match_matchFoundBG",new Vector2(0,335),new Vector2(940,183));
-                    Text(banner.transform,"m_text_Title","匹配成功！",new Vector2(0,30),new Vector2(700,70),48,Color.white,true);
-                    Text(banner.transform,"m_text_Entering","即将进入战斗",new Vector2(-28,-36),new Vector2(350,55),34,Color.white);
-                    for(var i=0;i<3;i++) Text(banner.transform,"m_text_Dot"+i,".",new Vector2(161+i*17,-36),new Vector2(20,55),34,Color.white);
+                    var successTitle=Text(banner.transform,"m_text_Title","匹配成功！",new Vector2(0,30),new Vector2(700,70),48,Color.white,true);
+                    successTitle.alignByGeometry=true;
+                    var entering=Text(banner.transform,"m_text_Entering","即将进入战斗...",new Vector2(0,-36),new Vector2(700,55),34,Color.white);
+                    entering.alignByGeometry=true;
                     Card(success,"m_item_Player",false,-340);
                     Card(success,"m_item_Opponent",true,340);
                     Image(success,"m_img_VS","General/U_winVS",new Vector2(0,-180),new Vector2(300,270));
