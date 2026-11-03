@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace GameLogic
 {
-    /// <summary>金色球尾、墙体火花与玻璃水滴。长度按球半径限制，暂停时保留当前画面。</summary>
+    /// <summary>反弹加速金色短尾、墙体火花与玻璃水滴；暂停时保留当前画面。</summary>
     [DisallowMultipleComponent]
     public sealed class BallImpactFeedback : MonoBehaviour
     {
@@ -13,7 +13,10 @@ namespace GameLogic
         private const float FirstDropletDelay = 0.008f;
         private const int DropletCurveSamples = 8;
         private const float WallDuration = 0.24f;
-        private const float TrailLifetime = 0.32f;
+        private const float TrailLifetime = 0.16f;
+        private const float TrailFadeProgress = 0.6f;
+        private static readonly Color TrailGold = new Color32(255, 196, 56, 255);
+        private static readonly Color TrailAmber = new Color32(238, 151, 20, 255);
         private static readonly Color Gold = new Color32(242, 182, 57, 255);
         private static readonly Color Amber = new Color32(211, 147, 34, 255);
         private static readonly Color Spark = new Color32(255, 203, 77, 255);
@@ -137,12 +140,15 @@ namespace GameLogic
             _clock += Mathf.Max(0f, deltaTime);
             for (var i = _bursts.Count - 1; i >= 0; i--)
                 if (_clock - _bursts[i].Started >= (_bursts[i].Glass ? GlassDuration : WallDuration)) _bursts.RemoveAt(i);
-            if (!_berserk)
+            var acceleration = _ball.BounceAccelerationProgress;
+            if (!_berserk && acceleration > 0f)
             {
                 AppendPoint(_collider.bounds.center);
                 TrimTrail();
-                DrawTrail();
+                // 前40%的加速时段保持清晰，剩余时段跟随加速衰减整体淡出。
+                DrawTrail(Mathf.Clamp01(acceleration / TrailFadeProgress));
             }
+            else { _points.Clear(); _trail.Clear(); }
             DrawImpacts();
         }
 
@@ -157,7 +163,7 @@ namespace GameLogic
         {
             while (_points.Count > 1 && _clock - _points[0].Time > TrailLifetime) _points.RemoveAt(0);
             var distance = 0f;
-            var maximum = _ball.WorldRadius * 8f;
+            var maximum = _ball.WorldRadius * 3.5f;
             for (var i = _points.Count - 2; i >= 0; i--)
             {
                 var segment = Vector2.Distance(_points[i + 1].Position, _points[i].Position);
@@ -175,7 +181,7 @@ namespace GameLogic
 
         private Vector3 Local(Vector2 point) => transform.InverseTransformPoint(new Vector3(point.x, point.y, transform.position.z));
 
-        private void DrawTrail()
+        private void DrawTrail(float visibility)
         {
             _trail.Begin();
             var total = 0f;
@@ -188,16 +194,12 @@ namespace GameLogic
                 var start = total > 0f ? distance / total : 0f;
                 distance += Vector2.Distance(a, b);
                 var end = total > 0f ? distance / total : 1f;
-                var sa = TrailSide(i) * (_ball.WorldRadius * 0.75f * start);
-                var sb = TrailSide(i + 1) * (_ball.WorldRadius * 0.75f * end);
-                var ca = Color.Lerp(Gold, Amber, start); ca.a = 0.94f * Mathf.Pow(start, 0.65f);
-                var cb = Color.Lerp(Gold, Amber, end); cb.a = 0.94f * Mathf.Pow(end, 0.65f);
+                var sa = TrailSide(i) * (_ball.WorldRadius * 0.6f * Mathf.Sqrt(start));
+                var sb = TrailSide(i + 1) * (_ball.WorldRadius * 0.6f * Mathf.Sqrt(end));
+                var ca = Color.Lerp(TrailGold, TrailAmber, start); ca.a = 0.95f * visibility * Mathf.Pow(start, 0.35f);
+                var cb = Color.Lerp(TrailGold, TrailAmber, end); cb.a = 0.95f * visibility * Mathf.Pow(end, 0.35f);
                 _trail.Quad(Local(a - sa), Local(a + sa), Local(b + sb), Local(b - sb), ca, cb);
             }
-            // Glow sits behind the sprite, avoiding a large opaque disc over the ball.
-            var center = Local(_collider.bounds.center);
-            var radius = _ball.WorldRadius / Mathf.Max(0.001f, Mathf.Abs(transform.lossyScale.x));
-            _trail.Disc(center, radius * 1.5f, WithAlpha(Gold, 0.22f), true);
             _trail.Commit();
         }
 

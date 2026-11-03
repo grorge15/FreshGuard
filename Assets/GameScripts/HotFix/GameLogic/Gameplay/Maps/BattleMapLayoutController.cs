@@ -45,7 +45,9 @@ namespace GameLogic
             if (_player == null || _opponent == null) throw new InvalidOperationException("请先绑定双方棋盘和能源球。");
             var playerFit = _player.CalculateFit();
             var opponentFit = _opponent.CalculateFit();
-            try { _player.Apply(playerFit); _opponent.Apply(opponentFit); }
+            // 以我方原始世界格距为基准；地图适配倍率仍单独控制球的尺寸。
+            var opponentSpeedScale = _opponent.ReferenceWorldCellSize / _player.ReferenceWorldCellSize;
+            try { _player.Apply(playerFit, 1f); _opponent.Apply(opponentFit, opponentSpeedScale); }
             catch { Restore(); throw; }
         }
 
@@ -75,6 +77,7 @@ namespace GameLogic
             public readonly PlacementBoardView Board;
             public readonly Vector3 OriginalScale;
             public readonly float ReferenceCellSize;
+            public readonly float ReferenceWorldCellSize;
             private readonly PhysicalCollisionBall _ball;
             private readonly List<FixedChild> _fixedChildren = new List<FixedChild>();
             public Side(PlacementBoardView board, PhysicalCollisionBall ball)
@@ -83,6 +86,7 @@ namespace GameLogic
                 _ball = ball;
                 OriginalScale = board.transform.localScale;
                 ReferenceCellSize = board.ReferenceCellSize;
+                ReferenceWorldCellSize = board.transform.TransformVector(Vector3.right * ReferenceCellSize).magnitude;
                 // 当前场景的塔和路线是棋盘子节点；仅网格内容参与缩放。
                 foreach (Transform child in board.transform)
                     if (child.name != "Slots" && child.name != "Boundary" && child.name != "Glasses" &&
@@ -91,11 +95,12 @@ namespace GameLogic
             }
             public bool Matches(PlacementBoardView board, PhysicalCollisionBall ball) => Board == board && _ball == ball;
             public float CalculateFit() => MapGridMath.GetFitScale(Board.Columns, Board.Rows, Board.CellSize, ReferenceCellSize);
-            public void Apply(float fit)
+            public void Apply(float fit, float speedScale)
             {
                 foreach (var child in _fixedChildren) child.Detach(Board.transform);
                 Board.transform.localScale = new Vector3(OriginalScale.x * fit, OriginalScale.y * fit, OriginalScale.z);
                 _ball.SetMapScale(fit * Board.CellSize / ReferenceCellSize);
+                _ball.SetBattleSpeedScale(speedScale);
                 Board.SetBattleContentVisible(true);
             }
             public void Restore()
@@ -106,7 +111,7 @@ namespace GameLogic
                     Board.transform.localScale = OriginalScale;
                     foreach (var child in _fixedChildren) child.Restore(Board.transform);
                 }
-                if (_ball != null) { _ball.Stop(); _ball.SetMapScale(1f); }
+                if (_ball != null) { _ball.Stop(); _ball.SetMapScale(1f); _ball.SetBattleSpeedScale(1f); }
             }
         }
 

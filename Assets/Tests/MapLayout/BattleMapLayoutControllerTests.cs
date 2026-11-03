@@ -12,6 +12,7 @@ namespace GameLogic.Tests
     {
         private const float Epsilon = 0.0001f;
         private const float ReferenceCellSize = 0.35f;
+        private const float OpponentSpeedScale = (0.8f * 0.7f) / (1.25f * 1.2f);
         private GameObject _root;
         private BattleMapLayoutController _layout;
         private Side _player, _opponent;
@@ -57,7 +58,7 @@ namespace GameLogic.Tests
             SetSize(_opponent.Board, columns, rows, ReferenceCellSize);
             _layout.Apply();
             AssertScale(_player, expected, expected);
-            AssertScale(_opponent, expected, expected);
+            AssertScale(_opponent, expected, expected, OpponentSpeedScale);
             _layout.Restore();
             _layout.Restore();
             AssertScale(_player, 1f, 1f);
@@ -84,7 +85,7 @@ namespace GameLogic.Tests
             var playerFit = ExpectedFit(span, 1, cellSize);
             var opponentFit = ExpectedFit(1, span, cellSize);
             AssertScale(_player, playerFit, playerFit * cellSize / ReferenceCellSize);
-            AssertScale(_opponent, opponentFit, opponentFit * cellSize / ReferenceCellSize);
+            AssertScale(_opponent, opponentFit, opponentFit * cellSize / ReferenceCellSize, OpponentSpeedScale);
             playerPose.AssertPositionRotationParent();
             opponentPose.AssertPositionRotationParent();
             AssertCenteredFit(_player, span, 1, cellSize);
@@ -125,7 +126,7 @@ namespace GameLogic.Tests
             SetSize(_opponent.Board, 13, 13, 0.7f);
             _layout.Apply();
             AssertScale(_player, 0.5f, 0.5f);
-            AssertScale(_opponent, 9f / 26f, 9f / 13f);
+            AssertScale(_opponent, 9f / 26f, 9f / 13f, OpponentSpeedScale);
             AssertStates(roots);
             _layout.Restore();
             AssertScale(_player, 1f, 1f);
@@ -156,17 +157,17 @@ namespace GameLogic.Tests
                 SetSize(_opponent.Board, 13, 13, 0.175f);
                 _layout.Apply();
                 AssertScale(_player, 0.25f, 0.5f);
-                AssertScale(_opponent, 18f / 13f, 9f / 13f);
+                AssertScale(_opponent, 18f / 13f, 9f / 13f, OpponentSpeedScale);
                 Configure();
                 AssertReference(_player);
                 AssertReference(_opponent);
                 _layout.Apply();
                 AssertScale(_player, 0.25f, 0.5f);
-                AssertScale(_opponent, 18f / 13f, 9f / 13f);
+                AssertScale(_opponent, 18f / 13f, 9f / 13f, OpponentSpeedScale);
                 SetBothSizes(11, 9, ReferenceCellSize);
                 _layout.Apply();
                 AssertScale(_player, 1f, 1f);
-                AssertScale(_opponent, 1f, 1f);
+                AssertScale(_opponent, 1f, 1f, OpponentSpeedScale);
                 _layout.Restore();
                 AssertReference(_player);
                 AssertReference(_opponent);
@@ -185,7 +186,7 @@ namespace GameLogic.Tests
                 {
                     _layout.Apply();
                     AssertScale(_player, 0.5f, 0.5f);
-                    AssertScale(_opponent, 0.5f, 0.5f);
+                    AssertScale(_opponent, 0.5f, 0.5f, OpponentSpeedScale);
                 }
                 _layout.Restore();
                 _layout.Restore();
@@ -289,7 +290,7 @@ namespace GameLogic.Tests
             SetBothSizes(columns, rows, cellSize);
             _layout.Apply();
             AssertScale(_player, fit, cell);
-            AssertScale(_opponent, fit, cell);
+            AssertScale(_opponent, fit, cell, OpponentSpeedScale);
             Assert.That(_player.Ball.WorldRadius, Is.EqualTo(playerRadius * cell).Within(Epsilon));
             Assert.That(_opponent.Ball.WorldRadius, Is.EqualTo(opponentRadius * cell).Within(Epsilon));
             playerPose.AssertPositionRotationParent();
@@ -303,6 +304,29 @@ namespace GameLogic.Tests
             opponentPose.AssertUnchanged();
             playerSettings.AssertUnchanged();
             opponentSettings.AssertUnchanged();
+        }
+
+        [TestCase(11, 9, 0.35f)]
+        [TestCase(22, 18, 0.7f)]
+        [TestCase(13, 13, 0.175f)]
+        public void EqualSpeedsCrossEqualCellsOnDifferentWorldScalesAndMapSizes(int columns, int rows, float cellSize)
+        {
+            SetField(_player.Ball, "speed", 3f);
+            SetField(_opponent.Ball, "speed", 3f);
+            Configure();
+            SetSize(_player.Board, columns, rows, cellSize);
+            SetSize(_opponent.Board, 13, 13, 0.7f);
+            _layout.Apply();
+            var playerCell = _player.Board.transform.TransformVector(Vector3.right * cellSize).magnitude;
+            var opponentCell = _opponent.Board.transform.TransformVector(Vector3.right * 0.7f).magnitude;
+            Assert.That(_opponent.Ball.EffectiveSpeed / opponentCell,
+                Is.EqualTo(_player.Ball.EffectiveSpeed / playerCell).Within(Epsilon), "双方每秒跨过的格数必须相同。");
+            Assert.That(_player.Ball.EffectiveSpeed, Is.EqualTo(3f * ExpectedFit(columns, rows, cellSize) * cellSize / ReferenceCellSize).Within(Epsilon));
+            _layout.Apply();
+            Assert.That(_opponent.Ball.BattleSpeedScale, Is.EqualTo(OpponentSpeedScale).Within(Epsilon), "重复适配不能累乘速度倍率。");
+            _layout.Restore();
+            Assert.That(_opponent.Ball.BattleSpeedScale, Is.EqualTo(1f));
+            Assert.That(_opponent.Ball.EffectiveSpeed, Is.EqualTo(3f));
         }
 
         [Test]
@@ -654,13 +678,14 @@ namespace GameLogic.Tests
         private static Vector3 ScaleXy(Vector3 scale, float factor) => new Vector3(scale.x * factor, scale.y * factor, scale.z);
         private static void AssertVector(Vector3 expected, Vector3 actual) =>
             Assert.That(Vector3.Distance(expected, actual), Is.LessThan(Epsilon), expected + " != " + actual);
-        private static void AssertScale(Side side, float fit, float cell)
+        private static void AssertScale(Side side, float fit, float cell, float speedScale = 1f)
         {
             AssertVector(ScaleXy(side.BoardScale, fit), side.Board.transform.localScale);
             AssertVector(ScaleXy(side.BallScale, cell), side.Ball.transform.localScale);
             Assert.That(side.Ball.MapScale, Is.EqualTo(cell).Within(Epsilon));
             Assert.That(side.Ball.Speed, Is.EqualTo(side.Speed));
-            Assert.That(side.Ball.EffectiveSpeed, Is.EqualTo(side.Speed * cell).Within(Epsilon));
+            Assert.That(side.Ball.BattleSpeedScale, Is.EqualTo(speedScale).Within(Epsilon));
+            Assert.That(side.Ball.EffectiveSpeed, Is.EqualTo(side.Speed * cell * speedScale).Within(Epsilon));
             Assert.That(side.Board.ReferenceCellSize, Is.EqualTo(ReferenceCellSize));
         }
         private Side CreateSide(bool player)

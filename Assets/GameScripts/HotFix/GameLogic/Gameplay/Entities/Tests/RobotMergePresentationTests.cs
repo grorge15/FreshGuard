@@ -115,7 +115,7 @@ namespace GameLogic.Tests
                         "落位回弹不能改变碰撞范围。");
                     view.AdvanceMergeFeedback(0.63f);
                     view.PlayMergeFeedback();
-                    Assert.AreEqual(Color.white, portrait.color, "合成闪光不能给立绘染色。");
+                    Assert.AreEqual(Color.white, portrait.color, "合成不能给立绘染色。");
                     var rootScale = instance.transform.localScale;
                     var colliderBounds = view.GetPhysicalCollider().bounds;
                     view.PlayMergeFeedback(instance.transform.position + Vector3.left, 4, 5);
@@ -124,18 +124,56 @@ namespace GameLogic.Tests
                     Assert.IsNotNull(sourceGhostField.GetValue(view));
                     Assert.IsNotNull(ringField.GetValue(view));
                     var mergeRing = (GameObject)ringField.GetValue(view);
+                    var ringRenderer = mergeRing.GetComponent<LineRenderer>();
                     Assert.AreEqual(view.GetPhysicalCollider().GetPath(0).Length,
-                        mergeRing.GetComponent<LineRenderer>().positionCount,
+                        ringRenderer.positionCount,
                         "合成能量圈应沿机器人完整外形绘制，而不是固定单格圆形。");
+                    Assert.AreSame(icon.transform, mergeRing.transform.parent,
+                        "外形光圈需要随底板回弹，不能穿进放大后的底板。");
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(4), icon.color);
+                    Assert.AreEqual(RobotLevelStyle.FrameColorForLevel(4), frame.color);
+                    Assert.IsFalse(ringRenderer.enabled);
+                    var ghost = (GameObject)sourceGhostField.GetValue(view);
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(4),
+                        ghost.transform.Find("RobotIcon").GetComponent<SpriteRenderer>().color,
+                        "收拢残影应使用合成前等级原色。");
                     Assert.AreEqual(rootScale, instance.transform.localScale, "合成动画不能缩放逻辑根节点。");
                     Assert.AreEqual(colliderBounds, view.GetPhysicalCollider().bounds, "合成动画不能改变碰撞范围。");
                     Assert.Less(stars[4].transform.localPosition.y, stars[3].transform.localPosition.y,
                         "新增星星应从最终位置下方入场。");
-                    view.AdvanceMergeFeedback(0.63f);
+                    Assert.AreEqual(new Color(1f, 1f, 1f, 0f), stars[4].color);
+                    view.AdvanceMergeFeedback(0.12f);
+                    view.SetMergeCandidate(true);
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(4), icon.color,
+                        "收拢期间不能闪白或沿用拖拽的青色染色。");
+                    view.SetMergeCandidate(false);
+                    view.AdvanceMergeFeedback(0.08f);
+                    Assert.IsNull(sourceGhostField.GetValue(view));
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(5), icon.color,
+                        "收拢完成后直接显示新等级固有色。");
+                    Assert.AreEqual(RobotLevelStyle.FrameColorForLevel(5), frame.color);
+                    Assert.AreEqual(Color.white, portrait.color);
+                    Assert.IsTrue(ringRenderer.enabled);
+                    Assert.AreEqual(new Color(1f, 1f, 1f, ringRenderer.startColor.a), ringRenderer.startColor,
+                        "合成外形光圈始终为淡白色，不使用等级色。");
+                    Assert.Greater(stars[4].color.a, 0f);
+                    Assert.AreEqual(new Color(1f, 1f, 1f, stars[4].color.a), stars[4].color);
+                    view.AdvanceMergeFeedback(0.2f);
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(5), icon.color);
+                    view.AdvanceMergeFeedback(0.23f);
                     Assert.IsNull(sourceGhostField.GetValue(view));
                     Assert.IsNull(ringField.GetValue(view));
                     Assert.AreEqual(originalStarSize, stars[4].transform.localScale);
                     Assert.AreEqual(Color.white, stars[4].color);
+                    view.PlayMergeFeedback(instance.transform.position + Vector3.left, 4, 5);
+                    instance.SetActive(false);
+                    // EditMode 不会自动派发未在播放模式启动的 MonoBehaviour 生命周期。
+                    typeof(RobotView).GetMethod("OnDisable", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(view, null);
+                    Assert.IsNull(sourceGhostField.GetValue(view));
+                    Assert.IsNull(ringField.GetValue(view));
+                    Assert.AreEqual(RobotLevelStyle.ColorForLevel(5), icon.color,
+                        "收拢未完成时隐藏，也必须清理旧等级的显示状态。");
+                    instance.SetActive(true);
                     robot.TrySetDragging(true);
                     view.Render(robot);
                     Assert.IsFalse(instance.GetComponentsInChildren<SpriteRenderer>(true).Any(renderer => renderer.enabled));

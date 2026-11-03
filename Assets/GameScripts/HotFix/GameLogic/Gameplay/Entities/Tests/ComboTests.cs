@@ -155,6 +155,62 @@ namespace GameLogic.Tests
             finally { bootstrap.UnbindBattle(); }
         }
 
+        [Test]
+        public void OpponentBerserkBallsKeepCellSpeedForAuthoredAndDynamicBallsAndAcceleration()
+        {
+            var tables = ConfigureGlobals(new Dictionary<int, float> { { 35, 2 }, { 11, 1 }, { 12, 0.5f }, { 13, 1 } });
+            _ball.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+            AssignPopup();
+            var opponentObject = UnityEngine.Object.Instantiate(_ball.gameObject);
+            _objects.Add(opponentObject);
+            var opponent = opponentObject.GetComponent<PhysicalCollisionBall>();
+            if (Get(opponent, "_body") == null) Invoke(opponent, "Awake");
+            opponent.GlobalValueProvider = _ball.GlobalValueProvider;
+            var authoredObject = UnityEngine.Object.Instantiate(opponentObject);
+            _objects.Add(authoredObject);
+            var authored = authoredObject.GetComponent<PhysicalCollisionBall>();
+            authored.GlobalValueProvider = _ball.GlobalValueProvider;
+            _ball.SetMapScale(0.5f);
+            opponent.SetMapScale(0.5f);
+            opponent.SetBattleSpeedScale(0.75f);
+            var bootstrap = NewObject("ScaledBootstrap").AddComponent<PlacementBoardsBootstrap>();
+            Set(bootstrap, "_ball", _ball);
+            Set(bootstrap, "_opponentBall", opponent);
+            Set(bootstrap, "_opponentBerserkBalls", new[] { authored });
+            bootstrap.ConfigureFromTables(tables);
+            bootstrap.BindBattle(2, () => _running, _registry, _popups);
+            try
+            {
+                var session = Get(bootstrap, "_opponent");
+                var extras = (PhysicalCollisionBall[])session.GetType().GetField("Temporary").GetValue(session);
+                Assert.AreSame(authored, extras[0]);
+                foreach (var extra in extras)
+                {
+                    if (Get(extra, "_body") == null) Invoke(extra, "Awake");
+                    extra.GlobalValueProvider = _ball.GlobalValueProvider;
+                }
+                opponent.LaunchAt(Vector2.zero, 45f);
+                Assert.AreEqual(tables.TbGlobal.Get(2).Value * 0.5f * 0.75f, opponent.EffectiveSpeed, 0.0001f);
+                Invoke(bootstrap, "EnterBerserk", opponent);
+                Assert.IsTrue(bootstrap.IsBerserk(BattleSide.Opponent));
+                foreach (var extra in extras)
+                {
+                    Assert.IsTrue(extra.IsLaunched && extra.IsBerserk);
+                    Assert.AreEqual(opponent.EffectiveSpeed, extra.EffectiveSpeed, 0.0001f);
+                    Assert.AreEqual(opponent.transform.localScale, extra.transform.localScale);
+                    Invoke(extra, "ApplyBounceAcceleration", false);
+                    var expected = (tables.TbGlobal.Get(3).Value + 1f) * 0.5f * 0.75f;
+                    Assert.AreEqual(expected, extra.EffectiveSpeed, 0.0001f);
+                    Assert.AreEqual(expected, extra.GetComponent<Rigidbody2D>().velocity.magnitude, 0.0001f);
+                }
+                bootstrap.UnbindBattle();
+                Assert.IsTrue(extras[1] == null);
+                Assert.AreEqual(1f, authored.MapScale);
+                Assert.AreEqual(1f, authored.BattleSpeedScale);
+            }
+            finally { bootstrap.UnbindBattle(); }
+        }
+
         [TestCase(2, 0f)]
         [TestCase(3, -1f)]
         [TestCase(10, 1.5f)]

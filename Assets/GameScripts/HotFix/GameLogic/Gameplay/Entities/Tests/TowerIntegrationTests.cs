@@ -147,10 +147,10 @@ namespace GameLogic.Tests
                     var body = root.transform.Find("Body");
                     var health = root.transform.Find("HealthFill");
                     var bodyPosition = body.localPosition;
-                    var healthPosition = health.localPosition;
                     var rootPosition = root.transform.localPosition;
                     var colliderBounds = root.GetComponent<BoxCollider2D>().bounds;
                     registry.ApplyTowerDamage(tower.InstanceId, 25);
+                    var healthPosition = health.localPosition;
                     Assert.AreEqual(0.75f, type.GetProperty("HealthFraction").GetValue(view));
                     type.GetMethod("AdvanceHitFeedback", BindingFlags.Instance | BindingFlags.NonPublic)
                         .Invoke(view, new object[] { 0.04f });
@@ -167,6 +167,47 @@ namespace GameLogic.Tests
                     Assert.AreEqual(true, type.GetProperty("IsDead").GetValue(view));
                     type.GetMethod("Unbind").Invoke(view, null);
                     Assert.AreEqual(0, type.GetProperty("InstanceId").GetValue(view));
+                }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
+        [TestCase(BattleSide.Player, 1f)]
+        [TestCase(BattleSide.Opponent, 1f)]
+        [TestCase(BattleSide.Player, 0.65f)]
+        [TestCase(BattleSide.Opponent, 0.65f)]
+        public void HealthBarKeepsLeftEdgeFixedAsRightEdgeDecreasesAndResetsOnNewBattle(BattleSide side, float mapScale)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Tower/Prefabs/Tower.prefab");
+            var root = UnityEngine.Object.Instantiate(prefab);
+            root.transform.localPosition = new Vector3(2f, -3f, 0f);
+            root.transform.localScale *= mapScale;
+            try
+            {
+                using (var registry = new BattleEntityRegistry())
+                {
+                    var view = root.GetComponent<TowerView>();
+                    var fill = root.transform.Find("HealthFill").GetComponent<SpriteRenderer>();
+                    var fullPosition = fill.transform.localPosition;
+                    var fullScale = fill.transform.localScale;
+                    var tower = registry.CreateTower(3001, side, 100);
+                    view.Bind(tower);
+                    var left = fill.bounds.min.x;
+                    var fullWidth = fill.bounds.size.x;
+                    for (var hit = 1; hit <= 4; hit++)
+                    {
+                        registry.ApplyTowerDamage(tower.InstanceId, 25);
+                        var fraction = 1f - hit * 0.25f;
+                        Assert.That(fill.bounds.min.x, Is.EqualTo(left).Within(0.0001f), "扣血时左端必须保持原位。");
+                        Assert.That(fill.bounds.max.x, Is.EqualTo(left + fullWidth * fraction).Within(0.0001f),
+                            "右端应按剩余血量逐步向左收缩。");
+                        Assert.AreEqual(fullScale.y, fill.transform.localScale.y, "扣血不能改变血条高度。");
+                    }
+                    view.Unbind();
+                    using (var nextBattle = new BattleEntityRegistry())
+                        view.Bind(nextBattle.CreateTower(3001, side, 100));
+                    Assert.AreEqual(fullPosition, fill.transform.localPosition, "新一局满血时恢复原位置。");
+                    Assert.AreEqual(fullScale, fill.transform.localScale, "新一局满血时恢复完整宽度。");
                 }
             }
             finally { UnityEngine.Object.DestroyImmediate(root); }
