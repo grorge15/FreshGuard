@@ -36,6 +36,7 @@ namespace GameLogic
         private float _collisionStartScale = 1f;
         private float _collisionCurrentScale = 1f;
         private bool _collisionPlaying;
+        private RobotImpactOutline _impactOutline;
         private const float MergeConvergeDuration = 0.18f;
         private const float MergePopDuration = 0.48f;
         private const float MergeTotalDuration = 0.62f;
@@ -396,6 +397,12 @@ namespace GameLogic
         public void PlayCollisionFeedback()
         {
             if (!isActiveAndEnabled || _robot == null || !_robot.CanParticipate || _mergePlaying) return;
+            if (_impactOutline == null)
+            {
+                _impactOutline = GetComponent<RobotImpactOutline>();
+                if (_impactOutline == null) _impactOutline = gameObject.AddComponent<RobotImpactOutline>();
+            }
+            _impactOutline.Play(_iconRenderer, GetPhysicalCollider());
             if (_collisionVisuals == null)
             {
                 if (_iconRenderer == null || _iconRenderer.sprite == null) return;
@@ -423,6 +430,7 @@ namespace GameLogic
         {
             if (_host != null && _host.IsFrozen) return;
             AdvanceCollisionFeedback(Time.deltaTime);
+            _impactOutline?.Advance(Time.deltaTime);
             AdvanceMergeFeedback(Time.unscaledDeltaTime);
         }
 
@@ -543,6 +551,7 @@ namespace GameLogic
 
         private void ResetCollisionFeedback()
         {
+            _impactOutline?.Clear();
             if (!_collisionPlaying) return;
             _collisionPlaying = false;
             ApplyCollisionScale(1f);

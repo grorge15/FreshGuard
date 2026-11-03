@@ -154,7 +154,7 @@ namespace GameLogic.Tests
         }
 
         [UnityTest]
-        public IEnumerator ParticleTrailsSwitchWithBerserkFreezeRelaunchAndDisable()
+        public IEnumerator BallTrailsSwitchWithBerserkFreezeRelaunchAndDisable()
         {
             var ball = _bootstrap.PlayerBall;
             var normal = ball.transform.Find("NormalTrail").GetComponent<ParticleSystem>();
@@ -174,16 +174,20 @@ namespace GameLogic.Tests
                 Assert.IsFalse(effect.isPlaying);
             }
             ball.LaunchAt(Vector2.zero, 45f);
-            Assert.IsTrue(normal.isEmitting, "普通球发射后应播放橙黄色拖尾。");
-            Assert.IsFalse(trail.isPlaying);
-            normal.Emit(1);
-            ball.SetFrozen(true);
-            Assert.IsTrue(normal.isPaused);
             yield return null;
-            Assert.AreEqual(1, normal.particleCount);
+            var golden = ball.transform.Find("GoldenBallTrail").GetComponent<MeshRenderer>();
+            Assert.IsTrue(golden.enabled, "普通球发射后应播放连续的金色折角拖尾。");
+            Assert.IsFalse(normal.isPlaying, "普通粒子拖尾不能与新拖尾叠加。");
+            Assert.IsFalse(trail.isPlaying);
+            var goldenMesh = golden.GetComponent<MeshFilter>().sharedMesh;
+            var frozenVertices = goldenMesh.vertices;
+            ball.SetFrozen(true);
+            yield return null;
+            CollectionAssert.AreEqual(frozenVertices, goldenMesh.vertices, "暂停应冻结金色拖尾的形状与寿命。");
             ball.SetFrozen(false);
-            Assert.IsTrue(normal.isEmitting);
+            Assert.IsTrue(golden.enabled);
             ball.SetBerserk(true);
+            Assert.IsFalse(golden.enabled);
             Assert.IsFalse(normal.isPlaying, "进入暴走后不能叠加普通拖尾。");
             Assert.AreEqual(0, normal.particleCount);
             Assert.IsTrue(trail.isEmitting);
@@ -202,7 +206,8 @@ namespace GameLogic.Tests
             ball.SetBerserk(false);
             Assert.IsFalse(trail.isPlaying);
             Assert.AreEqual(0, trail.particleCount);
-            Assert.IsTrue(normal.isEmitting, "暴走结束后恢复普通拖尾。");
+            yield return null;
+            Assert.IsTrue(golden.enabled, "暴走结束后恢复金色拖尾。");
             ball.SetBerserk(true);
             ball.Stop();
             Assert.IsFalse(trail.isPlaying);
@@ -218,10 +223,31 @@ namespace GameLogic.Tests
             ball.gameObject.SetActive(true);
             ball.LaunchAt(Vector2.zero, 45f);
             Assert.IsFalse(trail.isEmitting, "复用后必须恢复普通球外观。");
-            Assert.IsTrue(normal.isEmitting);
-            normal.Emit(1);
+            yield return null;
+            Assert.IsTrue(golden.enabled);
+            Assert.IsFalse(normal.isPlaying);
             ball.LaunchAt(new Vector2(10f, 10f), 45f);
-            Assert.AreEqual(0, normal.particleCount, "普通球重新发射也应清空旧位置的轨迹。");
+            Assert.AreEqual(0, goldenMesh.vertexCount, "普通球重新发射也应清空旧位置的轨迹。");
+        }
+
+        [UnityTest]
+        public IEnumerator ActualBoundaryCollisionShowsGoldenSparksAndFreezePreservesThem()
+        {
+            var boundary = NewObject("ImpactBoundary").AddComponent<PhysicalCollisionBoundary>();
+            boundary.Configure(new Vector2(4f, 3f), 0.2f);
+            var ball = _bootstrap.PlayerBall;
+            ball.LaunchAt(Vector2.zero, 90f);
+            TickUntil(() => ball.BounceCount > 0);
+            Assert.Less(ball.GetComponent<Rigidbody2D>().velocity.y, 0f);
+            Assert.AreEqual(0, ball.ComboCount, "墙体火花不能计入机器人 Combo。");
+            var sparks = ball.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh;
+            Assert.Greater(sparks.vertexCount, 0, "真实边框反弹应生成金色短线。");
+            ball.SetFrozen(true);
+            var vertices = sparks.vertices;
+            yield return null;
+            CollectionAssert.AreEqual(vertices, sparks.vertices);
+            ball.Stop();
+            Assert.AreEqual(0, sparks.vertexCount);
         }
 
         [UnityTest]
@@ -294,7 +320,8 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, _balls.Count(b => b.Side == BattleSide.Player && b.IsLaunched));
             Assert.IsTrue(extras.All(b => !b.gameObject.activeSelf));
             Assert.IsFalse(main.transform.Find("BerserkTrail").GetComponent<ParticleSystem>().isPlaying);
-            Assert.IsTrue(main.transform.Find("NormalTrail").GetComponent<ParticleSystem>().isEmitting);
+            yield return null;
+            Assert.IsTrue(main.transform.Find("GoldenBallTrail").GetComponent<MeshRenderer>().enabled);
             Assert.IsTrue(extras.All(b => b.GetComponentsInChildren<ParticleSystem>(true)
                 .All(effect => !effect.isPlaying && effect.particleCount == 0)));
             AssertRobotCollisionMode(robot, false);

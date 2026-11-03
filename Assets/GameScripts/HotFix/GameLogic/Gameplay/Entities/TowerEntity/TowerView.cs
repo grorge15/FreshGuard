@@ -49,7 +49,6 @@ namespace GameLogic
             }
             _tower = tower;
             _tower.HealthChanged += OnHealthChanged;
-            _tower.Died += OnHealthChanged;
             Render(tower.CurrentHp, tower.MaxHp, tower.Side);
         }
 
@@ -58,7 +57,6 @@ namespace GameLogic
             if (_tower != null)
             {
                 _tower.HealthChanged -= OnHealthChanged;
-                _tower.Died -= OnHealthChanged;
             }
             _tower = null;
         }
