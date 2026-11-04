@@ -15,11 +15,23 @@ namespace GameLogic
     public sealed class EnemyBattleController : MonoBehaviour
     {
         [Header("我方战场路线：按数组顺序移动")]
-        [Tooltip("把自行摆放的节点 Transform 按顺序拖入。Element 0 为出生点；同侧 Tower 自动作为终点，不必填入。修改在下一次初始化对局时生效。")]
+        [Tooltip("按顺序拖入节点 Transform：Element 0 为出生圆心，Element 1、2 为 P1、P2 圆心。每只怪物在各圆内独立选点并依次经过；同侧 Tower 自动作为终点。修改在下一次初始化对局时生效。")]
         [SerializeField] private Transform[] _playerRoutePoints;
+        [Tooltip("我方战场出生圆半径（XY 平面，世界单位）。0 为固定点出生；修改在下一次初始化对局时生效。")]
+        [SerializeField, Min(0f)] private float _playerSpawnRadius = 0.5f;
+        [Tooltip("我方 P1（路线 Element 1）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [SerializeField, Min(0f)] private float _playerP1Radius = 0.5f;
+        [Tooltip("我方 P2（路线 Element 2）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [SerializeField, Min(0f)] private float _playerP2Radius = 0.5f;
         [Header("敌方战场路线：按数组顺序移动")]
-        [Tooltip("把自行摆放的节点 Transform 按顺序拖入。Element 0 为出生点；同侧 Tower 自动作为终点，不必填入。修改在下一次初始化对局时生效。")]
+        [Tooltip("按顺序拖入节点 Transform：Element 0 为出生圆心，Element 1、2 为 P1、P2 圆心。每只怪物在各圆内独立选点并依次经过；同侧 Tower 自动作为终点。修改在下一次初始化对局时生效。")]
         [SerializeField] private Transform[] _opponentRoutePoints;
+        [Tooltip("敌方战场出生圆半径（XY 平面，世界单位）。0 为固定点出生；修改在下一次初始化对局时生效。")]
+        [SerializeField, Min(0f)] private float _opponentSpawnRadius = 0.5f;
+        [Tooltip("敌方 P1（路线 Element 1）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [SerializeField, Min(0f)] private float _opponentP1Radius = 0.5f;
+        [Tooltip("敌方 P2（路线 Element 2）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [SerializeField, Min(0f)] private float _opponentP2Radius = 0.5f;
         [Header("敌人生成父节点")]
         [Tooltip("我方战场的 Battle_playerBelt；敌人保留预制体局部缩放并继承该节点比例。留空沿用控制器节点。")]
         [SerializeField] private Transform _playerEnemyRoot;
@@ -56,6 +68,7 @@ namespace GameLogic
             internal Enemy Config => Schedule.Config;
             internal Vector3[] Points;
             internal float[] CumulativeLengths;
+            internal float[] PointRadii;
             internal int TowerId;
             internal int Spawned;
             internal readonly Queue<GameObject> Pending = new Queue<GameObject>();
@@ -65,6 +78,8 @@ namespace GameLogic
         {
             internal SpawnGroup Group;
             internal EnemyView View;
+            internal Vector3[] Points;
+            internal float[] CumulativeLengths;
             internal int NextPoint = 1;
         }
 
@@ -133,14 +148,16 @@ namespace GameLogic
                         throw new InvalidOperationException("当前战场缺少有效 Tower：" + side);
                     var authored = side == BattleSide.Player ? _playerRoutePoints : _opponentRoutePoints;
                     var points = ReadRoute(authored, tower);
+                    var radii = (side == BattleSide.Player
+                        ? new[] { _playerSpawnRadius, _playerP1Radius, _playerP2Radius }
+                        : new[] { _opponentSpawnRadius, _opponentP1Radius, _opponentP2Radius })
+                        .Select(ClampRouteRadius).ToArray();
                     foreach (var schedule in _timeline.Groups)
                     {
-                        var lengths = new float[points.Length];
-                        for (var p = 1; p < points.Length; p++)
-                            lengths[p] = lengths[p - 1] + Vector3.Distance(points[p - 1], points[p]);
-                        if (lengths.Any(v => !Finite(v))) throw new InvalidOperationException("路线长度必须为有限数值。");
+                        var lengths = CalculateRouteLengths(points);
                         _groups.Add(new SpawnGroup { Side = side, Schedule = schedule, Points = points,
-                            CumulativeLengths = lengths, TowerId = towerId });
+                            CumulativeLengths = lengths, TowerId = towerId,
+                            PointRadii = radii });
                     }
                 }
                 var root = new GameObject("PreparedEnemyViews");
@@ -190,6 +207,59 @@ namespace GameLogic
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private static float[] CalculateRouteLengths(Vector3[] points)
+        {
+            var lengths = new float[points.Length];
+            for (var p = 1; p < points.Length; p++)
+                lengths[p] = lengths[p - 1] + Vector3.Distance(points[p - 1], points[p]);
+            if (lengths.Any(v => !Finite(v))) throw new InvalidOperationException("路线长度必须为有限数值。");
+            return lengths;
+        }
+
+        private static float ClampRouteRadius(float radius) => Finite(radius) ? Mathf.Max(0f, radius) : 0f;
+
+        private void OnValidate()
+        {
+            _playerSpawnRadius = ClampRouteRadius(_playerSpawnRadius);
+            _playerP1Radius = ClampRouteRadius(_playerP1Radius);
+            _playerP2Radius = ClampRouteRadius(_playerP2Radius);
+            _opponentSpawnRadius = ClampRouteRadius(_opponentSpawnRadius);
+            _opponentP1Radius = ClampRouteRadius(_opponentP1Radius);
+            _opponentP2Radius = ClampRouteRadius(_opponentP2Radius);
+        }
+
+        private void OnDrawGizmos()
+        {
+            var previousColor = Gizmos.color;
+            DrawRouteCircle(_playerRoutePoints, 0, _playerSpawnRadius, Color.cyan);
+            DrawRouteCircle(_playerRoutePoints, 1, _playerP1Radius, Color.cyan);
+            DrawRouteCircle(_playerRoutePoints, 2, _playerP2Radius, Color.cyan);
+            var opponentColor = new Color(1f, 0.4f, 0.2f);
+            DrawRouteCircle(_opponentRoutePoints, 0, _opponentSpawnRadius, opponentColor);
+            DrawRouteCircle(_opponentRoutePoints, 1, _opponentP1Radius, opponentColor);
+            DrawRouteCircle(_opponentRoutePoints, 2, _opponentP2Radius, opponentColor);
+            Gizmos.color = previousColor;
+        }
+
+        private static void DrawRouteCircle(Transform[] route, int pointIndex, float radius, Color color)
+        {
+            if (route == null || pointIndex >= route.Length || route[pointIndex] == null) return;
+            var center = route[pointIndex].position;
+            radius = ClampRouteRadius(radius);
+            Gizmos.color = color;
+            Gizmos.DrawLine(center - Vector3.right * 0.08f, center + Vector3.right * 0.08f);
+            Gizmos.DrawLine(center - Vector3.up * 0.08f, center + Vector3.up * 0.08f);
+            const int SEGMENTS = 64;
+            var previous = center + Vector3.right * radius;
+            for (var i = 1; i <= SEGMENTS; i++)
+            {
+                var angle = i * Mathf.PI * 2f / SEGMENTS;
+                var next = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * radius;
+                Gizmos.DrawLine(previous, next);
+                previous = next;
+            }
+        }
 
         public void StartBattle()
         {
@@ -243,10 +313,10 @@ namespace GameLogic
                     !(entity is EnemyEntity enemy) || !enemy.IsAlive) continue;
                 var position = entry.View.transform.position;
                 var remaining = 0d;
-                for (var i = entry.NextPoint; i < entry.Group.Points.Length; i++)
+                for (var i = entry.NextPoint; i < entry.Points.Length; i++)
                 {
-                    remaining += Vector3.Distance(position, entry.Group.Points[i]);
-                    position = entry.Group.Points[i];
+                    remaining += Vector3.Distance(position, entry.Points[i]);
+                    position = entry.Points[i];
                 }
                 if (remaining <= 0.00001d) return 0d;
                 if (enemy.EffectiveSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.EffectiveSpeed);
@@ -293,13 +363,26 @@ namespace GameLogic
                         instance.transform.SetParent(parent != null ? parent : transform, true);
                         // 保留预制体自身比例，让同侧 Belt 的缩放作用于首批和后续出兵。
                         if (parent != null) instance.transform.localScale = prefabScale;
-                        instance.transform.position = group.Points[0];
+                        var points = group.Points;
+                        var lengths = group.CumulativeLengths;
+                        // 只采样人工配置的节点，不随机化自动追加的塔终点。
+                        for (var p = 0; p < group.PointRadii.Length && p < points.Length - 1; p++)
+                        {
+                            if (group.PointRadii[p] <= 0f) continue;
+                            if (points == group.Points) points = (Vector3[])points.Clone();
+                            var offset = UnityEngine.Random.insideUnitCircle * group.PointRadii[p];
+                            points[p] += new Vector3(offset.x, offset.y, 0f);
+                        }
+                        // 每只怪物保留整条采样路线，移动与击退共用，不在抵达或击退后重新随机。
+                        if (points != group.Points) lengths = CalculateRouteLengths(points);
+                        instance.transform.position = points[0];
                         BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), group.Side);
                         instance.SetActive(true);
                         var view = instance.GetComponent<EnemyView>();
                         view.Bind(context.Registry, instanceId);
                         view.SetMoving(true);
-                        _active.Add(instanceId, new MoveEntry { Group = group, View = view });
+                        _active.Add(instanceId, new MoveEntry { Group = group, View = view,
+                            Points = points, CumulativeLengths = lengths });
                         group.Spawned++;
                     }
                     catch
@@ -331,8 +414,8 @@ namespace GameLogic
                 !(entity is EnemyEntity enemy) || !enemy.IsAlive) return false;
             var received = Mathf.Clamp01(enemy.Configuration?.KnockbackResist ?? 1f);
             var progress = Mathf.Max(0f, enemy.RouteProgress - distance * received);
-            var points = entry.Group.Points;
-            var lengths = entry.Group.CumulativeLengths;
+            var points = entry.Points;
+            var lengths = entry.CumulativeLengths;
             var next = 1;
             while (next < lengths.Length - 1 && lengths[next] <= progress) next++;
             var segmentLength = lengths[next] - lengths[next - 1];
@@ -364,7 +447,7 @@ namespace GameLogic
                 }
                 var distance = enemy.EffectiveSpeed * deltaTime;
                 var position = entry.View.transform.position;
-                var points = entry.Group.Points;
+                var points = entry.Points;
                 while (entry.NextPoint < points.Length)
                 {
                     var offset = points[entry.NextPoint] - position;
@@ -378,7 +461,7 @@ namespace GameLogic
                     distance = Mathf.Max(0f, distance - length);
                 }
                 entry.View.transform.position = position;
-                var lengths = entry.Group.CumulativeLengths;
+                var lengths = entry.CumulativeLengths;
                 var progress = entry.NextPoint == points.Length ? lengths[lengths.Length - 1] :
                     lengths[entry.NextPoint] - Vector3.Distance(position, points[entry.NextPoint]);
                 enemy.TrySetRouteProgress(Mathf.Clamp(progress, 0f, lengths[lengths.Length - 1]));

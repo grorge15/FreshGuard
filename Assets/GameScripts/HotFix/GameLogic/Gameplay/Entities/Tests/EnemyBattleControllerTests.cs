@@ -18,6 +18,136 @@ namespace GameLogic.Tests
 
         [TearDown] public void TearDown() { _fixture?.Dispose(); _fixture = null; }
 
+        [Test]
+        public void BothSidesChooseIndependentP1AndP2PositionsForInitialAndLaterEnemies()
+        {
+            var f = Create(false);
+            SetField(f.Controller, "_playerP1Radius", 0.2f);
+            SetField(f.Controller, "_playerP2Radius", 0.4f);
+            SetField(f.Controller, "_opponentP1Radius", 0.3f);
+            SetField(f.Controller, "_opponentP2Radius", 0.6f);
+            f.Prepare(); f.Start();
+            var samples = new System.Collections.Generic.List<Vector3>();
+            for (var batch = 0; batch < 2; batch++)
+            {
+                if (batch > 0) f.Advance(0.5f);
+                foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
+                {
+                    var view = f.Views.Where(v => f.Side(v) == side).OrderBy(v => v.InstanceId).Last();
+                    var points = GetEnemyRoute(f, view);
+                    for (var p = 1; p <= 2; p++)
+                    {
+                        var center = new Vector3((p == 1 ? -3f : -1f) + (side == BattleSide.Player ? 0f : 10f), 0f, 0f);
+                        var offset = points[p] - center;
+                        var radius = (side == BattleSide.Player ? 0.2f : 0.3f) * p;
+                        Assert.That(offset.magnitude, Is.InRange(0.000001f, radius + 0.00001f));
+                        Assert.AreEqual(0f, offset.z);
+                        samples.Add(offset);
+                    }
+                    Assert.AreEqual(new Vector3(side == BattleSide.Player ? -3f : 7f, 1f, 0f), points[0]);
+                }
+            }
+            Assert.AreEqual(8, samples.Distinct().Count(), "每只怪物、每个节点应独立采样");
+        }
+
+        [TestCase(BattleSide.Player)]
+        [TestCase(BattleSide.Opponent)]
+        public void MovementAndKnockbackFollowTheSameSampledWaypointRoute(BattleSide side)
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 1, 2001, 1) }));
+            var f = _fixture;
+            SetField(f.Controller, side == BattleSide.Player ? "_playerP1Radius" : "_opponentP1Radius", 0.15f);
+            SetField(f.Controller, side == BattleSide.Player ? "_playerP2Radius" : "_opponentP2Radius", 0.25f);
+            f.Prepare(); f.Start();
+            var view = f.Views.Single(v => f.Side(v) == side);
+            var points = GetEnemyRoute(f, view);
+            var firstLength = Vector3.Distance(points[0], points[1]);
+            var secondLength = Vector3.Distance(points[1], points[2]);
+            f.Context.Registry.TryGet(view.InstanceId, out var entity);
+            var enemy = (EnemyEntity)entity;
+            f.Advance(firstLength / enemy.EffectiveSpeed);
+            Assert.That(Vector3.Distance(view.transform.position, points[1]), Is.LessThan(0.0001f));
+            f.Advance(secondLength * 0.4f / enemy.EffectiveSpeed);
+            Assert.That(Vector3.Distance(view.transform.position, Vector3.Lerp(points[1], points[2], 0.4f)), Is.LessThan(0.0001f));
+            Assert.That(enemy.RouteProgress, Is.EqualTo(firstLength + secondLength * 0.4f).Within(0.0001f));
+            var knockback = secondLength * 0.4f + firstLength * 0.5f;
+            Assert.IsTrue(((EnemyBattleController)f.Controller).TryKnockback(side, view.InstanceId,
+                knockback / enemy.Configuration.KnockbackResist));
+            Assert.That(Vector3.Distance(view.transform.position, Vector3.Lerp(points[0], points[1], 0.5f)), Is.LessThan(0.0001f));
+            f.Advance(firstLength * 0.5f / enemy.EffectiveSpeed);
+            Assert.That(Vector3.Distance(view.transform.position, points[1]), Is.LessThan(0.0001f), "击退后继续使用原采样点，不能重新随机");
+        }
+
+        private static Vector3[] GetEnemyRoute(Fixture f, EnemyView view)
+        {
+            var entries = (System.Collections.IDictionary)typeof(EnemyBattleController)
+                .GetField("_active", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f.Controller);
+            var entry = entries[view.InstanceId];
+            return (Vector3[])entry.GetType().GetField("Points", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(entry);
+        }
+
+        [Test]
+        public void BothSidesSpawnInitialAndLaterEnemiesInsideTheirOwnCircle()
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 3, 2001, 6) }));
+            var f = _fixture;
+            SetField(f.Controller, "_playerSpawnRadius", 0.4f);
+            SetField(f.Controller, "_opponentSpawnRadius", 0.8f);
+            f.SetRoutes(new[] { new Vector3(-3f, 1f, 2f), new Vector3(-3f, 0f, 2f) });
+            f.Prepare(); f.Start();
+            var positions = new System.Collections.Generic.List<Vector3>();
+            for (var i = 0; i < 6; i++)
+            {
+                if (i > 0) f.Advance(0.5f);
+                foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
+                {
+                    var view = f.Views.Where(v => f.Side(v) == side).OrderBy(v => v.InstanceId).Last();
+                    var center = new Vector3(side == BattleSide.Player ? -3f : 7f, 1f, 2f);
+                    var offset = view.transform.position - center;
+                    Assert.That(offset.magnitude, Is.LessThanOrEqualTo(side == BattleSide.Player ? 0.40001f : 0.80001f));
+                    Assert.AreEqual(0f, offset.z, "出生圆位于 XY 平面，保留原节点深度");
+                    Assert.That(offset.sqrMagnitude, Is.GreaterThan(0f), "不能仍在固定点出生");
+                    positions.Add(offset);
+                }
+            }
+            Assert.AreEqual(12, positions.Distinct().Count(), "后续出生也应独立采样");
+        }
+
+        [Test]
+        public void CircleSpawnMovementAndKnockbackUseEachEnemiesActualOrigin()
+        {
+            var f = Create(false);
+            SetField(f.Controller, "_playerSpawnRadius", 0.5f);
+            SetField(f.Controller, "_opponentSpawnRadius", 0.5f);
+            f.Prepare(); f.Start();
+            var views = f.Views;
+            var starts = views.Select(v => v.transform.position).ToArray();
+            f.Advance(0.25f);
+            for (var i = 0; i < views.Length; i++)
+            {
+                var view = views[i];
+                var side = f.Side(view);
+                var nextPoint = new Vector3(side == BattleSide.Player ? -3f : 7f, 0f, 0f);
+                f.Context.Registry.TryGet(view.InstanceId, out var entity);
+                Assert.That(Vector3.Distance(view.transform.position, Vector3.MoveTowards(starts[i], nextPoint, 0.075f)),
+                    Is.LessThan(0.0001f));
+                Assert.That(((EnemyEntity)entity).RouteProgress, Is.EqualTo(0.075f).Within(0.0001f));
+                Assert.IsTrue(((EnemyBattleController)f.Controller).TryKnockback(side, view.InstanceId, 100f));
+                Assert.That(Vector3.Distance(starts[i], view.transform.position), Is.LessThan(0.0001f));
+            }
+            f.Advance(6f);
+            for (var i = 0; i < views.Length; i++)
+            {
+                var view = views[i];
+                f.Context.Registry.TryGet(view.InstanceId, out var entity);
+                Assert.That(((EnemyEntity)entity).RouteProgress, Is.EqualTo(1.8f).Within(0.0001f), "跨过第一段后进度仍从实际出生点累计");
+                Assert.IsTrue(((EnemyBattleController)f.Controller).TryKnockback(f.Side(view), view.InstanceId, 100f));
+                Assert.That(Vector3.Distance(starts[i], view.transform.position), Is.LessThan(0.0001f), "跨节点击退也不能回到圆心");
+            }
+        }
+
         [TestCase(2001)]
         [TestCase(2002)]
         [TestCase(2003)]
@@ -574,6 +704,13 @@ namespace GameLogic.Tests
                 Host = Root.AddComponent<BattleShopSceneController>();
                 SetField(Host, "_bootstrap", Root.AddComponent<PlacementBoardsBootstrap>());
                 Controller = Root.AddComponent(type);
+                // 既有时序/战斗用例使用固定路线；圆形出生用例显式设置各侧半径。
+                SetField(Controller, "_playerSpawnRadius", 0f);
+                SetField(Controller, "_opponentSpawnRadius", 0f);
+                SetField(Controller, "_playerP1Radius", 0f);
+                SetField(Controller, "_playerP2Radius", 0f);
+                SetField(Controller, "_opponentP1Radius", 0f);
+                SetField(Controller, "_opponentP2Radius", 0f);
                 Context = new BattleShopContext(ShopRules.FromTables(Tables), new[] { 501, 502, 505 }, new[] { 501, 502, 505 }, Tables.TbRobot.Get);
                 SetField(Host, "<Context>k__BackingField", Context);
                 SetField(Host, "_ready", true); SetField(Host, "_running", true);
