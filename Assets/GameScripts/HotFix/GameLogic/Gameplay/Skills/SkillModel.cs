@@ -13,14 +13,17 @@ namespace GameLogic
         public int MaxLevel { get; }
         public float Cooldown { get; }
         public SkillTargetRule TargetRule { get; }
+        public int BulletId { get; }
         public IReadOnlyList<int> PassiveBuffIds { get; }
         public SkillModel(int id, SkillType type, string timelineKey, int maxLevel, float cooldown,
-            SkillTargetRule targetRule, IReadOnlyList<int> passiveBuffIds = null)
+            SkillTargetRule targetRule, IReadOnlyList<int> passiveBuffIds = null, int bulletId = 0)
         {
             EntityValidation.RequirePositive(id, nameof(id)); EntityValidation.RequirePositive(maxLevel, nameof(maxLevel));
             EntityValidation.RequireFiniteNonNegative(cooldown, nameof(cooldown));
             if (string.IsNullOrWhiteSpace(timelineKey)) throw new ArgumentException(nameof(timelineKey));
+            if (bulletId < 0) throw new ArgumentOutOfRangeException(nameof(bulletId));
             Id = id; Type = type; TimelineKey = timelineKey; MaxLevel = maxLevel; Cooldown = cooldown; TargetRule = targetRule;
+            BulletId = bulletId;
             PassiveBuffIds = new List<int>(passiveBuffIds ?? Array.Empty<int>()).AsReadOnly();
         }
     }
@@ -75,11 +78,14 @@ namespace GameLogic
         private readonly Dictionary<int, SkillModel> _skills = new Dictionary<int, SkillModel>();
         private readonly Dictionary<(int, int), SkillLevelModel> _levels = new Dictionary<(int, int), SkillLevelModel>();
         private readonly Dictionary<int, BuffModel> _buffs = new Dictionary<int, BuffModel>();
+        private readonly Dictionary<int, BulletModel> _bullets = new Dictionary<int, BulletModel>();
         public void Add(SkillModel model) => _skills.Add(model.Id, model);
         public void Add(SkillLevelModel model) => _levels.Add((model.SkillId, model.Level), model);
         public void Add(BuffModel model) => _buffs.Add(model.Id, model);
+        public void Add(BulletModel model) => _bullets.Add(model.Id, model);
         public bool TryGet(int id, out SkillModel model) => _skills.TryGetValue(id, out model);
         public bool TryGetLevel(int id, int level, out SkillLevelModel model) => _levels.TryGetValue((id, level), out model);
         public bool TryGetBuff(int id, out BuffModel model) => _buffs.TryGetValue(id, out model);
+        public bool TryGetBullet(int id, out BulletModel model) => _bullets.TryGetValue(id, out model);
     }
 }

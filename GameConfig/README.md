@@ -40,7 +40,7 @@
 业务代码在游戏启动流程完成资源初始化后读取：
 
 ```csharp
-var item = ConfigSystem.Instance.Tables.TbItem.Get(10000);
+var item = ConfigSystem.Instance.Tables.TbItemBase.Get(10000);
 var name = item.Name;
 ```
 
@@ -50,20 +50,34 @@ var name = item.Name;
 
 ## 新增表
 
-参考 `item.xlsx` 的实际格式，在 `__tables__.xlsx` 中登记表名、记录类型、输入文件等。
+参考 `bullet.xlsx` 的实际格式，在 `__tables__.xlsx` 中登记表名、记录类型、输入文件等。旧演示表 `item.xlsx` 已移除，表索引也不再注册 `item.TbItem`；正式道具数据使用 `item_base.xlsx`。
 表格首列是 Luban 标记列，字段从第二列开始。普通数据行首列留空，避免将数据写到标记列。
 基础字段使用 `##var` 和 `##type` 定义，`##group` 指定分组，`##` 行用于说明。
 新增表后执行同一个转表入口即可。
 
 ## 技能与技能等级
 
-`skill.xlsx` 保存技能基础定义：`id`、`skillType`（0普通攻击、1机器人技能、2战场技能、3敌人技能）、`timelineKey`、`maxLevel`、`cooldown`、`targetRule` 和 `passiveBuffIds`。技能执行顺序由时间轴节点驱动，Buff 行为由代码注册。
+`skill.xlsx` 保存技能基础定义：`id`、`skillType`（0普通攻击、1机器人技能、2战场技能、3敌人技能）、`timelineKey`、`maxLevel`、`cooldown`、`targetRule`、`passiveBuffIds` 和 `bulletId`。`bulletId=0` 表示不使用弹丸，非零值必须引用 `bullet.xlsx`。技能执行顺序由时间轴节点驱动，Buff 行为由代码注册。
 
 `skill_level.xlsx` 保存每一级数值：`id` 是独立记录ID，`skillId` 引用技能基础表，`level` 从1开始，`damage`、`slow` 和 `duration` 分别表示伤害、减速比例和持续秒数。运行时按 `(skillId, level)` 查询；同技能等级不可重复，必须完整配置1至 `maxLevel` 的所有等级。旧文件 `skilllevel.xlsx` 不再由表索引引用。
 
-1505 当前仅配置1级：`damage=20` 为直接伤害，`slow=0.3`、`duration=3` 为减速30%、持续3秒。`buff.xlsx` 中的2505提供减速行为。后续新增等级时增加等级行并同步调整基础表的 `maxLevel`，无需修改技能行为代码。
+机器人技能新增具名等级字段：`scatterCount`、`scatterAngle`、`pierceTargetCount`、`burstCount`、`burstInterval`、`knockbackDistance`。不使用的字段填0。散射数量和穿透人数至少为1，连射次数至少为1、间隔大于0；角度范围0～360度，距离和时间必须是有限非负数。
 
-技能实例初始等级为1，由 `SkillObj.SetLevel` 显式升级；当前不自动绑定机器人等级。等级、目标与数值在施放时锁定，升级或更改等级配置不会改变已经发出的投射物。
+1500～1504 为机器人技能，时间轴依次为 `robot.single`、`robot.scatter`、`robot.pierce`、`robot.burst`、`robot.impact`，1～5级每弹伤害均为20/30/40/50/60。1501散射5枚、总角度60度；1502最多穿透3人；1503连射4发、间隔0.2秒；1504击退1单位且不附带减速。
+
+1505 保留原有5级配置：伤害20/28/40/55/77，减速比例0.3/0.3/0.4/0.4/0.4，持续3秒。源表中的动态数组公式及缓存值保留。`buff.xlsx` 中的2505提供减速行为，施法钩子调整后的 `slow` 和 `duration` 仍在施法快照中绑定命中Buff。
+
+机器人技能等级跟随当前机器人等级并限制在技能最大等级内。等级、目标与数值在施放时锁定，升级或更改等级配置不会改变已经发出的投射物。
+
+## 弹丸与受击半径
+
+弹丸关系为 `Robot.skillId → Skill.bulletId → Bullet`。`robot.xlsx` 已移除 `bulletFlightTime`、`bulletArcHeight`、`bulletPrefab`，飞行和资源配置统一放在 `bullet.xlsx`。
+
+`bullet.xlsx` 在表索引注册为 `bullet.TbBullet`，字段包括 `id`、`prefab`、`flightType`、`trackTarget`、`hitMode`、`speed`、`flightTime`、`arcHeight`、`hitRadius`。飞行枚举为 `bullet.BulletFlightType`（Straight=0、Parabolic=1），命中枚举为 `bullet.BulletHitMode`（LockedTarget=0、FirstEnemy=1、PierceEnemies=2）。
+
+当前支持追踪抛物线指定目标，以及不追踪的直线首次命中/穿透。直线速度必须大于0，抛物线飞行时间必须大于0。3500使用 `RobotBullet`、0.6秒和1单位弧高；3501/3502分别供散射/穿透使用，速度10单位/秒、命中半径0.1单位。未使用的字段填0。
+
+1500/1503/1504引用3500，1501引用3501，1502引用3502；其余机器人原飞行参数相同，共用3500，保留原有追踪抛物线行为。`enemy.xlsx` 的 `hitRadius` 是受击圆半径，当前三种演示敌人均为0.3单位；碰撞半径按敌人与弹丸半径之和计算。
 
 ## 波次演示配置
 

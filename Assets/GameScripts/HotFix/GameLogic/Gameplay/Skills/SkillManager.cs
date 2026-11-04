@@ -72,12 +72,18 @@ namespace GameLogic
                     return new SkillCastResult(failure == SkillCastFailure.None ? SkillCastFailure.InvalidOwner : failure);
                 var snapshot = new SkillCastSnapshot(context);
                 if (!_battle.Timelines.TryPrepare(snapshot, out var timeline, out failure)) return new SkillCastResult(failure);
-                failure = Validate(request, out _, out _, true);
-                if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
-                if (commitContact != null && !commitContact()) return new SkillCastResult(SkillCastFailure.NotAllowed);
-                skill.CooldownRemaining = skill.Model.Cooldown;
-                _battle.Timelines.Start(timeline);
-                return new SkillCastResult(SkillCastFailure.None);
+                var started = false;
+                try
+                {
+                    failure = Validate(request, out _, out _, true);
+                    if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
+                    if (commitContact != null && !commitContact()) return new SkillCastResult(SkillCastFailure.NotAllowed);
+                    skill.CooldownRemaining = skill.Model.Cooldown;
+                    started = true;
+                    _battle.Timelines.Start(timeline);
+                    return new SkillCastResult(SkillCastFailure.None);
+                }
+                finally { if (!started) timeline.ReleasePreparation(); }
             }
             finally { _preparing.Remove(request.Owner); }
         }

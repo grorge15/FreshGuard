@@ -1,8 +1,9 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GameLogic
 {
-    internal sealed class EnemyBulletWorld : IBulletWorld
+    internal sealed class EnemyBulletWorld : IProjectileWorld
     {
         private readonly BattleShopSceneController _host;
         private readonly BattleShopContext _context;
@@ -12,7 +13,9 @@ namespace GameLogic
         public bool IsValid(long battleId) => _host != null && _context != null && _host.Context == _context &&
             _context.BattleId == battleId && !_context.IsEnded && !_context.IsEndRequested &&
             _enemies != null && _enemies.OwnsContext(_context);
-        public bool IsRunning => IsValid(_context.BattleId) && _host.IsCombatRunning;
+        public bool IsRunning => _context != null && IsValid(_context.BattleId) && _host.IsCombatRunning;
+        public Bounds GetBattleBounds(BattleSide side) => _host.GetBulletBounds(side);
+        public IReadOnlyList<BulletTarget> GetTargets(BattleSide side) => _enemies.GetBulletTargets(side);
         public bool TryGetPosition(BattleSide side, int targetId, out Vector3 position) =>
             _enemies.TryGetTargetPosition(side, targetId, out position);
         public bool TryGetDeathPosition(BattleSide side, int targetId, out Vector3 position) =>

@@ -115,7 +115,7 @@ namespace GameLogic.Tests
                 System.IO.Path.Combine(UnityEngine.Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             var timeline = BattleWaveTimeline.FromTables(tables);
             var due = new List<BattleWaveTimeline.SpawnCommand>();
-            timeline.CollectDue(400, due);
+            timeline.CollectDue(timeline.Groups.Max(g => g.Rule.SpawnSecRange[1]), due);
             Assert.AreEqual(200, due.Count);
             Assert.AreEqual(20, timeline.CurrentWave);
             Assert.AreEqual(4, due.Count(c => c.Group.Config.EnemyType == 2));

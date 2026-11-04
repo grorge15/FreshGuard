@@ -28,6 +28,7 @@ public sealed partial class Enemy : Luban.BeanBase
         ControlResist = _buf.ReadFloat();
         KnockbackResist = _buf.ReadFloat();
         {int __n0 = _buf.ReadSize(); BuffId = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); BuffId[__index0] = __e0;}}
+        HitRadius = _buf.ReadFloat();
     }
 
     public static Enemy DeserializeEnemy(ByteBuf _buf)
@@ -83,6 +84,10 @@ public sealed partial class Enemy : Luban.BeanBase
     /// 附加Buff ID，空数组为无
     /// </summary>
     public readonly int[] BuffId;
+    /// <summary>
+    /// 受击圆半径（世界单位）
+    /// </summary>
+    public readonly float HitRadius;
    
     public const int __ID__ = -1023814270;
     public override int GetTypeId() => __ID__;
@@ -106,6 +111,7 @@ public sealed partial class Enemy : Luban.BeanBase
         + "controlResist:" + ControlResist + ","
         + "knockbackResist:" + KnockbackResist + ","
         + "buffId:" + Luban.StringUtil.CollectionToString(BuffId) + ","
+        + "hitRadius:" + HitRadius + ","
         + "}";
     }
 }

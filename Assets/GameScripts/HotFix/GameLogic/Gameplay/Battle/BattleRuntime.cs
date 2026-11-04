@@ -82,8 +82,8 @@ namespace GameLogic
             => AdvanceCore(deltaTime, true);
 
         // 场景移动阶段按到期/Tick边界推进敌人Buff；避免先过期再把整帧按原速移动。
-        internal void AdvanceBeforeEnemyMovement(float deltaTime) => AdvanceCore(deltaTime, false);
-        private void AdvanceCore(float deltaTime, bool advanceEnemyBuffs)
+        internal void AdvanceBeforeEnemyMovement(float deltaTime, bool advanceTimelines = true) => AdvanceCore(deltaTime, false, advanceTimelines);
+        private void AdvanceCore(float deltaTime, bool advanceEnemyBuffs, bool advanceTimelines = true)
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (IsDisposed) return;
@@ -94,7 +94,7 @@ namespace GameLogic
             Player.Skills.Advance(deltaTime); Opponent.Skills.Advance(deltaTime);
             Player.Buffs.Advance(deltaTime); if (IsDisposed) return;
             Opponent.Buffs.Advance(deltaTime); if (IsDisposed) return;
-            Timelines.Advance(deltaTime);
+            if (advanceTimelines) Timelines.Advance(deltaTime);
         }
         public void Dispose()
         {

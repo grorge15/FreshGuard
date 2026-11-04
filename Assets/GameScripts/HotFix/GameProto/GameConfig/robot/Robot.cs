@@ -27,9 +27,6 @@ public sealed partial class Robot : Luban.BeanBase
         MinTriggerInterval = _buf.ReadFloat();
         AttackDamage = _buf.ReadInt();
         DamagePerLevel = _buf.ReadInt();
-        BulletFlightTime = _buf.ReadFloat();
-        BulletArcHeight = _buf.ReadFloat();
-        BulletPrefab = _buf.ReadString();
     }
 
     public static Robot DeserializeRobot(ByteBuf _buf)
@@ -78,18 +75,6 @@ public sealed partial class Robot : Luban.BeanBase
     /// 每级增加伤害
     /// </summary>
     public readonly int DamagePerLevel;
-    /// <summary>
-    /// 子弹飞行时间（秒）
-    /// </summary>
-    public readonly float BulletFlightTime;
-    /// <summary>
-    /// 子弹弧线高度
-    /// </summary>
-    public readonly float BulletArcHeight;
-    /// <summary>
-    /// 子弹预制体资源名
-    /// </summary>
-    public readonly string BulletPrefab;
    
     public const int __ID__ = 1376639430;
     public override int GetTypeId() => __ID__;
@@ -112,9 +97,6 @@ public sealed partial class Robot : Luban.BeanBase
         + "minTriggerInterval:" + MinTriggerInterval + ","
         + "attackDamage:" + AttackDamage + ","
         + "damagePerLevel:" + DamagePerLevel + ","
-        + "bulletFlightTime:" + BulletFlightTime + ","
-        + "bulletArcHeight:" + BulletArcHeight + ","
-        + "bulletPrefab:" + BulletPrefab + ","
         + "}";
     }
 }

@@ -12,6 +12,7 @@ namespace GameLogic
             internal Action Release;
         }
         private readonly List<Entry> _entries = new List<Entry>();
+        private bool _advancing;
         public int Count => _entries.Count;
         public bool IsDisposed { get; private set; }
         public void Add(BulletState state, Action<BulletState> present, Action release)
@@ -25,16 +26,23 @@ namespace GameLogic
         public void Advance(float deltaTime)
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
-            if (IsDisposed) return;
-            foreach (var entry in _entries.ToArray())
+            if (IsDisposed || _advancing) return;
+            _advancing = true;
+            try
             {
-                if (IsDisposed) break;
-                if (!_entries.Contains(entry)) continue;
-                var ended = entry.State.Advance(deltaTime);
-                if (IsDisposed) break;
-                entry.Present?.Invoke(entry.State);
-                if (ended && _entries.Remove(entry)) entry.Release();
+                foreach (var entry in _entries.ToArray())
+                {
+                    if (IsDisposed) break;
+                    if (!_entries.Contains(entry)) continue;
+                    var ended = entry.State.Advance(deltaTime);
+                    if (IsDisposed) break;
+                    // 命中可能同步Clear并归还表现；不得再向旧资源推送位置。
+                    if (!_entries.Contains(entry)) continue;
+                    entry.Present?.Invoke(entry.State);
+                    if (ended && _entries.Remove(entry)) entry.Release();
+                }
             }
+            finally { _advancing = false; }
         }
         public void Clear()
         {

@@ -118,6 +118,7 @@ namespace GameLogic
             _context = context;
             context.Combat.DamageApplying += OnDamageApplying;
             context.Combat.TargetResolved += OnTargetResolved;
+            context.Combat.KnockbackRequested += OnKnockbackRequested;
             _preparing = true;
             var generation = _generation;
             GameObject pending = null;
@@ -310,6 +311,40 @@ namespace GameLogic
                 }
             }
         }
+
+        public IReadOnlyList<BulletTarget> GetBulletTargets(BattleSide side)
+        {
+            var targets = new List<BulletTarget>();
+            if (!OwnsBattle) return targets;
+            foreach (var pair in _active)
+                if (pair.Value.Group.Side == side && pair.Value.View != null &&
+                    _context.Registry.TryGet(pair.Key, out var entity) && entity is EnemyEntity enemy && enemy.IsAlive)
+                    targets.Add(new BulletTarget(pair.Key, pair.Value.View.transform.position, enemy.Configuration?.HitRadius ?? 0.3f));
+            return targets;
+        }
+
+        public bool TryKnockback(BattleSide side, int instanceId, float distance)
+        {
+            EntityValidation.RequireFiniteNonNegative(distance, nameof(distance));
+            if (!OwnsBattle || !_active.TryGetValue(instanceId, out var entry) || entry.Group.Side != side ||
+                entry.View == null || !_context.Registry.TryGet(instanceId, out var entity) ||
+                !(entity is EnemyEntity enemy) || !enemy.IsAlive) return false;
+            var received = Mathf.Clamp01(enemy.Configuration?.KnockbackResist ?? 1f);
+            var progress = Mathf.Max(0f, enemy.RouteProgress - distance * received);
+            var points = entry.Group.Points;
+            var lengths = entry.Group.CumulativeLengths;
+            var next = 1;
+            while (next < lengths.Length - 1 && lengths[next] <= progress) next++;
+            var segmentLength = lengths[next] - lengths[next - 1];
+            var u = segmentLength <= 0f ? 0f : (progress - lengths[next - 1]) / segmentLength;
+            entry.NextPoint = next;
+            entry.View.transform.position = Vector3.Lerp(points[next - 1], points[next], u);
+            enemy.TrySetRouteProgress(progress);
+            return true;
+        }
+
+        private void OnKnockbackRequested(BattleSide side, int instanceId, float distance)
+            => TryKnockback(side, instanceId, distance);
 
         private void MoveAll(float deltaTime)
         {
@@ -556,6 +591,7 @@ namespace GameLogic
             {
                 context.Combat.DamageApplying -= OnDamageApplying;
                 context.Combat.TargetResolved -= OnTargetResolved;
+                context.Combat.KnockbackRequested -= OnKnockbackRequested;
             }
             _host = null;
             foreach (var pair in _active)

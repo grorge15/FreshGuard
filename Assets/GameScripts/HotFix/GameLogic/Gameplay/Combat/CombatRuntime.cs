@@ -15,6 +15,7 @@ namespace GameLogic
         public bool IsDisposed { get; private set; }
         public event Action<CombatDamageContext> DamageApplying;
         public event Action<CombatDamageContext> TargetResolved;
+        public event Action<BattleSide, int, float> KnockbackRequested;
 
         public CombatRuntime(long battleId)
         {
@@ -61,6 +62,25 @@ namespace GameLogic
             return new CombatResolutionResult(new CombatOutcomeDraft(action), results);
         }
 
+        public ProjectileAttackSnapshot CaptureProjectileAttack(CombatActionSnapshot action)
+        {
+            var locked = CaptureAttack(action);
+            locked.Consumed = true; // 禁止同时通过旧的整次攻击入口再次结算。
+            return new ProjectileAttackSnapshot(locked);
+        }
+
+        public CombatTargetResolution ResolveProjectileHit(ProjectileAttackSnapshot projectile, int targetId)
+        {
+            ThrowIfDisposed();
+            if (projectile == null) throw new ArgumentNullException(nameof(projectile));
+            var action = projectile.Action;
+            if (action.BattleId != BattleId || !ReferenceEquals(action.Owner, _owner))
+                throw new InvalidOperationException("投射物攻击不属于当前对局。");
+            if (!Active || !TryGetTarget(action, targetId, out _) || !projectile.TryConsume(targetId))
+                return new CombatTargetResolution(targetId, 0, DamageResult.Ignored);
+            return ResolveTarget(action, targetId);
+        }
+
         private CombatTargetResolution ResolveTarget(CombatActionSnapshot action, int id)
         {
             var ignored = new CombatTargetResolution(id, 0, DamageResult.Ignored);
@@ -74,7 +94,11 @@ namespace GameLogic
                 enemy.Buffs.OnBeHurt(context, () => Active);
                 if (!TryGetTarget(action, id, out enemy)) return ignored;
                 var damage = context.Outcome.GetFinalDamage();
-                if (damage <= 0) return ignored;
+                if (damage <= 0)
+                {
+                    if (!context.Outcome.IsCancelled) RequestKnockback(action, id, reference);
+                    return ignored;
+                }
                 DamageApplying?.Invoke(context);
                 if (!TryGetTarget(action, id, out enemy)) return ignored;
                 // 回调结束后只保存值与旧Buff容器；ApplyDamage可能同步归池并创建其他敌人。
@@ -93,6 +117,7 @@ namespace GameLogic
                 if (context.Result.IsKilled) DispatchSource(action, buffs => buffs.OnKill(context, () => Valid), true);
                 if (Valid && context.Result.AppliedDamage > 0 && !context.Result.IsKilled)
                 {
+                    RequestKnockback(action, id, reference);
                     var source = SkillOwnerRef.Entity(BattleId, action.SourceSide, action.SourceInstanceId);
                     foreach (var effect in context.HitBuffs)
                     {
@@ -106,6 +131,12 @@ namespace GameLogic
                 return context.Result;
             }
             finally { _resolving.Remove(id); }
+        }
+
+        private void RequestKnockback(CombatActionSnapshot action, int id, SkillOwnerRef expected)
+        {
+            if (action.KnockbackDistance > 0f && TryGetTarget(action, id, out var enemy, true) && enemy.OwnerRef.Equals(expected))
+                KnockbackRequested?.Invoke(action.SourceSide, id, action.KnockbackDistance);
         }
 
         private bool TryGetTarget(CombatActionSnapshot action, int id, out EnemyEntity enemy, bool committed = false)
@@ -137,7 +168,7 @@ namespace GameLogic
         {
             if (IsDisposed) return;
             IsDisposed = true;
-            DamageApplying = null; TargetResolved = null;
+            DamageApplying = null; TargetResolved = null; KnockbackRequested = null;
             BattleTime = 0f; _resolving.Clear();
         }
 

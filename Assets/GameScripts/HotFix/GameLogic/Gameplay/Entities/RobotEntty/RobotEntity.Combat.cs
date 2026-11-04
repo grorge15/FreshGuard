@@ -38,11 +38,9 @@ namespace GameLogic
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             EntityValidation.RequireFiniteNonNegative(config.MinTriggerInterval, nameof(config.MinTriggerInterval));
-            EntityValidation.RequireFiniteNonNegative(config.BulletFlightTime, nameof(config.BulletFlightTime));
-            EntityValidation.RequireFiniteNonNegative(config.BulletArcHeight, nameof(config.BulletArcHeight));
             EntityValidation.RequirePositive(config.AttackDamage, nameof(config.AttackDamage));
-            if (config.MinTriggerInterval <= 0f || config.BulletFlightTime <= 0f || config.DamagePerLevel < 0 ||
-                string.IsNullOrWhiteSpace(config.BulletPrefab)) throw new ArgumentException("机器人攻击配置无效。", nameof(config));
+            if (config.MinTriggerInterval <= 0f || config.DamagePerLevel < 0)
+                throw new ArgumentException("机器人攻击配置无效。", nameof(config));
             checked { var maxDamage = config.AttackDamage + (maxLevel - 1) * config.DamagePerLevel; }
         }
 

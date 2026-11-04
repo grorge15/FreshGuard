@@ -23,6 +23,12 @@ public sealed partial class SkillLevel : Luban.BeanBase
         Damage = _buf.ReadInt();
         Slow = _buf.ReadFloat();
         Duration = _buf.ReadFloat();
+        ScatterCount = _buf.ReadInt();
+        ScatterAngle = _buf.ReadFloat();
+        PierceTargetCount = _buf.ReadInt();
+        BurstCount = _buf.ReadInt();
+        BurstInterval = _buf.ReadFloat();
+        KnockbackDistance = _buf.ReadFloat();
     }
 
     public static SkillLevel DeserializeSkillLevel(ByteBuf _buf)
@@ -55,6 +61,30 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// 减速持续时间<br/>单位：秒
     /// </summary>
     public readonly float Duration;
+    /// <summary>
+    /// 散射弹丸数量
+    /// </summary>
+    public readonly int ScatterCount;
+    /// <summary>
+    /// 散射总角度（度）
+    /// </summary>
+    public readonly float ScatterAngle;
+    /// <summary>
+    /// 最大穿透人数，包含首次命中
+    /// </summary>
+    public readonly int PierceTargetCount;
+    /// <summary>
+    /// 一次连射总次数
+    /// </summary>
+    public readonly int BurstCount;
+    /// <summary>
+    /// 相邻连射间隔（秒）
+    /// </summary>
+    public readonly float BurstInterval;
+    /// <summary>
+    /// 击退距离（世界单位）
+    /// </summary>
+    public readonly float KnockbackDistance;
    
     public const int __ID__ = -65736816;
     public override int GetTypeId() => __ID__;
@@ -73,6 +103,12 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "damage:" + Damage + ","
         + "slow:" + Slow + ","
         + "duration:" + Duration + ","
+        + "scatterCount:" + ScatterCount + ","
+        + "scatterAngle:" + ScatterAngle + ","
+        + "pierceTargetCount:" + PierceTargetCount + ","
+        + "burstCount:" + BurstCount + ","
+        + "burstInterval:" + BurstInterval + ","
+        + "knockbackDistance:" + KnockbackDistance + ","
         + "}";
     }
 }

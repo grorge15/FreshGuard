@@ -41,6 +41,7 @@ namespace GameLogic
             EntityValidation.RequirePositive(config.HpC1, nameof(config.HpC1));
             EntityValidation.RequirePositive(config.HpC2, nameof(config.HpC2));
             EntityValidation.RequireFiniteNonNegative(config.EnemySpeed, nameof(config.EnemySpeed));
+            EntityValidation.RequireFiniteNonNegative(config.HitRadius, nameof(config.HitRadius));
             if (config.EnemyType < 1 || config.EnemyType > 3) throw new ArgumentOutOfRangeException(nameof(config.EnemyType));
             if (config.EnemyKillSP < 0) throw new ArgumentOutOfRangeException(nameof(config.EnemyKillSP));
             if (config.LeakDamage < 0) throw new ArgumentOutOfRangeException(nameof(config.LeakDamage));
