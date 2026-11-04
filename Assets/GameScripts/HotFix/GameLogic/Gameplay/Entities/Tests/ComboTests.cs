@@ -354,6 +354,54 @@ namespace GameLogic.Tests
             Hit(Robot()); Assert.AreEqual(1, Count);
         }
 
+        [TestCase("OtherSideRobot")]
+        [TestCase("ShopRobot")]
+        public void IneligibleRecoveryEndpointsNeitherCountNorRefreshComboTimeout(string endpoint)
+        {
+            Bind(); Hit(Robot()); Advance(1f);
+            Collider2D obstacle = null;
+            if (endpoint == "OtherSideRobot" || endpoint == "ShopRobot")
+            {
+                var view = Robot(endpoint == "OtherSideRobot" ? BattleSide.Opponent : BattleSide.Player);
+                if (endpoint == "ShopRobot")
+                {
+                    _registry.TryGet(view.InstanceId, out var entity);
+                    Assert.IsTrue(((RobotEntity)entity).TrySetLocation(RobotLocation.PurchasedShopSlot, null));
+                }
+                obstacle = view.GetPhysicalCollider();
+            }
+            Invoke(_ball, "ProcessRecoveryEndpoint", (Vector2)_ball.transform.position, obstacle);
+            Assert.AreEqual(1, Count, "只有有效机器人的碰撞才能增加Combo。");
+            Advance(0.51f);
+            Assert.AreEqual(0, Count, "无效机器人端点不能刷新连击的断档时间。");
+            Hit(Robot());
+            Assert.AreEqual(1, Count);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void NonRobotRecoveryBounceImmediatelyBreaksComboAndNextRobotRestartsAtOne(bool hitWall)
+        {
+            Bind();
+            var first = Robot();
+            Hit(first); Hit(Robot());
+            Assert.AreEqual(2, Count);
+            Collider2D obstacle = null;
+            if (hitWall)
+            {
+                var wall = NewObject("RecoveryWall");
+                wall.transform.position = Vector3.left * 20f;
+                wall.AddComponent<PhysicalCollisionBoundary>();
+                obstacle = wall.AddComponent<BoxCollider2D>();
+            }
+            Invoke(_ball, "ProcessRecoveryEndpoint", (Vector2)_ball.transform.position, obstacle);
+            Assert.AreEqual(0, Count, "非机器人反弹必须立即清零，不能等断档计时结束。");
+            Hit(first);
+            Assert.AreEqual(0, Count, "清零不能把尚未结束的机器人接触重新计数。");
+            Hit(Robot()); Assert.AreEqual(1, Count);
+            Hit(Robot()); Assert.AreEqual(2, Count);
+        }
+
         [Test]
         public void BerserkConsumesContactsWithoutBackfillingAndDoesNotAutomaticallyStartAtFifty()
         {

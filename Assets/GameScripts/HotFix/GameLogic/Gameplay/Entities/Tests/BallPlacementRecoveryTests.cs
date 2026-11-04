@@ -425,7 +425,8 @@ namespace GameLogic.Tests
             }
             // 窄通道仍有实际行程；不能再每侧扣0.02，导致只有抖动且始终不计端点。
             Assert.That(Mathf.Max(maximumX - minimumX, maximumY - minimumY), Is.GreaterThan(0.012f * scale));
-            Assert.Greater(_ball.ComboCount, 1, "非零的真实端点往返必须能够累计Combo。");
+            Assert.Greater(_ball.BounceCount, 1, "非零的真实端点往返必须正常反弹。");
+            Assert.AreEqual(0, _ball.ComboCount, "玻璃端点必须立即中断机器人Combo。");
             Assert.AreEqual(1, _attacks);
             Assert.AreEqual(PlacementRecoveryState.Trapped, _ball.RecoveryState);
         }
@@ -498,7 +499,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void AllEightOccupiedSnapsToRealEdgeMidpointThenCountsEndpointsWithoutAttacks()
+        public void AllEightOccupiedSnapsToRealEdgeMidpointThenBouncesWithoutExtraComboOrAttacks()
         {
             var source = FillNeighbors();
             _ball.ResolvePlacementOverlap(source, _board);
@@ -507,7 +508,9 @@ namespace GameLogic.Tests
             Assert.That(Mathf.Abs(p.x) + Mathf.Abs(p.y), Is.EqualTo(0.5f).Within(0.0001f));
             Assert.That(Mathf.Min(Mathf.Abs(p.x), Mathf.Abs(p.y)), Is.LessThan(0.0001f));
             for (var i = 0; i < 80; i++) Tick();
-            Assert.Greater(_ball.ComboCount, 1); Assert.AreEqual(1, _attacks);
+            Assert.Greater(_ball.BounceCount, 1);
+            Assert.AreEqual(0, _ball.ComboCount, "非机器人格边端点必须中断Combo。");
+            Assert.AreEqual(1, _attacks);
             Assert.AreEqual("Trapped", State);
         }
 
@@ -532,7 +535,9 @@ namespace GameLogic.Tests
                 minimum = Mathf.Min(minimum, along); maximum = Mathf.Max(maximum, along);
             }
             Assert.That(maximum - minimum, Is.GreaterThan(0.03f), "必须有实际往返位移，不能只给刚体写入非零速度。");
-            Assert.Greater(_ball.ComboCount, 1, "到达往返尽头应累计Combo。");
+            Assert.Greater(_ball.BounceCount, 1, "到达往返尽头应正常反弹。");
+            if (glassNeighbors) Assert.AreEqual(0, _ball.ComboCount, "玻璃端点必须中断Combo。");
+            else Assert.Greater(_ball.ComboCount, 1, "实际撞到其他机器人才累计Combo。");
             Assert.AreEqual(1, _attacks, "往返不能重复攻击覆盖球的机器人。");
         }
 
@@ -637,7 +642,7 @@ namespace GameLogic.Tests
             for (var i = 0; i < 60; i++) Tick();
             // 1.2米：到第一个端点0.5米，再向回0.7米，最终位于中点反侧0.2米。
             Assert.That(Vector2.Distance(start - direction * 0.2f, _body.position), Is.LessThan(0.001f));
-            Assert.AreEqual(2, _ball.ComboCount); Assert.AreEqual(2, _ball.BounceCount);
+            Assert.AreEqual(0, _ball.ComboCount); Assert.AreEqual(2, _ball.BounceCount);
             Assert.AreEqual(1, _attacks);
         }
 
@@ -672,8 +677,11 @@ namespace GameLogic.Tests
             Set(_ball, "speed", 1.3f);
             var source = FillNeighbors(); _ball.ResolvePlacementOverlap(source, _board);
             foreach (var view in _board.GetComponentsInChildren<RobotView>()) view.GetPhysicalCollider().enabled = false;
+            var blocker = Robot(new BoardCoordinate(4, 2));
+            blocker.transform.position = _body.position + _ball.CurrentDirection * 0.7f;
+            Physics2D.SyncTransforms();
             typeof(PhysicalCollisionBall).GetProperty("ComboCount").SetValue(_ball, 49);
-            var expected = _body.position + _ball.CurrentDirection * 0.5f;
+            var expected = blocker.GetPhysicalCollider().ClosestPoint(_body.position) - _ball.CurrentDirection * _ball.WorldRadius;
             Vector2 reported = Vector2.zero;
             _ball.ComboThresholdReached += ball => { reported = _body.position; ball.SetBerserk(true); };
             for (var i = 0; i < 40 && !_ball.IsBerserk; i++) Tick();
@@ -714,7 +722,7 @@ namespace GameLogic.Tests
             { _glassContext.Registry.AdvanceTime(Time.fixedDeltaTime); Tick(); }
             Assert.AreEqual(entity.MaxDurability - 1, entity.CurrentDurability);
             if (accelerate) Assert.That(_ball.EffectiveSpeed, Is.EqualTo(5f).Within(0.0001f));
-            Assert.AreEqual(2, _ball.ComboCount, "玻璃挡住路线形成实际端点，只计一次。");
+            Assert.AreEqual(0, _ball.ComboCount, "玻璃挡住路线必须立即清零机器人Combo。");
             for (var i = 0; i < 3; i++) { _glassContext.Registry.AdvanceTime(Time.fixedDeltaTime); Tick(); }
             Assert.AreEqual(entity.MaxDurability - 1, entity.CurrentDurability, "尚未返回不能再次扣耐久。");
             for (var i = 0; i < 130 && entity.CurrentDurability == entity.MaxDurability - 1; i++)
@@ -1005,7 +1013,8 @@ namespace GameLogic.Tests
                     Assert.AreEqual(PlacementRecoveryState.Trapped, ball.RecoveryState);
                     Assert.That(Mathf.Max(maxX - minX, maxY - minY), Is.GreaterThan(0.012f * scale));
                     Assert.That(Mathf.Min(maxX - minX, maxY - minY), Is.LessThan(0.002f));
-                    Assert.Greater(ball.ComboCount, 1);
+                    Assert.Greater(ball.BounceCount, 1);
+                    Assert.AreEqual(0, ball.ComboCount, "玻璃和格边端点必须清零Combo。");
                 }
                 Assert.AreEqual(1, (int)type.GetField("_attacks", flags).GetValue(_fixture));
                 scenarios++;
@@ -1048,7 +1057,9 @@ namespace GameLogic.Tests
                     samples++;
                 }
                 Assert.That(maximum - minimum, Is.GreaterThan(0.03f));
-                Assert.Greater(ball.ComboCount, 1);
+                Assert.Greater(ball.BounceCount, 1);
+                if (glassNeighbors) Assert.AreEqual(0, ball.ComboCount);
+                else Assert.Greater(ball.ComboCount, 1);
                 scenarios++;
             }
             System.IO.File.WriteAllText(path, "{\"passed\":true,\"scenarios\":" + scenarios + ",\"samples\":" + samples + "}");
@@ -1073,6 +1084,8 @@ namespace GameLogic.Tests
                 type.GetMethod("BeginAccelerationCollision", flags).Invoke(_fixture, new object[] { robot, enabled });
                 var ball = (PhysicalCollisionBall)type.GetField("_ball", flags).GetValue(_fixture);
                 var body = ball.GetComponent<Rigidbody2D>();
+                if (!rageOnBounce && !triggerOnly)
+                    typeof(PhysicalCollisionBall).GetProperty("ComboCount").SetValue(ball, 4);
                 if (rageOnBounce || triggerOnly)
                 {
                     type.GetMethod("ConfigureTestSpeeds", flags).Invoke(_fixture, null);
@@ -1096,6 +1109,8 @@ namespace GameLogic.Tests
                 var deadline = Time.time + 1f;
                 while (ball.BounceCount == 0 && Time.time < deadline) yield return null;
                 Assert.AreEqual(1, ball.BounceCount, "需要实际OnCollisionEnter2D反弹，不能手动调用效果方法替代。");
+                Assert.AreEqual(rageOnBounce ? 0 : robot ? 5 : 0, ball.ComboCount,
+                    "实际物理回调中机器人继续连击，撞墙必须立即清零已有连击。");
                 float baseSpeed = rageOnBounce ? 6f : 4f;
                 if (rageOnBounce) Assert.IsTrue(ball.IsBerserk);
                 Assert.That(body.velocity.magnitude, Is.EqualTo(baseSpeed + (enabled ? 1f : 0f)).Within(0.045f));
@@ -1191,7 +1206,8 @@ namespace GameLogic.Tests
                 Assert.That(Mathf.Abs(Vector2.Dot(delta, tangent)), Is.LessThanOrEqualTo(0.501f));
                 samples++;
             }
-            Assert.GreaterOrEqual(ball.ComboCount, 3);
+            Assert.GreaterOrEqual(ball.BounceCount, 3);
+            Assert.AreEqual(0, ball.ComboCount, "无机器人碰撞的格边往返必须中断Combo。");
             ball.SetFrozen(true);
             var position = body.position; var count = ball.ComboCount;
             until = Time.time + 0.1f;

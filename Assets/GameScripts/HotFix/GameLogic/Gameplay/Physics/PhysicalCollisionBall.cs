@@ -384,7 +384,7 @@ namespace GameLogic
                 }
                 if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
                 SecondsSinceEffectiveInteraction = 0f;
-                AddCombo();
+                AddRobotCombo(placed, obstacle);
                 ApplyBounceAcceleration(true);
                 if (!_launched || IsBerserk || RecoveryState == PlacementRecoveryState.None) return;
                 ApplyEffectiveVelocity();
@@ -604,6 +604,8 @@ namespace GameLogic
             _impactFeedback?.RecordCorner(center);
             BounceCount++;
             SecondsSinceEffectiveInteraction = 0f;
+            var robot = obstacle != null ? obstacle.GetComponentInParent<RobotView>() : null;
+            if (robot == null) ResetComboCount();
             var glass = obstacle != null ? obstacle.GetComponent<GlassView>() : null;
             if (glass != null) ProcessRecoveryGlass(glass);
             else if (obstacle != null && obstacle.GetComponentInParent<PhysicalCollisionBoundary>() != null)
@@ -623,8 +625,10 @@ namespace GameLogic
                 ProcessRecoveryGlass(adjacent);
                 if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
             }
-            AddCombo();
-            ApplyBounceAcceleration(obstacle != null && obstacle.GetComponentInParent<RobotView>() != null);
+            // 同一端点也接触玻璃时，玻璃中断连击，不能再把机器人计入旧连击。
+            if (glass != null || glasses.Count > 0) ResetComboCount();
+            else AddRobotCombo(robot, obstacle);
+            ApplyBounceAcceleration(robot != null);
         }
 
         private void ProcessRecoveryGlass(GlassView glass)
@@ -842,6 +846,7 @@ namespace GameLogic
                     break;
                 }
                 var robot = collision.collider.GetComponentInParent<RobotView>();
+                if (bounced && robot == null) ResetComboCount();
                 if (robot != null) ProcessRobotCombo(robot, collision.collider, bounced);
                 if (bounced && glass != null) ApplyGlassCollision(glass, impactPoint, impactNormal);
                 else if (bounced && robot == null && collision.collider.GetComponentInParent<PhysicalCollisionBoundary>() != null)
@@ -903,12 +908,15 @@ namespace GameLogic
             if (IsBerserk) { contact.Counted = true; return; }
             if (!IsComboRunning || !bounced || contact.Counted || !_robotHitsThisStep.Add(robot.InstanceId)) return;
             contact.Counted = true;
-            AddCombo();
+            AddRobotCombo(view, collider);
         }
 
-        private void AddCombo()
+        /// <summary>连续碰撞本局有效机器人才累计Combo；撞墙、玻璃或非机器人端点立即中断连击。</summary>
+        private void AddRobotCombo(RobotView view, Collider2D collider)
         {
-            if (!IsComboRunning || IsBerserk) return;
+            if (!IsComboRunning || IsBerserk || view == null || collider == null ||
+                !collider.enabled || !collider.gameObject.activeInHierarchy || collider != view.GetPhysicalCollider() ||
+                !view.TryGetComboRobot(_comboRegistry, Side, out _)) return;
             if (_rageReentryRemaining > 0f) return;
             ComboCount++;
             _comboElapsed = 0d;
@@ -925,6 +933,7 @@ namespace GameLogic
             var normal = contactNormal ?? (center - point).normalized;
             var result = glass.Collide(this);
             if (result == GlassCollisionResult.Ignored) return;
+            ResetComboCount();
             _impactFeedback?.PlayGlass(point, normal);
             SecondsSinceEffectiveInteraction = 0f;
             EffectiveInteraction?.Invoke(this);
