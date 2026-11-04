@@ -29,6 +29,10 @@ public sealed partial class SkillLevel : Luban.BeanBase
         BurstCount = _buf.ReadInt();
         BurstInterval = _buf.ReadFloat();
         KnockbackDistance = _buf.ReadFloat();
+        PoisonDamage = _buf.ReadInt();
+        PoisonDuration = _buf.ReadFloat();
+        PoisonInterval = _buf.ReadFloat();
+        PoisonMaxLayers = _buf.ReadInt();
     }
 
     public static SkillLevel DeserializeSkillLevel(ByteBuf _buf)
@@ -85,6 +89,22 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// 击退距离（世界单位）
     /// </summary>
     public readonly float KnockbackDistance;
+    /// <summary>
+    /// 每层每次中毒伤害
+    /// </summary>
+    public readonly int PoisonDamage;
+    /// <summary>
+    /// 中毒持续时间（秒）
+    /// </summary>
+    public readonly float PoisonDuration;
+    /// <summary>
+    /// 中毒结算间隔（秒）
+    /// </summary>
+    public readonly float PoisonInterval;
+    /// <summary>
+    /// 目标中毒总层数上限
+    /// </summary>
+    public readonly int PoisonMaxLayers;
    
     public const int __ID__ = -65736816;
     public override int GetTypeId() => __ID__;
@@ -109,6 +129,10 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "burstCount:" + BurstCount + ","
         + "burstInterval:" + BurstInterval + ","
         + "knockbackDistance:" + KnockbackDistance + ","
+        + "poisonDamage:" + PoisonDamage + ","
+        + "poisonDuration:" + PoisonDuration + ","
+        + "poisonInterval:" + PoisonInterval + ","
+        + "poisonMaxLayers:" + PoisonMaxLayers + ","
         + "}";
     }
 }
