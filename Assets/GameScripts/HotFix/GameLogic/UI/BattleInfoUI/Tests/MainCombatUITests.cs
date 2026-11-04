@@ -45,11 +45,10 @@ namespace GameLogic.Tests
                 typeof(MainCombatUI).GetMethod("OnCreate", PRIVATE).Invoke(window, null);
                 foreach (var text in root.GetComponentsInChildren<Text>(true))
                 {
-                    Assert.That(AssetDatabase.GetAssetPath(text.font), Does.StartWith("Assets/AssetRaw/Fonts/MiSans-UI-"),
+                    Assert.That(AssetDatabase.GetAssetPath(text.font), Is.EqualTo("Assets/AssetRaw/Fonts/AlibabaPuHuiTi-3-95-ExtraBold.ttf"),
                         "窗口创建时应保留预制体字体，不能回退到系统字体：" + text.name);
-                    var bold = text.transform.parent.name == "Notice" || text.name == "m_text_PreparationCountdown";
-                    Assert.AreEqual(bold ? FontStyle.Bold : FontStyle.Normal,
-                        text.fontStyle, "战斗提示和开局倒计时使用粗体，其余文本保留现有字重。");
+                    Assert.AreEqual(FontStyle.Normal,
+                        text.fontStyle, "使用字体自身的特粗字重，避免再次合成粗体。");
                 }
                 typeof(UIBase).GetField("_userDatas", PRIVATE).SetValue(window,
                     new object[] { null, null, new BattleProgressSnapshot(17, 4, 125d) });

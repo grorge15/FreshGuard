@@ -45,8 +45,8 @@ namespace GameLogic.Tests
             _widget.Show("能源币不足");
             Assert.AreEqual("Assets/AssetRaw/Actor/UISprites/General/U_blackBarDarker.png",
                 AssetDatabase.GetAssetPath(_panel.GetComponent<Image>().sprite));
-            Assert.AreEqual("Assets/AssetRaw/Fonts/MiSans-UI-Semibold.ttf", AssetDatabase.GetAssetPath(_label.font));
-            Assert.AreEqual(FontStyle.Bold, _label.fontStyle);
+            Assert.AreEqual("Assets/AssetRaw/Fonts/AlibabaPuHuiTi-3-95-ExtraBold.ttf", AssetDatabase.GetAssetPath(_label.font));
+            Assert.AreEqual(FontStyle.Normal, _label.fontStyle);
             Assert.AreEqual(Color.white, _label.color);
             Assert.IsFalse(_label.supportRichText);
             foreach (var graphic in _widget.gameObject.GetComponentsInChildren<Graphic>(true))

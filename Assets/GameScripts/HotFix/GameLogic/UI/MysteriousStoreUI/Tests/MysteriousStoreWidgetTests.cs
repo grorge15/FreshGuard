@@ -151,7 +151,7 @@ namespace GameLogic.Tests
             Assert.That(_root.transform.Find("m_img_InputBlocker").GetComponent<Image>().raycastTarget, Is.True);
             Assert.That(_root.transform.Find("m_go_RemoveConfirmation/m_rect_Content/Panel").GetComponent<Image>().raycastTarget, Is.True);
             Assert.That(_root.GetComponentsInChildren<CanvasScaler>(true).Length, Is.Zero);
-            var font = AssetDatabase.LoadAssetAtPath<Font>("Assets/AssetRaw/Fonts/NotoSansSC-Regular.otf");
+            var font = AssetDatabase.LoadAssetAtPath<Font>("Assets/AssetRaw/Fonts/AlibabaPuHuiTi-3-95-ExtraBold.ttf");
             foreach (var text in _root.GetComponentsInChildren<Text>(true))
             {
                 Assert.That(text.font, Is.SameAs(font));

@@ -16,7 +16,7 @@ namespace FreshGuard.Editor
         public const string PrefabPath = "Assets/AssetRaw/UI/MysteriousStoreWidget.prefab";
         private const string Sprites = "Assets/AssetRaw/Actor/UISprites/MysteriousStore/";
         private const string CoinPath = "Assets/AssetRaw/Actor/UISprites/CheckOutScreen/Sprites/zhuliCoin.png";
-        private const string FontPath = "Assets/AssetRaw/Fonts/NotoSansSC-Regular.otf";
+        private const string FontPath = ModernUIFontTheme.FontPath;
         private const float Scale = 1.5f;
 
         private static MysteriousStorePreviewSession CreatePreviewSession() =>
@@ -182,7 +182,7 @@ namespace FreshGuard.Editor
             label.font = AssetDatabase.LoadAssetAtPath<Font>(FontPath);
             if (label.font == null) throw new InvalidOperationException("缺少中文字体：" + FontPath);
             label.fontSize = Mathf.RoundToInt(size * Scale);
-            label.fontStyle = FontStyle.Bold;
+            label.fontStyle = FontStyle.Normal;
             label.text = value;
             label.color = color;
             label.alignment = alignment;

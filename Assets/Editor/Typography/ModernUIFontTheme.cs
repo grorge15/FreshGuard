@@ -6,18 +6,19 @@ using UnityEngine.UI;
 
 namespace FreshGuard.Editor
 {
-    /// <summary>MiSans 现代黑体主题。字体随 Prefab 打包，运行时不读取操作系统字体。</summary>
+    /// <summary>阿里巴巴普惠体特粗主题。字体随 Prefab 打包，运行时不读取操作系统字体。</summary>
     public static class ModernUIFontTheme
     {
-        public const string RegularPath = "Assets/AssetRaw/Fonts/MiSans-UI-Regular.ttf";
-        public const string SemiboldPath = "Assets/AssetRaw/Fonts/MiSans-UI-Semibold.ttf";
+        public const string FontPath = "Assets/AssetRaw/Fonts/AlibabaPuHuiTi-3-95-ExtraBold.ttf";
+        public const string RegularPath = FontPath;
+        public const string SemiboldPath = FontPath;
         public static readonly Color ShopPriceColor = new Color(0.23f, 0.16f, 0.12f);
 
         public static Font LoadFont(bool emphasis)
         {
             var path = emphasis ? SemiboldPath : RegularPath;
             var font = AssetDatabase.LoadAssetAtPath<Font>(path);
-            if (font == null) throw new InvalidOperationException("缺少 MiSans 字体：" + path);
+            if (font == null) throw new InvalidOperationException("缺少阿里巴巴普惠体特粗字体：" + path);
             return font;
         }
 
@@ -37,7 +38,7 @@ namespace FreshGuard.Editor
         {
             text.font = LoadFont(emphasis);
             text.fontStyle = FontStyle.Normal;
-            // MiSans 行高约为字号的 1.33 倍，原系统字体的小框会把整行裁掉。
+            // 给中文字形预留行高，避免原系统字体的小框把整行裁掉。
             // 只扩展固定高度的单行文字框，保留锚点、位置、宽度及多行正文布局。
             var rect = text.rectTransform;
             var name = text.name.ToLowerInvariant();
@@ -62,7 +63,7 @@ namespace FreshGuard.Editor
             }
         }
 
-        [MenuItem("FreshGuard/Typography/Apply Modern Sans (MiSans)")]
+        [MenuItem("FreshGuard/Typography/Apply Alibaba PuHuiTi ExtraBold")]
         public static void ApplyToAllUIPrefabs()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
@@ -70,7 +71,7 @@ namespace FreshGuard.Editor
             LoadFont(false);
             LoadFont(true);
             // 先保存被嵌套的小部件，让主窗口继承其字体，减少重复覆盖。
-            var paths = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/AssetRaw/UI" })
+            var paths = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/AssetRaw/UI", "Assets/Launcher/Resources/UIWindow" })
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .OrderBy(path => AssetDatabase.GetDependencies(path).Count(item => item.EndsWith(".prefab")))
                 .ThenBy(path => path).ToArray();
@@ -82,10 +83,10 @@ namespace FreshGuard.Editor
                 if (labels.Length == 0) continue;
                 foreach (var label in labels)
                 {
-                    Apply(label);
+                    // 迁移已有界面时只替换字体，保留已编辑的布局、颜色和描边。
+                    label.font = LoadFont(false);
+                    label.fontStyle = FontStyle.Normal;
                     EditorUtility.SetDirty(label);
-                    EditorUtility.SetDirty(label.rectTransform);
-                    foreach (var shadow in label.GetComponents<Shadow>()) EditorUtility.SetDirty(shadow);
                 }
                 PrefabUtility.SavePrefabAsset(root);
                 changed++;
@@ -107,7 +108,7 @@ namespace FreshGuard.Editor
                 PrefabUtility.SavePrefabAsset(root);
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("[Typography] 已为 " + changed + " 个 UI Prefab 应用 MiSans 现代黑体。");
+            Debug.Log("[Typography] 已为 " + changed + " 个 UI Prefab 应用阿里巴巴普惠体特粗。");
         }
     }
 }
