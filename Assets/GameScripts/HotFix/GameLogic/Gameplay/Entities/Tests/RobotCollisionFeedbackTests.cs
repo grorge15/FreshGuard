@@ -39,9 +39,7 @@ namespace GameLogic.Tests
                     var icon = instance.transform.Find("RobotIcon");
                     var portrait = instance.transform.Find("RobotPortrait");
                     var frame = instance.transform.Find("RobotLevelFrame");
-                    var stars = instance.transform.Find("LevelStars");
-                    var initialStarPosition = stars.localPosition;
-                    var initialStarScale = stars.localScale;
+                    Assert.IsNull(instance.transform.Find("LevelStars"));
                     var initialPosition = icon.localPosition;
                     var initialScale = icon.localScale;
                     var initialRootScale = instance.transform.localScale;
@@ -72,7 +70,6 @@ namespace GameLogic.Tests
                         "非居中形状也应以整张外观中心放大。");
                     Assert.AreEqual(icon.localScale, portrait.localScale);
                     Assert.AreEqual(icon.localScale, frame.localScale, "等级边框应随底板同步回弹。");
-                    Assert.Greater(stars.localScale.x, initialStarScale.x * 1.05f, "星星应随外观同步回弹。");
                     Assert.AreEqual(icon.localPosition, portrait.localPosition);
                     Assert.AreEqual(icon.localPosition, frame.localPosition);
                     Assert.AreEqual(initialRootScale, instance.transform.localScale);
@@ -93,8 +90,6 @@ namespace GameLogic.Tests
                     Assert.That(Vector3.Distance(initialPosition, icon.localPosition), Is.LessThan(0.0001f));
                     Assert.AreEqual(initialScale, icon.localScale);
                     Assert.AreEqual(initialScale, frame.localScale);
-                    Assert.AreEqual(initialStarScale, stars.localScale);
-                    Assert.That(Vector3.Distance(initialStarPosition, stars.localPosition), Is.LessThan(0.0001f));
                     view.PlayCollisionFeedback();
                     Advance(view, 0.055f);
                     robot.TrySetDragging(true);

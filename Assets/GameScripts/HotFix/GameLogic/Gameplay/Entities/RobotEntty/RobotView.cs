@@ -15,8 +15,6 @@ namespace GameLogic
         [SerializeField] private SpriteRenderer _iconRenderer;
         [SerializeField] private SpriteRenderer _portraitRenderer;
         [SerializeField] private SpriteRenderer _levelFrameRenderer;
-        [SerializeField] private Transform _starsRoot;
-        [SerializeField] private SpriteRenderer[] _levelStars;
         [Header("碰撞反馈")]
         [SerializeField, Range(1f, 1.5f)] private float _collisionScale = 1.08f;
         [SerializeField, Min(0.05f)] private float _collisionDuration = 0.22f;
@@ -45,9 +43,6 @@ namespace GameLogic
         private int _mergePreviousLevel;
         private CollisionVisual[] _mergeVisuals;
         private Vector3 _mergeStartOffset;
-        private SpriteRenderer _mergeStar;
-        private Vector3 _mergeStarPosition;
-        private Vector3 _mergeStarScale;
         private GameObject _mergeSourceGhost;
         private SpriteRenderer[] _mergeSourceRenderers;
         private Vector3 _mergeSourceStart;
@@ -138,7 +133,6 @@ namespace GameLogic
                 _levelFrameRenderer.enabled = visible && useIcon && _levelFrameRenderer.sprite != null;
                 _levelFrameRenderer.color = RobotLevelStyle.FrameColorForLevel(visualLevel);
             }
-            RenderStars(robot, visible && useIcon);
             foreach (var edge in _outline) edge.enabled = visible && !useIcon;
             var collider = GetPhysicalCollider();
             if (collider != null)
@@ -151,27 +145,6 @@ namespace GameLogic
                 // 占格节点继续提供攻击原点和拖拽选格；正式外观使用整张 Icon。
                 cell.enabled = visible && !useIcon;
                 cell.color = color;
-            }
-        }
-
-        private void RenderStars(RobotEntity robot, bool visible)
-        {
-            if (_levelStars == null) return;
-            var count = Mathf.Clamp(robot.Level, 1, RobotLevelStyle.MaxStars);
-            var cells = robot.Configuration?.ShapeId_Ref?.CellOffsets;
-            var anchor = RobotLevelStyle.StarAnchor(cells);
-            var fit = RobotLevelStyle.StarScaleForCells(cells);
-            var spacing = RobotLevelStyle.StarSpacingForCells(cells);
-            var cellSize = MapGridMath.REFERENCE_CELL_SIZE;
-            for (var i = 0; i < _levelStars.Length; i++)
-            {
-                var star = _levelStars[i];
-                if (star == null) continue;
-                star.enabled = visible && i < count && star.sprite != null;
-                star.color = Color.white;
-                star.transform.localPosition = (anchor + Vector2.right * ((i - (count - 1) * 0.5f) * spacing)) * cellSize;
-                if (star.sprite != null)
-                    star.transform.localScale = Vector3.one * (RobotLevelStyle.StarSpriteSize * fit * cellSize / star.sprite.bounds.size.x);
             }
         }
 
@@ -298,19 +271,11 @@ namespace GameLogic
             _mergeStartOffset = sourcePosition.HasValue
                 ? transform.InverseTransformVector(sourcePosition.Value - transform.position) * 0.08f
                 : Vector3.zero;
-            _mergeStar = level > previousLevel && _levelStars != null && level > 0 && level <= _levelStars.Length
-                ? _levelStars[level - 1] : null;
-            if (_mergeStar != null)
-            {
-                _mergeStarPosition = _mergeStar.transform.localPosition;
-                _mergeStarScale = _mergeStar.transform.localScale;
-            }
             CreateMergeRing();
             if (sourcePosition.HasValue) CreateSourceGhost(sourcePosition.Value);
             _mergeElapsed = 0f;
             _mergePlaying = true;
             ApplyMergeVisuals(0.75f, _mergeStartOffset);
-            ApplyMergeStar(0f);
         }
 
         private CollisionVisual[] CaptureMergeVisuals()
@@ -318,7 +283,7 @@ namespace GameLogic
             var result = new List<CollisionVisual>();
             foreach (var node in new[] { _iconRenderer != null ? _iconRenderer.transform : null,
                 _portraitRenderer != null ? _portraitRenderer.transform : null,
-                _levelFrameRenderer != null ? _levelFrameRenderer.transform : null, _starsRoot })
+                _levelFrameRenderer != null ? _levelFrameRenderer.transform : null })
             {
                 if (node == null) continue;
                 result.Add(new CollisionVisual { Transform = node, Position = node.localPosition,
@@ -414,7 +379,7 @@ namespace GameLogic
             if (group != null) BattleSideRenderGroup.BindRoot(_mergeRing, group.Registry, group.Side);
         }
 
-        /// <summary>同步缩放底板、立绘和星星，保持碰撞、占格节点和攻击原点不变。</summary>
+        /// <summary>同步缩放底板、立绘和边框，保持碰撞、占格节点和攻击原点不变。</summary>
         public void PlayCollisionFeedback()
         {
             if (!isActiveAndEnabled || _robot == null || !_robot.CanParticipate || _mergePlaying) return;
@@ -430,7 +395,7 @@ namespace GameLogic
                 var pivot = _iconRenderer.transform.TransformPoint(_iconRenderer.sprite.bounds.center);
                 var visuals = new List<CollisionVisual>();
                 foreach (var node in new[] { _iconRenderer.transform, _portraitRenderer != null ? _portraitRenderer.transform : null,
-                    _levelFrameRenderer != null ? _levelFrameRenderer.transform : null, _starsRoot })
+                    _levelFrameRenderer != null ? _levelFrameRenderer.transform : null })
                 {
                     if (node == null) continue;
                     visuals.Add(new CollisionVisual
@@ -484,7 +449,6 @@ namespace GameLogic
                 scale = Mathf.Lerp(1.15f, 1f, Mathf.SmoothStep(0f, 1f,
                     (_mergeElapsed - MergeConvergeDuration) / (MergePopDuration - MergeConvergeDuration)));
             ApplyMergeVisuals(scale, Vector3.Lerp(_mergeStartOffset, Vector3.zero, converge));
-            ApplyMergeStar(Mathf.Clamp01((_mergeElapsed - MergeConvergeDuration) / 0.4f));
             UpdateMergeRing(Mathf.Clamp01((_mergeElapsed - 0.12f) / 0.5f));
             if (_mergeElapsed >= MergeTotalDuration) ResetMergeFeedback();
         }
@@ -498,17 +462,6 @@ namespace GameLogic
                 visual.Transform.localPosition = visual.Position + offset;
                 visual.Transform.localScale = new Vector3(visual.Scale.x * scale, visual.Scale.y * scale, visual.Scale.z);
             }
-        }
-
-        private void ApplyMergeStar(float progress)
-        {
-            if (_mergeStar == null) return;
-            var rise = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / 0.65f));
-            var bounce = progress < 0.65f ? Mathf.Lerp(0.5f, 1.2f, rise) :
-                Mathf.Lerp(1.2f, 1f, Mathf.SmoothStep(0f, 1f, (progress - 0.65f) / 0.35f));
-            _mergeStar.transform.localPosition = _mergeStarPosition + Vector3.down * (0.07f * (1f - rise));
-            _mergeStar.transform.localScale = _mergeStarScale * bounce;
-            _mergeStar.color = new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / 0.22f)));
         }
 
         private void UpdateMergeRing(float progress)
@@ -528,17 +481,10 @@ namespace GameLogic
         {
             var restoreLevel = _mergePreviousLevel > 0;
             if (_mergeVisuals != null) ApplyMergeVisuals(1f, Vector3.zero);
-            if (_mergeStar != null)
-            {
-                _mergeStar.transform.localPosition = _mergeStarPosition;
-                _mergeStar.transform.localScale = _mergeStarScale;
-                _mergeStar.color = Color.white;
-            }
             _mergePlaying = false;
             _mergeElapsed = 0f;
             _mergePreviousLevel = 0;
             _mergeVisuals = null;
-            _mergeStar = null;
             DestroyMergeObject(ref _mergeSourceGhost);
             _mergeSourceRenderers = null;
             DestroyMergeObject(ref _mergeRing);
