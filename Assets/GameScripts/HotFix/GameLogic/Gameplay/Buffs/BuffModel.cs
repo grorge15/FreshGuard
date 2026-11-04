@@ -21,12 +21,19 @@ namespace GameLogic
     }
     public sealed class BuffObj
     {
+        internal const double TimeTolerance = 0.0000001d;
+        public long InstanceId { get; internal set; }
         public BuffModel Model { get; }
         public SkillOwnerRef Source { get; }
         public int Stacks { get; internal set; } = 1;
-        public float Remaining { get; internal set; }
+        public float Remaining { get => (float)TimeRemaining; internal set => TimeRemaining = value; }
+        internal double TimeRemaining;
+        public double TickInterval { get; }
+        public double NextTickRemaining { get; internal set; }
+        public double RemainingTickCount => TickInterval <= 0d || NextTickRemaining > TimeRemaining + TimeTolerance
+            ? 0d : Math.Max(0d, 1d + Math.Floor((TimeRemaining - NextTickRemaining + TimeTolerance) / TickInterval));
+        public double RemainingPoisonDamage => Get("poisonDamage") * RemainingTickCount;
         public IReadOnlyDictionary<string, float> Parameters { get; internal set; }
-        internal double TickElapsed;
         internal long Order;
         internal IBuffBehavior Behavior;
         internal BuffObj(BuffModel model, SkillOwnerRef source, float duration,
@@ -34,6 +41,8 @@ namespace GameLogic
         {
             Model = model; Source = source; Remaining = duration; Behavior = behavior;
             Parameters = Copy(parameters);
+            TickInterval = model.BehaviorKey == "poison" ? Get("poisonInterval") : model.TickInterval;
+            NextTickRemaining = TickInterval;
         }
         internal static IReadOnlyDictionary<string, float> Copy(IReadOnlyDictionary<string, float> values)
         {

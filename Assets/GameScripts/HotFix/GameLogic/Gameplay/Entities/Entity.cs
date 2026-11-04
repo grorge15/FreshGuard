@@ -7,7 +7,11 @@ namespace GameLogic
         public SkillContainer Skills { get; } = new SkillContainer();
         public BuffContainer Buffs { get; private set; } = new BuffContainer();
         public virtual bool CanCast => !IsRemoved;
-        internal void BindSkillOwner(long battleId) => OwnerRef = SkillOwnerRef.Entity(battleId, Side, InstanceId);
+        internal void BindSkillOwner(long battleId)
+        {
+            OwnerRef = SkillOwnerRef.Entity(battleId, Side, InstanceId);
+            Buffs.Owner = OwnerRef;
+        }
         public int InstanceId { get; private set; }
         public int ConfigId { get; private set; }
         public BattleSide Side { get; private set; }

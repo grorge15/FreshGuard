@@ -9,6 +9,8 @@ namespace GameLogic
         private readonly object _owner = new object();
         private BattleRuntime _battle;
         private long _sequence;
+        private int _followUpDepth;
+        public bool AllowsGameplayTriggers => _followUpDepth == 0;
         private readonly HashSet<int> _resolving = new HashSet<int>();
         public long BattleId { get; }
         public float BattleTime { get; private set; }
@@ -37,6 +39,8 @@ namespace GameLogic
         {
             ThrowIfDisposed();
             if (action == null) throw new ArgumentNullException(nameof(action));
+            if (!AllowsGameplayTriggers || !action.AllowsGameplayTriggers)
+                throw new InvalidOperationException("后续伤害不能生成新的攻击。");
             if (action.BattleId != BattleId || action.Owner != null)
                 throw new InvalidOperationException("攻击必须来自当前对局且尚未锁定。");
             var draft = new CombatOutcomeDraft(action);
@@ -54,6 +58,7 @@ namespace GameLogic
                 throw new InvalidOperationException("攻击快照不属于当前运行时或已结算。");
             action.Consumed = true;
             var results = new List<CombatTargetResolution>();
+            if (!AllowsGameplayTriggers) return new CombatResolutionResult(new CombatOutcomeDraft(action), results);
             foreach (var id in action.TargetInstanceIds)
             {
                 if (!Active) break;
@@ -76,9 +81,41 @@ namespace GameLogic
             var action = projectile.Action;
             if (action.BattleId != BattleId || !ReferenceEquals(action.Owner, _owner))
                 throw new InvalidOperationException("投射物攻击不属于当前对局。");
-            if (!Active || !TryGetTarget(action, targetId, out _) || !projectile.TryConsume(targetId))
+            if (!AllowsGameplayTriggers || !Active || !TryGetTarget(action, targetId, out _) || !projectile.TryConsume(targetId))
                 return new CombatTargetResolution(targetId, 0, DamageResult.Ignored);
             return ResolveTarget(action, targetId);
+        }
+
+        /// <summary>后续伤害只发事实通知，不经过攻击/受伤/击杀玩法钩子。</summary>
+        public CombatTargetResolution ResolvePeriodicDamage(SkillOwnerRef source, SkillOwnerRef target, int skillId, int damage)
+        {
+            var id = target.EntityId ?? 0;
+            var ignored = new CombatTargetResolution(id, 0, DamageResult.Ignored);
+            if (!Active || !AllowsGameplayTriggers || damage <= 0 || source.BattleId != BattleId || target.BattleId != BattleId ||
+                !source.EntityId.HasValue || source.Side != target.Side || !_battle.TryResolveOwner(target, out var owner) ||
+                !(owner is EnemyEntity enemy) || !enemy.IsAlive || !_resolving.Add(id)) return ignored;
+            _followUpDepth++;
+            try
+            {
+                var raw = new CombatActionSnapshot(BattleId, source.EntityId.Value, source.Side, skillId, new[] { id },
+                    CombatOutcomeTag.DamageOverTime, damage, UnityEngine.Vector3.zero, UnityEngine.Vector3.zero, 1,
+                    damageOrigin: DamageOrigin.FollowUp);
+                var action = raw.Lock(_owner, checked(++_sequence), new CombatOutcomeDraft(raw));
+                action.Consumed = true;
+                var context = new CombatDamageContext(new CombatOutcomeDraft(action), target);
+                DamageApplying?.Invoke(context);
+                if (!TryGetTarget(action, id, out enemy) || !enemy.OwnerRef.Equals(target)) return ignored;
+                var applied = Math.Min(enemy.CurrentHp, damage);
+                var elite = enemy.Configuration != null && enemy.Configuration.EnemyType >= 2;
+                // 后续伤害致死时只清理Buff数据；移除不能派生新的生命周期玩法。
+                if (damage >= enemy.CurrentHp) enemy.Buffs.SuppressRemovedCallbacks = true;
+                var result = _battle.Registry.ApplyDamage(id, damage, out var removal);
+                context.Result = new CombatTargetResolution(id, damage, result, result == DamageResult.Ignored ? 0 : applied, elite);
+                context.Removal = removal;
+                if (Valid) TargetResolved?.Invoke(context);
+                return context.Result;
+            }
+            finally { _followUpDepth--; _resolving.Remove(id); }
         }
 
         private CombatTargetResolution ResolveTarget(CombatActionSnapshot action, int id)
@@ -96,7 +133,7 @@ namespace GameLogic
                 var damage = context.Outcome.GetFinalDamage();
                 if (damage <= 0)
                 {
-                    if (!context.Outcome.IsCancelled) RequestKnockback(action, id, reference);
+                    if (!context.Outcome.IsCancelled) ApplyHitEffects(action, id, reference, context);
                     return ignored;
                 }
                 DamageApplying?.Invoke(context);
@@ -117,20 +154,25 @@ namespace GameLogic
                 if (context.Result.IsKilled) DispatchSource(action, buffs => buffs.OnKill(context, () => Valid), true);
                 if (Valid && context.Result.AppliedDamage > 0 && !context.Result.IsKilled)
                 {
-                    RequestKnockback(action, id, reference);
-                    var source = SkillOwnerRef.Entity(BattleId, action.SourceSide, action.SourceInstanceId);
-                    foreach (var effect in context.HitBuffs)
-                    {
-                        if (!TryGetTarget(action, id, out enemy, true) || !enemy.OwnerRef.Equals(reference)) break;
-                        if (!_battle.Catalog.TryGetBuff(effect.BuffId, out var model))
-                            throw new InvalidOperationException("命中效果引用了未配置Buff：" + effect.BuffId);
-                        _battle.AddBuff(enemy, model, source, effect.Duration, effect.Parameters);
-                    }
+                    ApplyHitEffects(action, id, reference, context);
                 }
                 if (Valid) TargetResolved?.Invoke(context);
                 return context.Result;
             }
             finally { _resolving.Remove(id); }
+        }
+
+        private void ApplyHitEffects(CombatActionSnapshot action, int id, SkillOwnerRef reference, CombatDamageContext context)
+        {
+            RequestKnockback(action, id, reference);
+            var source = SkillOwnerRef.Entity(BattleId, action.SourceSide, action.SourceInstanceId);
+            foreach (var effect in context.HitBuffs)
+            {
+                if (!TryGetTarget(action, id, out var enemy, true) || !enemy.OwnerRef.Equals(reference)) break;
+                if (!_battle.Catalog.TryGetBuff(effect.BuffId, out var model))
+                    throw new InvalidOperationException("命中效果引用了未配置Buff：" + effect.BuffId);
+                _battle.AddBuff(enemy, model, source, effect.Duration, effect.Parameters);
+            }
         }
 
         private void RequestKnockback(CombatActionSnapshot action, int id, SkillOwnerRef expected)
