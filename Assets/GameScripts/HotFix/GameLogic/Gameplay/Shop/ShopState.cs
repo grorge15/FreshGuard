@@ -16,8 +16,7 @@ namespace GameLogic
         EntityNotFound,
         InvalidLocation,
         InvalidPlacement,
-        StorageFull,
-        IncompatibleMerge,
+        IncompatibleMerge = 13,
         MaxLevelReached,
         InvalidConfiguration,
         WrongBattle,
@@ -70,7 +69,6 @@ namespace GameLogic
         public BattleSide Side { get; }
         public int EnergyCoins { get; internal set; }
         public IReadOnlyList<ShopSlot> Slots { get; }
-        public int? StorageInstanceId { get; internal set; }
         public IReadOnlyList<int> LastBatchRobotIds { get; internal set; }
 
         internal BattleShopState(BattleSide side, ShopRules rules)

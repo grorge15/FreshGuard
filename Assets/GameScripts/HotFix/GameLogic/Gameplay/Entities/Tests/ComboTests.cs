@@ -300,7 +300,7 @@ namespace GameLogic.Tests
             ((RobotEntity)entity).TrySetDragging(true);
             Hit(dragged); Assert.AreEqual(1, Count);
             var stored = Robot(); _registry.TryGet(stored.InstanceId, out entity);
-            ((RobotEntity)entity).TrySetLocation(RobotLocation.Storage, null);
+            ((RobotEntity)entity).TrySetLocation(RobotLocation.PurchasedShopSlot, null);
             Hit(stored); Assert.AreEqual(1, Count);
             var removed = Robot(); _registry.Remove(removed.InstanceId, EntityRemovalReason.Consumed, out _);
             Hit(removed); Assert.AreEqual(1, Count);

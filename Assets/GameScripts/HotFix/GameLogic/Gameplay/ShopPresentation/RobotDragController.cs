@@ -7,7 +7,7 @@ namespace GameLogic
 {
     public enum RobotDragPhase { Idle, Pressed, Dragging, Committing }
 
-    /// <summary>四来源共用的指针会话；拿起和最终购买均由上下文校验。</summary>
+    /// <summary>商店商品、已购商品和场上机器人共用的指针会话。</summary>
     [DisallowMultipleComponent]
     public sealed class RobotDragController : MonoBehaviour
     {
@@ -109,14 +109,12 @@ namespace GameLogic
             _ui.MoveGhost(_position);
             _host.Placement.UpdateDrag(_position);
             _ui.UpdateOfferMergeCandidates(_source, _position);
-            var storage = _ui.IsOverStorage(_position);
-            var overShop = !storage && _ui.IsOverShop(_position);
+            var overShop = _ui.IsOverShop(_position);
             if (overShop) _host.ClearMergeCandidates();
             else _host.UpdateMergeCandidates(_source);
 
-            _ui.SetStorageHighlighted(storage);
             int occupant;
-            if (overShop || storage || (_host.Placement.TryGetDragOccupant(out occupant) &&
+            if (overShop || (_host.Placement.TryGetDragOccupant(out occupant) &&
                 _context.CheckMerge(BattleSide.Player, _source, occupant) == ShopOperationResult.Success))
                 _host.Placement.ClearPlacementPreview();
         }
@@ -145,10 +143,8 @@ namespace GameLogic
             try
             {
                 if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
-                RobotEntity robot;
                 int shopSlot;
-                if (_ui.IsOverStorage(_position)) result = context.TryCommitStorage(session.InteractionId, out robot);
-                else if (_ui.IsOverShop(_position))
+                if (_ui.IsOverShop(_position))
                 {
                     int? targetSlot = _ui.TryGetShopSlot(_position, out shopSlot) ? (int?)shopSlot : null;
                     result = context.TryCommitShopDrop(session.InteractionId, targetSlot);
@@ -197,7 +193,7 @@ namespace GameLogic
             if (generation != _generation) return;
             Phase = RobotDragPhase.Idle;
             if (_ui != null)
-            { _ui.HideGhost(); _ui.SetStorageHighlighted(false); _ui.ClearOfferMergeCandidates(); _ui.RefreshView(); }
+            { _ui.HideGhost(); _ui.ClearOfferMergeCandidates(); _ui.RefreshView(); }
         }
         private void OnApplicationFocus(bool focused) { if (!focused) Cancel(); }
         private void OnDisable() { Cancel(); }

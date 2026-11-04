@@ -167,9 +167,8 @@ namespace GameLogic.Tests
 
         [TestCase("BattleShopUI")]
         [TestCase("ShopRobotItem")]
-        [TestCase("StorageRobotSlot")]
         [TestCase("RobotDragGhost")]
-        public void ShopStorageAndGhostHaveAlignedOriginalColorPortraits(string prefabName)
+        public void ShopAndGhostHaveAlignedOriginalColorPortraits(string prefabName)
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/" + prefabName + ".prefab");
             var icons = prefab.GetComponentsInChildren<UnityEngine.UI.Image>(true)
@@ -198,7 +197,6 @@ namespace GameLogic.Tests
 
         [TestCase("BattleShopUI")]
         [TestCase("ShopRobotItem")]
-        [TestCase("StorageRobotSlot")]
         [TestCase("RobotDragGhost")]
         public void CachedShopIconsKeepLevelColorsAndVisibilityWithoutStars(string prefabName)
         {
@@ -262,11 +260,8 @@ namespace GameLogic.Tests
                 Assert.IsEmpty(prefab.GetComponentsInChildren<TextMesh>(true));
             }
             var item = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/ShopRobotItem.prefab");
-            var storage = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/StorageRobotSlot.prefab");
             Assert.IsNotNull(item);
-            Assert.IsNotNull(storage);
             Assert.IsNull(item.transform.Find("m_text_Level"));
-            Assert.IsNull(storage.transform.Find("m_text_Level"));
         }
 
         [Test]

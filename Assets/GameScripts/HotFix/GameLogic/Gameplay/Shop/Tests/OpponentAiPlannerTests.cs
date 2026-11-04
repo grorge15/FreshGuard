@@ -177,7 +177,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(OpponentAiActionKind.Refresh, OpponentAiPlanner.Plan(Snapshot(board, 12, empty,
                 new OpponentAiRobotSnapshot[0], p)).Kind);
             var snapshot = new OpponentAiSnapshot(BattleSide.Opponent, 100, board, empty,
-                new OpponentAiRobotSnapshot[0], new[] { p }, null, hasPurchasedShopRobots: true);
+                new OpponentAiRobotSnapshot[0], new[] { p }, hasPurchasedShopRobots: true);
             Assert.AreEqual(OpponentAiActionKind.Wait, OpponentAiPlanner.Plan(snapshot).Kind);
         }
 
@@ -189,7 +189,7 @@ namespace GameLogic.Tests
             board.TryPlace(new BoardCoordinate(1, 1), new PlaceableDefinition("obstacle", 1, 1));
             var offers = new List<OpponentAiOfferSnapshot> { new OpponentAiOfferSnapshot(0, 11, p, 1, 6, false) };
             var snapshot = new OpponentAiSnapshot(BattleSide.Opponent, 20, board, offers,
-                new OpponentAiRobotSnapshot[0], new[] { p }, null, battleId: 123);
+                new OpponentAiRobotSnapshot[0], new[] { p }, battleId: 123);
             offers.Clear();
             snapshot.Board.Release("obstacle");
             var action = OpponentAiPlanner.Plan(snapshot);
@@ -225,7 +225,7 @@ namespace GameLogic.Tests
             IReadOnlyList<OpponentAiRobotSnapshot> robots,
             params OpponentAiRobotProfile[] profiles)
         {
-            return new OpponentAiSnapshot(BattleSide.Opponent, coins, board, offers, robots, profiles, null);
+            return new OpponentAiSnapshot(BattleSide.Opponent, coins, board, offers, robots, profiles);
         }
 
         private static OpponentAiRobotProfile Profile(int id, int damage, float interval, int quality)

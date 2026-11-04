@@ -12,7 +12,6 @@ namespace GameLogic
         private Button _refreshButton;
         private RectTransform _offers;
         private readonly List<ShopRobotItemWidget> _items = new List<ShopRobotItemWidget>();
-        private StorageRobotSlotWidget _storage;
         private RobotDragGhostWidget _ghost;
         private BerserkBarWidget _berserkBar;
         private BattleShopSceneController _host;
@@ -51,7 +50,6 @@ namespace GameLogic
             _refreshButton = m_btn_Refresh;
             Drag = gameObject.GetComponent<RobotDragController>();
             m_item_Template.SetActive(false);
-            _storage = CreateWidget<StorageRobotSlotWidget>("m_rect_ShopPanel/m_item_Storage");
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
             _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: false);
         }
@@ -82,8 +80,8 @@ namespace GameLogic
         public void RefreshView()
         {
             // 场景卸载时Unity对象可能先于窗口包装销毁，终局通知不再访问展示组件。
-            if (Context == null || Context.IsEnded || gameObject == null || _items == null || _storage == null ||
-                _storage.gameObject == null || _coins == null || _refreshPrice == null || _offers == null) return;
+            if (Context == null || Context.IsEnded || gameObject == null || _items == null ||
+                _coins == null || _refreshPrice == null || _offers == null) return;
             foreach (var item in _items) if (item == null || item.gameObject == null) return;
             var state = Context.GetState(BattleSide.Player);
             _coins.text = state.EnergyCoins.ToString();
@@ -98,7 +96,6 @@ namespace GameLogic
                 else _items[i].Visible = false;
             }
             _refreshButton.interactable = !Context.IsBusy && Drag.Phase == RobotDragPhase.Idle;
-            _storage.Render(this);
             ApplyOfferMergeHighlights();
         }
         public void PressSlot(int slotId, int pointerId, Vector2 position, float now)
@@ -114,12 +111,6 @@ namespace GameLogic
             else if (slot.InstanceId.HasValue) Drag.Press(slot.InstanceId.Value, pointerId, position, now);
             RefreshView();
         }
-        public void PressStorage(int pointerId, Vector2 position, float now)
-        {
-            if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsEnded) return;
-            var id = Context.GetState(BattleSide.Player).StorageInstanceId;
-            if (id.HasValue) Drag.Press(id.Value, pointerId, position, now);
-        }
         private partial void OnClick_RefreshBtn()
         {
             if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsBusy ||
@@ -130,10 +121,6 @@ namespace GameLogic
         }
         public bool IsOverShop(Vector2 position) => RectTransformUtility.RectangleContainsScreenPoint(m_rect_ShopPanel, position, EventCamera);
 
-        public bool IsOverStorage(Vector2 position)
-        {
-            return _storage != null && RectTransformUtility.RectangleContainsScreenPoint(_storage.rectTransform, position, EventCamera);
-        }
         public bool TryGetShopSlot(Vector2 position, out int slotId)
         {
             slotId = -1;
@@ -174,7 +161,6 @@ namespace GameLogic
                 item.SetMergeCandidate(eligible, eligible && item.SlotId == _hoveredOfferSlot);
             }
         }
-        public void SetStorageHighlighted(bool highlighted) { _storage?.SetHighlighted(highlighted); }
         public void ShowGhost(string icon, int level, Vector2 position) { _ghost.Show(icon, level, position, EventCamera); }
         public void MoveGhost(Vector2 position) { _ghost?.Move(position, EventCamera); }
         public void HideGhost() { if (_ghost != null && _ghost.gameObject != null) _ghost.Visible = false; }
@@ -194,7 +180,6 @@ namespace GameLogic
                 case ShopOperationResult.MaxLevelReached: message = "Lv5 无法继续合成"; break;
                 case ShopOperationResult.EntityNotFound: message = "目标已失效，已返回来源位置"; break;
                 case ShopOperationResult.ShopFull: message = "商店已满，无法放入"; break;
-                case ShopOperationResult.StorageFull: message = "暂存位已满，已返回原位置"; break;
                 default: message = "无法放置，已返回来源位置"; break;
             }
             BattleNoticeEvents.Show(Context.BattleId, message);

@@ -193,7 +193,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void DragAndStorageBlockNewShotsWhileOldBulletsKeepFlying()
+        public void DragAndShopBlockNewShotsWhileOldBulletsKeepFlying()
         {
             Prepare(); var robot = AddRobot();
             var target = _f.PlayerView.InstanceId;
@@ -203,7 +203,7 @@ namespace GameLogic.Tests
             _combat.AdvanceAttacks(1f);
             Assert.IsFalse(Contact(robot));
             Assert.AreEqual(1, _combat.LiveBulletCount);
-            robot.TrySetLocation(RobotLocation.Storage, null);
+            robot.TrySetLocation(RobotLocation.PurchasedShopSlot, null);
             _combat.AdvanceAttacks(1f);
             Assert.IsFalse(Contact(robot));
             _combat.AdvanceExistingBullets(0.6f);

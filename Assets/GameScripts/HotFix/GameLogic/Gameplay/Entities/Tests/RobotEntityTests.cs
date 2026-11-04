@@ -32,11 +32,11 @@ namespace GameLogic.Tests
             Assert.IsFalse(_robot.CanParticipate);
             _registry.AdvanceTime(0.5f);
             Assert.AreEqual(1.5f, _robot.TriggerCooldownRemaining);
-            Assert.AreEqual(version, _robot.ActionVersion, "拖拽、恢复和存储不取消已产生的行动。");
+            Assert.AreEqual(version, _robot.ActionVersion, "拖拽、恢复和返回商店不取消已产生的行动。");
             Assert.IsTrue(_robot.TrySetDragging(false));
             Assert.AreEqual(anchor, _robot.Anchor);
             Assert.IsTrue(_robot.CanParticipate);
-            Assert.IsTrue(_robot.TrySetLocation(RobotLocation.Storage, null));
+            Assert.IsTrue(_robot.TrySetLocation(RobotLocation.PurchasedShopSlot, null));
             Assert.IsFalse(_robot.CanParticipate);
             Assert.IsNull(_robot.Anchor);
             Assert.AreEqual(1.5f, _robot.TriggerCooldownRemaining);
@@ -49,7 +49,7 @@ namespace GameLogic.Tests
             _robot.TrySetLocation(RobotLocation.Board, anchor);
             _robot.TrySetDragging(true);
             Assert.IsFalse(_robot.TrySetLocation(RobotLocation.Board, null));
-            Assert.IsFalse(_robot.TrySetLocation(RobotLocation.Storage, anchor));
+            Assert.IsFalse(_robot.TrySetLocation(RobotLocation.PurchasedShopSlot, anchor));
             Assert.IsFalse(_robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(-1, 0)));
             Assert.IsFalse(_robot.TrySetLocation((RobotLocation)99, null));
             Assert.AreEqual(RobotLocation.Board, _robot.Location);

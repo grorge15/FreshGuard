@@ -24,15 +24,14 @@ namespace FreshGuard.Editor
                 throw new InvalidOperationException("请先打开本工程业务 Main 场景。");
             EnsureFolder(FOLDER);
             var item = LoadOrCreate("ShopRobotItem", BuildItem);
-            var storage = LoadOrCreate("StorageRobotSlot", BuildStorage);
             var ghost = LoadOrCreate("RobotDragGhost", BuildGhost);
-            LoadOrCreate("BattleShopUI", () => BuildWindow(item, storage, ghost));
+            LoadOrCreate("BattleShopUI", () => BuildWindow(item, ghost));
             NormalizeExistingPrefabs();
             AttachMain();
             AssetDatabase.SaveAssets();
             EditorSceneManager.SaveScene(scene);
             RobotMergePrefabBuilder.Upgrade();
-            Debug.Log("[BattleShop] 4 个 UI Prefab 已保存，Main 已装配；重复执行不会增加场景对象。");
+            Debug.Log("[BattleShop] 3 个 UI Prefab 已保存，Main 已装配；重复执行不会增加场景对象。");
         }
 
         private static void EnsureFolder(string path)
@@ -198,19 +197,7 @@ namespace FreshGuard.Editor
             image.preserveAspect = true;
             return image;
         }
-        private static GameObject BuildStorage()
-        {
-            var root = Rect("StorageRobotSlot", null, new Vector2(92, 118), Vector2.zero);
-            Image(root, new Color(0.76f, 0.68f, 0.58f), true);
-            root.gameObject.AddComponent<ShopPointerInput>();
-            var icon = Image(Rect("m_img_RobotIcon", root, new Vector2(80, 79), new Vector2(0, 10)), Color.white);
-            icon.type = UnityEngine.UI.Image.Type.Simple;
-            icon.sprite = null;
-            icon.preserveAspect = true;
-            icon.enabled = false;
-            Label("m_text_Storage", root, "暂存位", 17, new Vector2(90, 28), new Vector2(0, -43), Ink);
-            return root.gameObject;
-        }
+
         private static GameObject BuildGhost()
         {
             var root = Rect("RobotDragGhost", null, new Vector2(100, 100), Vector2.zero);
@@ -220,7 +207,7 @@ namespace FreshGuard.Editor
             RobotMergePrefabBuilder.UpgradeGhost(root);
             return root.gameObject;
         }
-        private static GameObject BuildWindow(GameObject item, GameObject storage, GameObject ghost)
+        private static GameObject BuildWindow(GameObject item, GameObject ghost)
         {
             var root = Rect("BattleShopUI", null, Vector2.zero, Vector2.zero);
             root.anchorMin = Vector2.zero;
@@ -246,9 +233,6 @@ namespace FreshGuard.Editor
             EnergyCoin(Rect("m_img_EnergyCoin", balance, new Vector2(64, 64), new Vector2(-55, 0)));
             var coinText = Label("m_text_EnergyCoins", panel, "20", 25, new Vector2(83, 36), Vector2.zero, Color.white);
             Pin(coinText.rectTransform, Vector2.one, Vector2.one, new Vector2(-46, -12));
-            var storageInstance = (GameObject)PrefabUtility.InstantiatePrefab(storage, panel);
-            storageInstance.name = "m_item_Storage";
-            Pin((RectTransform)storageInstance.transform, new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(90, -18));
             var offers = Rect("m_tf_Offers", panel, new Vector2(-246, 184), new Vector2(4, 0));
             offers.anchorMin = new Vector2(0, 0.5f);
             offers.anchorMax = new Vector2(1, 0.5f);

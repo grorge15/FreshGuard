@@ -71,7 +71,7 @@ namespace GameLogic.Tests
                 {
                     Assert.AreEqual(20, state.EnergyCoins);
                     Assert.AreEqual(3, state.Slots.Count);
-                    Assert.IsNull(state.StorageInstanceId);
+
                     CollectionAssert.AreEqual(new[] { 505, 505, 505 }, state.LastBatchRobotIds);
                     foreach (var slot in state.Slots)
                     {
@@ -202,7 +202,7 @@ namespace GameLogic.Tests
                 Assert.IsFalse(context.TryBeginInteraction(BattleSide.Player, second.InstanceId));
                 Assert.AreEqual(ShopOperationResult.Busy, context.TryRefresh(BattleSide.Player));
                 Assert.AreEqual(ShopOperationResult.Busy, context.TryRefresh(BattleSide.Opponent));
-                Assert.AreEqual(ShopOperationResult.Busy, context.TryStoreOrSwap(BattleSide.Player, second.InstanceId));
+                Assert.AreEqual(ShopOperationResult.Busy, context.TryDeploy(BattleSide.Player, second.InstanceId, BattleSide.Player, new BoardModel(4, 2), new BoardCoordinate(0, 0)));
                 RobotEntity robot;
                 var offer = context.GetState(BattleSide.Player).FindSlot(2).Offer;
                 Assert.AreEqual(ShopOperationResult.Busy, context.TryPurchase(BattleSide.Player, 2, offer.OfferId, out robot));
@@ -223,7 +223,7 @@ namespace GameLogic.Tests
                     robot.InstanceId, BattleSide.Opponent, board, new BoardCoordinate(0, 0)));
                 Assert.IsFalse(board.IsOccupied(new BoardCoordinate(0, 0)));
                 Assert.AreEqual(ShopOperationResult.WrongSide,
-                    context.TryStoreOrSwap(BattleSide.Opponent, robot.InstanceId));
+                    context.TryDeploy(BattleSide.Opponent, robot.InstanceId, BattleSide.Opponent, board, new BoardCoordinate(0, 0)));
                 board.SetOpen(new BoardCoordinate(1, 0), false);
                 Assert.AreEqual(ShopOperationResult.InvalidPlacement, context.TryDeploy(BattleSide.Player,
                     robot.InstanceId, BattleSide.Player, board, new BoardCoordinate(0, 0)));
@@ -239,61 +239,32 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void StorageDeployAndBoardDragMoveOrStorePreserveInstanceWithoutCharging()
+        public void PurchasedRobotDeployMoveAndReturnPreserveInstanceWithoutCharging()
         {
             using (var context = ShopTestData.Context())
             {
                 var robot = ShopTestData.Purchase(context);
-                Assert.AreEqual(ShopOperationResult.Success, context.TryStoreOrSwap(BattleSide.Player, robot.InstanceId));
                 var board = new BoardModel(4, 2);
                 board.TryPlace(new BoardCoordinate(3, 1), new PlaceableDefinition("other", 1, 1));
                 Assert.AreEqual(ShopOperationResult.Success, context.TryDeploy(BattleSide.Player, robot.InstanceId,
                     BattleSide.Player, board, new BoardCoordinate(0, 0)));
-                Assert.IsNull(context.GetState(BattleSide.Player).FindSlot(0));
                 Assert.IsTrue(context.TryBeginInteraction(BattleSide.Player, robot.InstanceId));
-                Assert.IsNull(board.GetOccupant(new BoardCoordinate(0, 0)));
                 RobotEntity moved;
-                Assert.AreEqual(ShopOperationResult.Success, context.TryCommitDeploy(context.ActiveInteraction.InteractionId, BattleSide.Player, board, new BoardCoordinate(1, 0), out moved));
-                Assert.IsNull(board.GetOccupant(new BoardCoordinate(0, 0)));
-                Assert.AreEqual(robot.InstanceId.ToString(), board.GetOccupant(new BoardCoordinate(1, 0)));
-                Assert.AreEqual(robot.InstanceId.ToString(), board.GetOccupant(new BoardCoordinate(2, 0)));
-                Assert.AreEqual(new BoardCoordinate(1, 0), robot.Anchor);
-                Assert.AreEqual(ShopOperationResult.Success, context.TryStoreOrSwap(BattleSide.Player, robot.InstanceId));
+                Assert.AreEqual(ShopOperationResult.Success, context.TryCommitDeploy(context.ActiveInteraction.InteractionId,
+                    BattleSide.Player, board, new BoardCoordinate(1, 0), out moved));
+                Assert.AreSame(robot, moved);
+                Assert.AreEqual(robot.Definition.Id, board.GetOccupant(new BoardCoordinate(2, 0)));
+                Assert.IsTrue(context.TryBeginInteraction(BattleSide.Player, robot.InstanceId));
+                Assert.AreEqual(ShopOperationResult.Success, context.TryCommitShopDrop(context.ActiveInteraction.InteractionId, null));
                 Assert.IsNull(board.GetOccupant(new BoardCoordinate(1, 0)));
-                Assert.AreEqual(robot.InstanceId, context.GetState(BattleSide.Player).StorageInstanceId);
+                Assert.IsTrue(context.GetState(BattleSide.Player).Slots.Any(slot => slot.InstanceId == robot.InstanceId));
                 Assert.AreEqual("other", board.GetOccupant(new BoardCoordinate(3, 1)));
                 Assert.AreEqual(14, context.GetState(BattleSide.Player).EnergyCoins);
-                Assert.AreEqual(RobotLocation.Storage, robot.Location);
+                Assert.AreEqual(RobotLocation.PurchasedShopSlot, robot.Location);
             }
         }
 
-        [Test]
-        public void StorageSwapsWithPurchasedSlotAndReturningStorageToItselfSucceeds()
-        {
-            using (var context = ShopTestData.Context())
-            {
-                var first = ShopTestData.Purchase(context);
-                var second = ShopTestData.Purchase(context, 1);
-                var third = ShopTestData.Purchase(context, 2);
-                Assert.AreEqual(ShopOperationResult.Success, context.TryStoreOrSwap(BattleSide.Player, first.InstanceId));
-                Assert.AreEqual(ShopOperationResult.Success, context.TryStoreOrSwap(BattleSide.Player, second.InstanceId));
-                Assert.AreEqual(second.InstanceId, context.GetState(BattleSide.Player).StorageInstanceId);
-                Assert.AreEqual(first.InstanceId, context.GetState(BattleSide.Player).FindSlot(1).InstanceId);
-                Assert.AreEqual(RobotLocation.PurchasedShopSlot, first.Location);
-                Assert.AreEqual(RobotLocation.Storage, second.Location);
-                RobotEntity ignored;
-                Assert.IsTrue(context.TryBeginInteraction(BattleSide.Player, second.InstanceId));
-                Assert.AreEqual(ShopOperationResult.Success, context.TryCommitStorage(context.ActiveInteraction.InteractionId, out ignored));
-                Assert.IsFalse(context.IsBusy);
-                Assert.IsFalse(second.IsDragging);
-                Assert.AreEqual(second.InstanceId, context.GetState(BattleSide.Player).StorageInstanceId);
-                var board = new BoardModel(4, 2);
-                context.TryDeploy(BattleSide.Player, third.InstanceId, BattleSide.Player, board, new BoardCoordinate(0, 0));
-                Assert.AreEqual(ShopOperationResult.StorageFull, context.TryStoreOrSwap(BattleSide.Player, third.InstanceId));
-                Assert.AreEqual(third.InstanceId.ToString(), board.GetOccupant(new BoardCoordinate(0, 0)));
-                Assert.AreEqual(2, context.GetState(BattleSide.Player).EnergyCoins);
-            }
-        }
+
 
         [Test]
         public void MergeConsumesSourceAndUpgradesTargetWithoutMovingItOrCharging()
@@ -304,12 +275,11 @@ namespace GameLogic.Tests
                 var target = ShopTestData.Purchase(context, 1);
                 var board = new BoardModel(4, 2);
                 context.TryDeploy(BattleSide.Player, target.InstanceId, BattleSide.Player, board, new BoardCoordinate(0, 0));
-                context.TryStoreOrSwap(BattleSide.Player, source.InstanceId);
                 Assert.IsTrue(context.TryBeginInteraction(BattleSide.Player, source.InstanceId));
                 Assert.AreEqual(ShopOperationResult.Success, context.TryCommitMerge(context.ActiveInteraction.InteractionId, target.InstanceId));
                 Assert.AreEqual(2, target.Level);
                 Assert.AreEqual(RobotLocation.Board, target.Location);
-                Assert.IsNull(context.GetState(BattleSide.Player).StorageInstanceId);
+
                 Assert.IsTrue(source.IsRemoved);
                 Assert.AreEqual(EntityRemovalReason.Consumed, source.RemovalReason);
                 Assert.AreEqual(target.InstanceId.ToString(), board.GetOccupant(new BoardCoordinate(0, 0)));
@@ -346,22 +316,22 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void RefreshDestroysOwnedSlotsWithoutRefundButPreservesBoardAndStorage()
+        public void RefreshDestroysOwnedSlotsWithoutRefundButPreservesBoardRobots()
         {
             using (var context = ShopTestData.Context())
             {
                 var boardRobot = ShopTestData.Purchase(context);
-                var storageRobot = ShopTestData.Purchase(context, 1);
+                var secondBoardRobot = ShopTestData.Purchase(context, 1);
                 var slotRobot = ShopTestData.Purchase(context, 2);
                 var board = new BoardModel(4, 2);
                 context.TryDeploy(BattleSide.Player, boardRobot.InstanceId, BattleSide.Player, board, new BoardCoordinate(0, 0));
-                context.TryStoreOrSwap(BattleSide.Player, storageRobot.InstanceId);
+                context.TryDeploy(BattleSide.Player, secondBoardRobot.InstanceId, BattleSide.Player, board, new BoardCoordinate(2, 0));
                 context.Rewards.TryGrantGlassBreak(context.BattleId, "funds", BattleSide.Player, 20);
                 context.TryRefresh(BattleSide.Player);
                 Assert.IsTrue(slotRobot.IsRemoved);
                 Assert.IsFalse(boardRobot.IsRemoved);
-                Assert.IsFalse(storageRobot.IsRemoved);
-                Assert.AreEqual(storageRobot.InstanceId, context.GetState(BattleSide.Player).StorageInstanceId);
+                Assert.IsFalse(secondBoardRobot.IsRemoved);
+                Assert.AreEqual(secondBoardRobot.Definition.Id, board.GetOccupant(new BoardCoordinate(2, 0)));
                 Assert.AreEqual(boardRobot.InstanceId.ToString(), board.GetOccupant(new BoardCoordinate(0, 0)));
                 Assert.AreEqual(17, context.GetState(BattleSide.Player).EnergyCoins);
                 Assert.AreEqual(20, context.GetState(BattleSide.Opponent).EnergyCoins);
@@ -487,11 +457,11 @@ namespace GameLogic.Tests
         {
             var context = ShopTestData.Context();
             var boardRobot = ShopTestData.Purchase(context);
-            var storageRobot = ShopTestData.Purchase(context, 1);
+            var secondBoardRobot = ShopTestData.Purchase(context, 1);
             var slotRobot = ShopTestData.Purchase(context, 2);
             var board = new BoardModel(4, 2);
             context.TryDeploy(BattleSide.Player, boardRobot.InstanceId, BattleSide.Player, board, new BoardCoordinate(0, 0));
-            context.TryStoreOrSwap(BattleSide.Player, storageRobot.InstanceId);
+            context.TryDeploy(BattleSide.Player, secondBoardRobot.InstanceId, BattleSide.Player, board, new BoardCoordinate(2, 0));
             context.TryBeginInteraction(BattleSide.Player, slotRobot.InstanceId);
             context.EndBattle();
             context.EndBattle();
@@ -500,12 +470,12 @@ namespace GameLogic.Tests
             Assert.IsFalse(context.IsBusy);
             Assert.IsFalse(slotRobot.IsDragging);
             Assert.IsTrue(boardRobot.IsRemoved);
-            Assert.IsTrue(storageRobot.IsRemoved);
+            Assert.IsTrue(secondBoardRobot.IsRemoved);
             Assert.IsTrue(slotRobot.IsRemoved);
             Assert.IsNull(board.GetOccupant(new BoardCoordinate(0, 0)));
             foreach (var state in new[] { context.GetState(BattleSide.Player), context.GetState(BattleSide.Opponent) })
             {
-                Assert.IsNull(state.StorageInstanceId);
+
                 Assert.IsTrue(state.Slots.All(s => s.Offer == null && !s.InstanceId.HasValue));
                 Assert.AreEqual(state.Side == BattleSide.Player ? 2 : 20, state.EnergyCoins);
             }

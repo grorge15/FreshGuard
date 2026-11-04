@@ -18,7 +18,7 @@ namespace GameLogic.Tests
             return new OpponentAiSnapshot(BattleSide.Opponent, 100, new BoardModel(5, 5),
                 new[] { new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false),
                     new OpponentAiOfferSnapshot(1, 12, profile, 1, 6, false) },
-                new OpponentAiRobotSnapshot[0], new[] { profile }, null, battleId: battleId);
+                new OpponentAiRobotSnapshot[0], new[] { profile }, battleId: battleId);
         }
 
         [Test]
@@ -145,7 +145,7 @@ namespace GameLogic.Tests
                 robots.Add(new OpponentAiRobotSnapshot(id, profile, 1, 5, 10, 1f, RobotLocation.Board, anchor, definition));
             }
             var snapshot = new OpponentAiSnapshot(BattleSide.Opponent, 100, board,
-                new[] { new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false) }, robots, new[] { profile }, null);
+                new[] { new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false) }, robots, new[] { profile });
             var actions = new List<OpponentAiActionKind>();
             using (var ai = new OpponentAiController(new OpponentAiSettings(), () => snapshot, (action, token) => {
                 actions.Add(action.Kind); return UniTask.FromResult(ShopOperationResult.Success);
@@ -178,7 +178,7 @@ namespace GameLogic.Tests
                 robots.Add(new OpponentAiRobotSnapshot(1, profile, 1, 5, 10, 1f, RobotLocation.Board, anchor, definition));
             }
             var snapshot = new OpponentAiSnapshot(BattleSide.Opponent, kind == OpponentAiActionKind.Refresh ? 100 : 0,
-                board, new OpponentAiOfferSnapshot[0], robots, new[] { profile }, null);
+                board, new OpponentAiOfferSnapshot[0], robots, new[] { profile });
             var calls = 0;
             using (var ai = new OpponentAiController(new OpponentAiSettings(), () => snapshot, (action, token) => {
                 Assert.AreEqual(kind, action.Kind); calls++; return UniTask.FromResult(ShopOperationResult.Success);

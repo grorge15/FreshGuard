@@ -101,14 +101,13 @@ namespace GameLogic
         public IReadOnlyList<OpponentAiOfferSnapshot> Offers { get; }
         public IReadOnlyList<OpponentAiRobotSnapshot> Robots { get; }
         public IReadOnlyList<OpponentAiRobotProfile> CandidateProfiles { get; }
-        public int? StorageInstanceId { get; }
         public int RefreshPrice { get; }
 
         public OpponentAiSnapshot(BattleSide side, int energyCoins, BoardModel board,
             IReadOnlyList<OpponentAiOfferSnapshot> offers,
             IReadOnlyList<OpponentAiRobotSnapshot> robots,
             IReadOnlyList<OpponentAiRobotProfile> candidateProfiles,
-            int? storageInstanceId, int refreshPrice = 5, long battleId = 0, bool hasPurchasedShopRobots = false)
+            int refreshPrice = 5, long battleId = 0, bool hasPurchasedShopRobots = false)
         {
             if (side != BattleSide.Player && side != BattleSide.Opponent)
                 throw new ArgumentOutOfRangeException(nameof(side));
@@ -121,7 +120,6 @@ namespace GameLogic
             Robots = new List<OpponentAiRobotSnapshot>(robots ?? throw new ArgumentNullException(nameof(robots))).AsReadOnly();
             CandidateProfiles = new List<OpponentAiRobotProfile>(candidateProfiles ?? throw new ArgumentNullException(nameof(candidateProfiles))).AsReadOnly();
             HasPurchasedShopRobots = hasPurchasedShopRobots;
-            StorageInstanceId = storageInstanceId;
             RefreshPrice = refreshPrice < 0 ? throw new ArgumentOutOfRangeException(nameof(refreshPrice)) : refreshPrice;
         }
 

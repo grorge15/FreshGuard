@@ -122,7 +122,7 @@ namespace GameLogic
                 if (_configs.TryGetValue(id, out config)) candidates.Add(CreateOpponentAiProfile(config, "candidate:" + id));
             }
             return new OpponentAiSnapshot(BattleSide.Opponent, state.EnergyCoins, opponentBoard,
-                offers, robots, candidates, state.StorageInstanceId, RefreshPrice, BattleId, hasPurchased);
+                offers, robots, candidates, RefreshPrice, BattleId, hasPurchased);
         }
 
         private OpponentAiRobotProfile CreateOpponentAiProfile(Robot config, string definitionId)
@@ -185,18 +185,6 @@ namespace GameLogic
             var gate = BeginLegacyCommit(side, instanceId, out session, out created);
             if (gate != ShopOperationResult.Success) return gate;
             var result = TryCommitMerge(session.InteractionId, targetInstanceId);
-            FinishLegacyCommit(session, created, result);
-            return result;
-        }
-
-        public ShopOperationResult TryStoreOrSwap(BattleSide side, int instanceId)
-        {
-            RobotDragSession session;
-            bool created;
-            var gate = BeginLegacyCommit(side, instanceId, out session, out created);
-            if (gate != ShopOperationResult.Success) return gate;
-            RobotEntity robot;
-            var result = TryCommitStorage(session.InteractionId, out robot);
             FinishLegacyCommit(session, created, result);
             return result;
         }
@@ -274,7 +262,6 @@ namespace GameLogic
                 _boardSides.Clear();
                 foreach (var state in _states)
                 {
-                    state.StorageInstanceId = null;
                     state.ClearSlots();
                 }
                 clean(Battle.Dispose);
@@ -340,9 +327,6 @@ namespace GameLogic
                 case RobotLocation.PurchasedShopSlot:
                     if (FindSlot(state, instanceId) != null) return ShopOperationResult.Success;
                     break;
-                case RobotLocation.Storage:
-                    if (state.StorageInstanceId == instanceId) return ShopOperationResult.Success;
-                    break;
                 case RobotLocation.Board:
                     if (_boards.ContainsKey(instanceId) && robot.Anchor.HasValue) return ShopOperationResult.Success;
                     break;
@@ -361,7 +345,6 @@ namespace GameLogic
             var state = GetState(robot.Side);
             var slot = FindSlot(state, robot.InstanceId);
             if (slot != null) { slot.InstanceId = null; if (!keepSlot) state.RemoveSlot(slot); }
-            if (state.StorageInstanceId == robot.InstanceId) state.StorageInstanceId = null;
             BoardModel board;
             if (_boards.TryGetValue(robot.InstanceId, out board))
             {

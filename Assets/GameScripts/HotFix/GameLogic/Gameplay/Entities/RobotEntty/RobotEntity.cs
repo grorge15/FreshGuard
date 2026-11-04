@@ -57,7 +57,6 @@ namespace GameLogic
                     if (!anchor.HasValue || anchor.Value.Column < 0 || anchor.Value.Row < 0) return false;
                     break;
                 case RobotLocation.Unplaced:
-                case RobotLocation.Storage:
                 case RobotLocation.PurchasedShopSlot:
                     if (anchor.HasValue) return false;
                     break;

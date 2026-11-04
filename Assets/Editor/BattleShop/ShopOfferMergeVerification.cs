@@ -39,7 +39,7 @@ namespace FreshGuard.Editor
             var start = helper?.GetMethod("StartScene", BindingFlags.Public | BindingFlags.Static);
             Require(start != null, "找不到TEngine Launcher入口。");
             SessionState.SetBool(Pending, true);
-            try { start.Invoke(null, new object[] { "Main" }); }
+            try { start.Invoke(null, new object[] { "main" }); }
             catch { SessionState.SetBool(Pending, false); throw; }
         }
 
@@ -61,7 +61,8 @@ namespace FreshGuard.Editor
         }
 
         private static GameObject Slot(BattleShopUI ui, int id) =>
-            ui.transform.Find("m_rect_ShopPanel/m_tf_Offers/Slot_" + id).gameObject;
+            ((IEnumerable<ShopRobotItemWidget>)typeof(BattleShopUI).GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                .GetValue(ui)).First(item => item.SlotId == id && item.gameObject.activeInHierarchy).gameObject;
 
         private static Vector2 Point(BattleShopUI ui, Transform node) =>
             RectTransformUtility.WorldToScreenPoint(EventCamera(ui), node.TransformPoint(((RectTransform)node).rect.center));
@@ -91,7 +92,7 @@ namespace FreshGuard.Editor
 
         private static void Offer(BattleShopContext context, int slotId, int robotId, int level)
         {
-            var slot = context.GetState(BattleSide.Player).Slots[slotId];
+            var slot = context.GetState(BattleSide.Player).FindSlot(slotId);
             Require(slot.Offer != null && !slot.IsPurchased, "夹具需要现有未购买商品。");
             var config = ConfigSystem.Instance.Tables.TbRobot.Get(robotId);
             var offer = (ShopOffer)Activator.CreateInstance(typeof(ShopOffer), BindingFlags.Instance | BindingFlags.NonPublic,
@@ -99,14 +100,16 @@ namespace FreshGuard.Editor
             typeof(ShopSlot).GetProperty("Offer").SetValue(slot, offer);
         }
 
-        private static void ResetOffers(BattleShopContext context, BattleShopUI ui, int robotId, int level = 1)
+        private static ShopSlot[] ResetOffers(BattleShopContext context, BattleShopUI ui, int robotId, int level = 1)
         {
             ui.Drag.Cancel();
             Coins(context, 10000);
             Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.Success, "验证刷新失败。");
-            Offer(context, 0, robotId, level);
-            Offer(context, 1, robotId, level);
+            var slots = context.GetState(BattleSide.Player).Slots.ToArray();
+            Offer(context, slots[0].SlotId, robotId, level);
+            Offer(context, slots[1].SlotId, robotId, level);
             ui.RefreshView();
+            return slots;
         }
 
         private static async UniTaskVoid VerifyAsync()
@@ -124,135 +127,87 @@ namespace FreshGuard.Editor
                     .Timeout(TimeSpan.FromSeconds(60));
                 await GameApp.BeginBattleFromMainMenu(GameModule.UI.GetUI<MainMenuUI>());
                 host = UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
-                Require(host != null && host.IsCombatOperational, "Launcher没有进入真实战斗。");
-                // 业务暂停会关闭机器人交互；夹具只暂停自动推进，保留真实交互条件。
+                await UniTask.WaitUntil(() => host != null && host.CanInteractWithRobots)
+                    .Timeout(TimeSpan.FromSeconds(30));
+                Require(host != null && host.CanInteractWithRobots, "Launcher没有进入真实战斗。");
                 oldHostEnabled = host.enabled;
                 host.enabled = false;
                 Time.timeScale = 0f;
                 var context = host.Context;
                 ui = host.ShopWindow;
                 var state = context.GetState(BattleSide.Player);
+                Require(ui.transform.Find("m_rect_ShopPanel/m_item_Storage") == null, "运行界面仍存在暂存区。");
                 var robotId = state.Slots[0].Offer.RobotId;
                 await UniTask.Yield();
-                ResetOffers(context, ui, robotId);
-                Coins(context, 0);
-                ui.RefreshView();
-                var source = state.Slots[0].Offer;
-                var target = state.Slots[1].Offer;
-                var third = state.Slots[2].Offer;
-                Pick(ui, 0);
-                Require(context.IsBusy && state.EnergyCoins == 0, "零余额拿起失败或提前扣费。");
-                Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.Busy, "拖拽期间可以刷新。");
-                var targetPoint = Point(ui, Slot(ui, 1).transform);
-                ui.Drag.Move(-1, targetPoint);
-                Require(Slot(ui, 1).GetComponent<Image>().color == Color.cyan, "可合成悬停目标未高亮。");
-                var hits = new List<RaycastResult>();
-                EventSystem.current.RaycastAll(Pointer(targetPoint), hits);
-                Require(hits.Count > 0 && hits[0].gameObject.GetComponentInParent<ShopPointerInput>() != null &&
-                    hits[0].gameObject.transform.IsChildOf(Slot(ui, 1).transform), "拖拽图像遮挡商品射线。");
-                ui.RefreshView();
-                Require(Slot(ui, 1).GetComponent<Image>().color == Color.cyan, "UI刷新丢失悬停高亮。");
-                var ghost = ui.transform.Find("m_item_DragGhost/m_img_RobotIcon") as RectTransform;
-                Require(ghost != null && Vector2.Distance(Point(ui, ghost), targetPoint) < 0.1f, "拖拽图像中心偏移。");
-                await Drop(ui, 0, targetPoint, false);
-                var merged = state.Slots[1].Offer;
-                Require(state.Slots[0].Offer == null && merged.Level == 2 && merged.RobotId == robotId &&
-                    !state.Slots[1].IsPurchased && state.Slots[2].Offer == third && state.EnergyCoins == 0,
-                    "免费合成没有原子清来源/升级目标，或影响了其他商品。");
-                Require(merged.OfferId != source.OfferId && merged.OfferId != target.OfferId &&
-                    Slot(ui, 1).transform.Find("m_text_Price").GetComponent<Text>().text == merged.Price.ToString() &&
-                    Slot(ui, 1).GetComponent<Image>().color == RobotLevelStyle.ColorForLevel(2) &&
-                    Slot(ui, 1).transform.Find("m_img_RobotIcon").GetComponent<Image>().enabled,
-                    "合成后商品身份、价格、等级配色或图标未更新。");
-                ui.Drag.Release(-1, targetPoint);
-                Require(state.Slots[1].Offer == merged && state.EnergyCoins == 0, "重复松手重复合成。");
-                checks.Add("真实Launcher、零余额免费合成、射线、高亮刷新、目标保留、价格与重复松手");
+                checks.Add("真实Launcher进入战斗，暂存区已移除");
 
-                // 空槽、来源自身、类型或等级不匹配均不穿透购买。
-                Pick(ui, 1);
-                await Drop(ui, 1, Point(ui, Slot(ui, 0).transform));
-                Require(state.Slots[1].Offer == merged && state.EnergyCoins == 0, "空槽落点消费了商品。");
-                Pick(ui, 1);
-                await Drop(ui, 1, targetPoint);
-                Require(state.Slots[1].Offer == merged, "来源自身落点消费了商品。");
-                ResetOffers(context, ui, robotId);
+                // SlotId是稳定身份；商品消耗后槽位会移除，不能将SlotId当作数组下标。
+                ShopSlot[] slots = null;
+                ShopOffer merged = null;
+                for (var mergeLevel = 1; mergeLevel <= 5; mergeLevel++)
+                {
+                    slots = ResetOffers(context, ui, robotId, mergeLevel);
+                    var source = slots[0].Offer;
+                    var target = slots[1].Offer;
+                    var third = slots[2].Offer;
+                    Coins(context, 0);
+                    ui.RefreshView();
+                    var targetPoint = Point(ui, Slot(ui, slots[1].SlotId).transform);
+                    Pick(ui, slots[0].SlotId);
+                    Require(context.IsBusy && state.EnergyCoins == 0, "拿起商品提前扣费。");
+                    Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.Busy, "拖拽期间可以刷新。");
+                    if (mergeLevel == 1)
+                    {
+                        ui.Drag.Move(-1, targetPoint);
+                        var hits = new List<RaycastResult>();
+                        EventSystem.current.RaycastAll(Pointer(targetPoint), hits);
+                        Require(hits.Count > 0 && hits[0].gameObject.GetComponentInParent<ShopPointerInput>() != null,
+                            "拖拽图像遮挡商品射线。");
+                        ui.RefreshView();
+                        int hitSlot;
+                        Require(ui.TryGetShopSlot(targetPoint, out hitSlot) && hitSlot == slots[1].SlotId, "动态槽位命中错误。");
+                    }
+                    await Drop(ui, slots[0].SlotId, targetPoint, false);
+                    Require(state.EnergyCoins == 0 && slots[2].Offer == third, "商品合成扣费或影响其他商品。");
+                    if (mergeLevel == 5)
+                        Require(slots[0].Offer == source && slots[1].Offer == target, "Lv5仍被合成。");
+                    else
+                    {
+                        merged = slots[1].Offer;
+                        Require(state.FindSlot(slots[0].SlotId) == null && merged.Level == mergeLevel + 1 &&
+                            merged.RobotId == robotId && merged.OfferId != source.OfferId && merged.OfferId != target.OfferId &&
+                            merged.Price == context.Rules.GetPrice(ConfigSystem.Instance.Tables.TbRobot.Get(robotId).QualityId, mergeLevel + 1),
+                            "免费合成没有移除来源、升级目标或更新价格。");
+                        ui.Drag.Release(-1, targetPoint);
+                        Require(slots[1].Offer == merged, "重复松手重复合成。");
+                    }
+                }
+                checks.Add("动态商品身份、Lv1～Lv4零余额免费合成、Lv5上限、刷新互斥和重复松手");
+
+                slots = ResetOffers(context, ui, robotId);
+                var original = slots[0].Offer;
+                Coins(context, 0);
                 var differentId = ConfigSystem.Instance.Tables.TbRobot.DataList.First(r => r.Id != robotId).Id;
-                Offer(context, 1, differentId, 1);
+                Offer(context, slots[1].SlotId, differentId, 1);
                 ui.RefreshView();
-                source = state.Slots[0].Offer;
-                target = state.Slots[1].Offer;
-                Pick(ui, 0);
-                ui.Drag.Move(-1, targetPoint);
-                Require(Slot(ui, 1).GetComponent<Image>().color != Color.cyan, "不兼容商品仍高亮。");
-                await Drop(ui, 0, targetPoint);
-                Require(state.Slots[0].Offer == source && state.Slots[1].Offer == target, "类型不同仍消耗商品。");
-                Offer(context, 1, robotId, 2);
-                target = state.Slots[1].Offer;
-                ui.RefreshView();
-                Pick(ui, 0);
-                await Drop(ui, 0, targetPoint);
-                Require(state.Slots[0].Offer == source && state.Slots[1].Offer == target, "等级不同仍消耗商品。");
-                checks.Add("空槽、来源自身、类型和等级不匹配时恢复商品");
+                Pick(ui, slots[0].SlotId);
+                await Drop(ui, slots[0].SlotId, Point(ui, Slot(ui, slots[1].SlotId).transform));
+                Require(slots[0].Offer == original && state.EnergyCoins == 0, "不兼容商品消耗了来源。");
+                Pick(ui, slots[0].SlotId);
+                await Drop(ui, slots[0].SlotId, new Vector2(-1000, -1000));
+                Require(slots[0].Offer == original && !context.IsBusy, "非法落点丢失商品或交互锁。");
+                checks.Add("不兼容商品及界外落点原位恢复、不扣币");
 
-                for (var level = 2; level <= 5; level++)
-                {
-                    ResetOffers(context, ui, robotId, level);
-                    source = state.Slots[0].Offer;
-                    target = state.Slots[1].Offer;
-                    var before = state.EnergyCoins;
-                    Pick(ui, 0);
-                    // 首次移动的坐标就是PointerUp，覆盖最终坐标刷新。
-                    await Drop(ui, 0, targetPoint, false);
-                    Require(state.EnergyCoins == before, "高等级商品合成扣费。");
-                    if (level < 5)
-                        Require(state.Slots[0].Offer == null && state.Slots[1].Offer.Level == level + 1 &&
-                            state.Slots[1].Offer.Price == context.Rules.GetPrice(
-                                ConfigSystem.Instance.Tables.TbRobot.Get(robotId).QualityId, level + 1), "高等级合成/定价错误。");
-                    else Require(state.Slots[0].Offer == source && state.Slots[1].Offer == target, "Lv5仍被合成。");
-                }
-                checks.Add("Lv2～Lv4升级、Lv5上限、无最终Move的PointerUp提交");
-
-                ResetOffers(context, ui, robotId);
-                var offersTransform = Slot(ui, 0).transform.parent;
-                var oldScale = offersTransform.localScale;
-                try
-                {
-                    offersTransform.localScale = oldScale * 0.8f;
-                    targetPoint = Point(ui, Slot(ui, 1).transform);
-                    int hitSlot;
-                    Require(ui.TryGetShopSlot(targetPoint, out hitSlot) && hitSlot == 1, "缩放后商品命中偏移。");
-                    Pick(ui, 0);
-                    ui.Drag.Move(-1, targetPoint);
-                    Require(Slot(ui, 1).GetComponent<Image>().color == Color.cyan, "缩放后合成高亮错误。");
-                    ui.Drag.Cancel();
-                    Require(Slot(ui, 1).GetComponent<Image>().color == RobotLevelStyle.ColorForLevel(1), "取消未恢复高亮。");
-                }
-                finally { offersTransform.localScale = oldScale; }
-                checks.Add("槽位缩放、坐标转换和取消高亮恢复");
-
-                // 使用合成商品走真实暂存购买，再拖入棋盘与已有场上合成链路。
-                targetPoint = Point(ui, Slot(ui, 1).transform);
-                Pick(ui, 0);
-                await Drop(ui, 0, targetPoint);
-                merged = state.Slots[1].Offer;
-                var storage = ui.transform.Find("m_rect_ShopPanel/m_item_Storage");
-                Coins(context, 0);
-                ui.RefreshView();
-                Pick(ui, 1);
-                await Drop(ui, 1, Point(ui, storage));
-                Require(state.Slots[1].Offer == merged && !state.StorageInstanceId.HasValue && state.EnergyCoins == 0,
-                    "余额不足仍购买进入暂存。");
-                Coins(context, merged.Price);
-                ui.RefreshView();
-                Pick(ui, 1);
-                await Drop(ui, 1, Point(ui, storage));
-                Require(state.StorageInstanceId.HasValue && state.Slots[1].Offer == null && state.EnergyCoins == 0,
-                    "合成后商品没有按新价仅购买一次。");
-                Entity storedEntity;
-                Require(context.Registry.TryGet(state.StorageInstanceId.Value, out storedEntity), "已购机器人不存在。");
-                var robot = (RobotEntity)storedEntity;
-                Require(robot.Level == 2, "购买丢失合成等级。");
-
+                slots = ResetOffers(context, ui, robotId);
+                Pick(ui, slots[0].SlotId);
+                await Drop(ui, slots[0].SlotId, Point(ui, Slot(ui, slots[1].SlotId).transform));
+                var mergedSlot = slots[1];
+                merged = mergedSlot.Offer;
+                GameConfig.robot.Robot deploymentConfig;
+                int deploymentLevel;
+                PlaceableDefinition definition;
+                Require(context.GetDragContent(BattleSide.Player, RobotDragSource.Offer(mergedSlot.SlotId, merged.OfferId),
+                    out deploymentConfig, out deploymentLevel, out definition) == ShopOperationResult.Success, "合成商品形状不存在。");
                 var board = host.PlayerGlass.GetComponentInParent<PlacementBoardView>();
                 for (var column = 1; column < board.Model.Columns - 1; column++)
                     for (var row = 1; row < board.Model.Rows - 1; row++)
@@ -270,31 +225,40 @@ namespace FreshGuard.Editor
                     for (var row = 1; row < board.Model.Rows - 1; row++)
                     {
                         var candidate = new BoardCoordinate(column, row);
-                        if (!board.Model.Evaluate(candidate, robot.Definition).IsValid) continue;
+                        if (!board.Model.Evaluate(candidate, definition).IsValid) continue;
                         anchor = candidate;
                         break;
                     }
                 Require(anchor.HasValue, "找不到验证部署位置。");
-                var center = new Vector2((robot.Definition.Cells.Min(c => c.Column) + robot.Definition.Cells.Max(c => c.Column)) * 0.5f,
-                    (robot.Definition.Cells.Min(c => c.Row) + robot.Definition.Cells.Max(c => c.Row)) * 0.5f);
+                var center = new Vector2((definition.Cells.Min(c => c.Column) + definition.Cells.Max(c => c.Column)) * 0.5f,
+                    (definition.Cells.Min(c => c.Row) + definition.Cells.Max(c => c.Row)) * 0.5f);
                 var deployPoint = (Vector2)host.Placement.SceneCamera.WorldToScreenPoint(board.transform.TransformPoint(
                     board.GetCellLocalPosition(anchor.Value) + (Vector3)(center * board.CellSize)));
-                ui.PressStorage(-1, Point(ui, storage), Time.unscaledTime);
-                ui.Drag.Advance(Time.unscaledTime + 0.21f);
-                ui.Drag.Release(-1, deployPoint);
-                await UniTask.WaitUntil(() => ui.Drag.Phase == RobotDragPhase.Idle).Timeout(TimeSpan.FromSeconds(15));
-                Require(robot.Location == RobotLocation.Board && robot.Anchor.Equals(anchor) && !state.StorageInstanceId.HasValue,
-                    "暂存部署或完整形状中心对齐发生变化。");
-                checks.Add("合成商品余额复核、按新价格购买一次、暂存与中心对齐部署");
+                Coins(context, 0);
+                ui.RefreshView();
+                Pick(ui, mergedSlot.SlotId);
+                await Drop(ui, mergedSlot.SlotId, deployPoint);
+                Require(mergedSlot.Offer == merged && state.EnergyCoins == 0 && board.Model.GetOccupant(anchor.Value) == null,
+                    "余额不足仍购买部署。");
+                Coins(context, merged.Price);
+                ui.RefreshView();
+                Pick(ui, mergedSlot.SlotId);
+                await Drop(ui, mergedSlot.SlotId, deployPoint);
+                Require(state.FindSlot(mergedSlot.SlotId) == null && state.EnergyCoins == 0, "部署没有仅购买一次。");
+                Entity entity;
+                Require(context.Registry.TryGet(int.Parse(board.Model.GetOccupant(anchor.Value)), out entity), "已购机器人不存在。");
+                var robot = (RobotEntity)entity;
+                Require(robot.Level == 2 && robot.Location == RobotLocation.Board && robot.Anchor.Equals(anchor), "直接部署丢失等级或锚点。");
+                checks.Add("余额复核、按合成价格仅购买一次与中心对齐部署");
 
-                ResetOffers(context, ui, robotId, 2);
+                slots = ResetOffers(context, ui, robotId, 2);
                 var boardHit = (Vector2)host.Placement.SceneCamera.WorldToScreenPoint(board.GetCellWorldPosition(anchor.Value));
-                var beforeBoardMerge = state.EnergyCoins;
-                var boardMergePrice = state.Slots[0].Offer.Price;
-                Pick(ui, 0);
-                await Drop(ui, 0, boardHit);
-                Require(robot.Level == 3 && state.EnergyCoins == beforeBoardMerge - boardMergePrice &&
-                    state.Slots[0].Offer == null && robot.Anchor.Equals(anchor), "原有场上合成行为改变。");
+                var beforeMerge = state.EnergyCoins;
+                var mergePrice = slots[0].Offer.Price;
+                Pick(ui, slots[0].SlotId);
+                await Drop(ui, slots[0].SlotId, boardHit);
+                Require(robot.Level == 3 && state.EnergyCoins == beforeMerge - mergePrice && state.FindSlot(slots[0].SlotId) == null,
+                    "商品向场上合成行为改变。");
                 var view = UnityEngine.Object.FindObjectsOfType<RobotView>().First(v => v.InstanceId == robot.InstanceId);
                 ExecuteEvents.Execute(view.gameObject, Pointer(boardHit), ExecuteEvents.pointerDownHandler);
                 ui.Drag.Advance(Time.unscaledTime + 0.21f);
@@ -303,35 +267,27 @@ namespace FreshGuard.Editor
                 await UniTask.WaitUntil(() => ui.Drag.Phase == RobotDragPhase.Idle).Timeout(TimeSpan.FromSeconds(15));
                 Require(robot.Location == RobotLocation.Board && robot.Anchor.Equals(anchor) &&
                     board.Model.GetOccupant(anchor.Value) == robot.Definition.Id, "非法落点没有回到原位置。");
-                checks.Add("原有商品向场上合成、价格扣除和非法回位");
+                checks.Add("商品向场上合成与场上机器人非法回位");
 
-                ResetOffers(context, ui, robotId);
-                source = state.Slots[0].Offer;
-                target = state.Slots[1].Offer;
-                Pick(ui, 0);
-                ui.Drag.Move(-1, Point(ui, Slot(ui, 1).transform));
+                slots = ResetOffers(context, ui, robotId);
+                original = slots[0].Offer;
+                Pick(ui, slots[0].SlotId);
                 ui.Visible = false;
-                Require(ui.Drag.Phase == RobotDragPhase.Idle && !context.IsBusy && state.Slots[0].Offer == source &&
-                    state.Slots[1].Offer == target && Slot(ui, 1).GetComponent<Image>().color == RobotLevelStyle.ColorForLevel(1),
-                    "隐藏UI没有取消手势、恢复商品或清理高亮。");
+                Require(ui.Drag.Phase == RobotDragPhase.Idle && !context.IsBusy && slots[0].Offer == original,
+                    "隐藏窗口没有取消手势并恢复商品。");
                 ui.Visible = true;
-                Pick(ui, 0);
+                Pick(ui, slots[0].SlotId);
                 var oldInteraction = context.ActiveInteraction.InteractionId;
                 host.EndBattle();
-                await UniTask.Yield();
                 await host.InitializeAsync();
                 Require(context.IsEnded && !context.IsBusy && host.Context.BattleId != context.BattleId &&
-                    host.Context.TryCommitOfferMerge(oldInteraction, 1, target.OfferId) == ShopOperationResult.InvalidSource,
+                    host.Context.TryCommitOfferMerge(oldInteraction, slots[1].SlotId, slots[1].Offer.OfferId) == ShopOperationResult.InvalidSource,
                     "旧对局回调污染新对局。");
-                checks.Add("隐藏窗口取消、终局清理和新局隔离");
+                checks.Add("隐藏窗口取消、终局清理与新局隔离");
                 report.passed = true;
-                report.details = "TEngine Launcher真实商店拖拽合成及购买/部署回归通过；商品与余额夹具只作用于运行实例。";
+                report.details = "TEngine Launcher真实商店回归通过，暂存区移除且购买、部署、合成、取消正常。";
             }
-            catch (Exception e)
-            {
-                report.details = e.ToString();
-                Debug.LogError("[Shop Offer Merge Verification] " + e);
-            }
+            catch (Exception e) { report.details = e.ToString(); Debug.LogError("[Shop Offer Merge Verification] " + e); }
             finally
             {
                 if (ui != null && ui.gameObject != null) ui.Drag.Cancel();

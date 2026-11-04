@@ -3,7 +3,7 @@ using System;
 namespace GameLogic
 {
     public enum BattleSide { Player, Opponent }
-    public enum RobotLocation { Unplaced, Board, Storage, PurchasedShopSlot }
+    public enum RobotLocation { Unplaced = 0, Board = 1, PurchasedShopSlot = 3 }
     public enum EntityRemovalReason { None, Consumed, Killed, Leaked, BattleEnded, Manual, Broken }
     public enum EntityKind { Robot, Enemy, Glass, Tower }
     public enum DamageResult { Ignored, Damaged, Killed }

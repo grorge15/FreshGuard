@@ -134,7 +134,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void FreePickupDoesNotBypassPurchaseChecksForStorageDeployOrBoardMerge()
+        public void FreePickupDoesNotBypassPurchaseChecksForDeployOrBoardMerge()
         {
             using (var context = ShopTestData.Context())
             {
@@ -146,9 +146,6 @@ namespace GameLogic.Tests
                 var source = OfferAt(context, 0);
                 var session = Begin(context);
                 RobotEntity created;
-                Assert.AreEqual(ShopOperationResult.InsufficientCoins,
-                    context.TryCommitStorage(session.InteractionId, out created));
-                Assert.IsNull(created);
                 Assert.AreEqual(ShopOperationResult.InsufficientCoins,
                     context.TryCommitDeploy(session.InteractionId, BattleSide.Player, board,
                         new BoardCoordinate(2, 0), out created));

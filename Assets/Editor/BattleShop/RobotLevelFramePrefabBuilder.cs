@@ -68,7 +68,7 @@ namespace FreshGuard.Editor
                 finally { PrefabUtility.UnloadPrefabContents(root); }
             }
 
-            foreach (var name in new[] { "ShopRobotItem", "StorageRobotSlot", "RobotDragGhost", "BattleShopUI" })
+            foreach (var name in new[] { "ShopRobotItem", "RobotDragGhost", "BattleShopUI" })
             {
                 var path = "Assets/AssetRaw/UI/Shop/" + name + ".prefab";
                 var root = PrefabUtility.LoadPrefabContents(path);
@@ -99,7 +99,7 @@ namespace FreshGuard.Editor
                 finally { PrefabUtility.UnloadPrefabContents(root); }
             }
             AssetDatabase.SaveAssets();
-            Debug.Log("[Robot Frames] 已更新机器人及商店、暂存、拖拽图标的等级边框。");
+            Debug.Log("[Robot Frames] 已更新机器人及商店、拖拽图标的等级边框。");
         }
     }
 }

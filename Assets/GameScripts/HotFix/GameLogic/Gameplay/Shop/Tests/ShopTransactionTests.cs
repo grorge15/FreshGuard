@@ -57,7 +57,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void MergeDifferentLevelsOrNonBoardTargetLeavesSourceAndCoinsUntouched()
+        public void MergeDifferentLevelsLeavesSourceAndCoinsUntouched()
         {
             using (var context = ShopTestData.Context())
             {
@@ -65,9 +65,6 @@ namespace GameLogic.Tests
                 var first = ShopTestData.Purchase(context, 1);
                 var second = ShopTestData.Purchase(context, 2);
                 var board = new BoardModel(4, 2);
-                context.TryStoreOrSwap(BattleSide.Player, target.InstanceId);
-                Assert.AreEqual(ShopOperationResult.InvalidLocation,
-                    context.TryMerge(BattleSide.Player, first.InstanceId, target.InstanceId));
                 context.TryDeploy(BattleSide.Player, target.InstanceId, BattleSide.Player, board, new BoardCoordinate(0, 0));
                 Assert.AreEqual(ShopOperationResult.Success,
                     context.TryMerge(BattleSide.Player, first.InstanceId, target.InstanceId));
@@ -179,18 +176,17 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void WrongSideStorageDeployRetainsStorageAndFailedInteractionUntilCallerCancels()
+        public void WrongSideShopDeployRetainsSourceAndFailedInteractionUntilCallerCancels()
         {
             using (var context = ShopTestData.Context())
             {
                 var robot = ShopTestData.Purchase(context);
-                context.TryStoreOrSwap(BattleSide.Player, robot.InstanceId);
                 context.TryBeginInteraction(BattleSide.Player, robot.InstanceId);
                 var board = new BoardModel(4, 2);
                 RobotEntity ignored;
                 Assert.AreEqual(ShopOperationResult.WrongSide, context.TryCommitDeploy(context.ActiveInteraction.InteractionId,
                     BattleSide.Opponent, board, new BoardCoordinate(0, 0), out ignored));
-                Assert.AreEqual(robot.InstanceId, context.GetState(BattleSide.Player).StorageInstanceId);
+                Assert.AreEqual(robot.InstanceId, context.GetState(BattleSide.Player).FindSlot(0).InstanceId);
                 Assert.IsTrue(context.IsBusy);
                 Assert.IsFalse(board.IsOccupied(new BoardCoordinate(0, 0)));
                 context.CancelInteraction();

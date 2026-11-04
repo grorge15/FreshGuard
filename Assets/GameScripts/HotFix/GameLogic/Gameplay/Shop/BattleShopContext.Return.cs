@@ -2,7 +2,7 @@ namespace GameLogic
 {
     public sealed partial class BattleShopContext
     {
-        private enum ShopDropAction { Keep, Return, MergeOffer, MergeOwned, SwapStorage }
+        private enum ShopDropAction { Keep, Return, MergeOffer, MergeOwned }
 
         public ShopOperationResult CheckShopDrop(BattleSide side, RobotDragSource source, int? targetSlotId)
         {
@@ -10,7 +10,7 @@ namespace GameLogic
             return ResolveShopDrop(side, source, targetSlotId, out action);
         }
 
-        // 预览与提交共用分支；只有同类有效目标的不匹配/封顶才允许回店或交换。
+        // 预览与提交共用分支；场上机器人可合成或返回有空位的商店。
         private ShopOperationResult ResolveShopDrop(BattleSide side, RobotDragSource source, int? targetSlotId,
             out ShopDropAction action)
         {
@@ -42,7 +42,6 @@ namespace GameLogic
                 result = CheckMerge(side, source, targetRobot.InstanceId);
                 if (result == ShopOperationResult.Success) { action = ShopDropAction.MergeOwned; return result; }
                 if (result != ShopOperationResult.IncompatibleMerge && result != ShopOperationResult.MaxLevelReached) return result;
-                if (robot.Location == RobotLocation.Storage) { action = ShopDropAction.SwapStorage; return ShopOperationResult.Success; }
                 if (sourceSlot != null) return result;
             }
             // 店内来源只允许合成，不因松到空白/未购商品而新增或交换对象。
@@ -69,17 +68,11 @@ namespace GameLogic
             _committing = true;
             try
             {
-                if (action == ShopDropAction.Return || action == ShopDropAction.SwapStorage)
+                if (action == ShopDropAction.Return)
                 {
                     var robot = _owned[session.Source.InstanceId];
-                    var oldTarget = action == ShopDropAction.SwapStorage ? _owned[target.InstanceId.Value] : null;
                     DetachSource(robot);
-                    if (oldTarget != null)
-                    {
-                        state.StorageInstanceId = oldTarget.InstanceId;
-                        oldTarget.TrySetLocation(RobotLocation.Storage, null);
-                    }
-                    else target = state.AddSlot();
+                    target = state.AddSlot();
                     target.InstanceId = robot.InstanceId;
                     robot.TrySetLocation(RobotLocation.PurchasedShopSlot, null);
                 }

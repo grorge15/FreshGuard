@@ -123,7 +123,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void FullShopStorageMismatchSwapsButBoardMismatchReturnsAndRestoresFootprint()
+        public void FullShopMismatchRestoresBoardRobotWithoutSwappingShopTarget()
         {
             using (var context = ShopTestData.Context())
             {
@@ -138,19 +138,15 @@ namespace GameLogic.Tests
                 Assert.That(context.TryCommitShopDrop(session.InteractionId, target.SlotId), Is.EqualTo(ShopOperationResult.ShopFull));
                 context.CancelInteraction(session.InteractionId);
                 Assert.That(board.GetOccupant(new BoardCoordinate(4, 0)), Is.EqualTo(c.Definition.Id));
-                Assert.That(context.TryStoreOrSwap(BattleSide.Player, c.InstanceId), Is.EqualTo(ShopOperationResult.Success));
-                session = Begin(context, c);
-                Assert.That(context.TryCommitShopDrop(session.InteractionId, target.SlotId), Is.EqualTo(ShopOperationResult.Success));
-                Assert.That(context.GetState(BattleSide.Player).StorageInstanceId, Is.EqualTo(a.InstanceId));
-                Assert.That(a.Location, Is.EqualTo(RobotLocation.Storage));
-                Assert.That(target.InstanceId, Is.EqualTo(c.InstanceId));
-                Assert.That(c.Location, Is.EqualTo(RobotLocation.PurchasedShopSlot));
+                Assert.That(target.InstanceId, Is.EqualTo(a.InstanceId));
+                Assert.That(a.Location, Is.EqualTo(RobotLocation.PurchasedShopSlot));
+                Assert.That(c.Location, Is.EqualTo(RobotLocation.Board));
                 Assert.That(context.GetState(BattleSide.Player).Slots.Count, Is.EqualTo(5));
             }
         }
 
         [Test]
-        public void MixedShopStatusesNeverConsumeOrChargeAndStoreBlankIsNoOp()
+        public void MixedShopStatusesNeverConsumeOrChargeAndShopBlankIsNoOp()
         {
             using (var context = ShopTestData.Context())
             {
@@ -188,14 +184,13 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void RefreshClearsReturnedRobotButKeepsStorageAndNeverReusesSlotIdentity()
+        public void RefreshClearsReturnedAndPurchasedRobotsAndNeverReusesSlotIdentity()
         {
             using (var context = ShopTestData.Context())
             {
                 Coins(context, 100);
                 var boardRobot = Deployed(context, new BoardModel(8, 2));
                 var stored = ShopTestData.Purchase(context, 1);
-                context.TryStoreOrSwap(BattleSide.Player, stored.InstanceId);
                 Return(context, boardRobot);
                 var state = context.GetState(BattleSide.Player);
                 var oldIds = state.Slots.Select(s => s.SlotId).ToArray();
@@ -203,8 +198,7 @@ namespace GameLogic.Tests
                 Assert.That(context.TryRefresh(BattleSide.Player), Is.EqualTo(ShopOperationResult.Success));
                 Assert.That(state.EnergyCoins, Is.EqualTo(coins - 5));
                 Assert.That(boardRobot.IsRemoved, Is.True);
-                Assert.That(stored.IsRemoved, Is.False);
-                Assert.That(state.StorageInstanceId, Is.EqualTo(stored.InstanceId));
+                Assert.That(stored.IsRemoved, Is.True);
                 Assert.That(state.Slots.Count, Is.EqualTo(3));
                 Assert.That(state.Slots.All(s => s.Offer != null && !oldIds.Contains(s.SlotId)), Is.True);
             }
@@ -220,7 +214,7 @@ namespace GameLogic.Tests
                 Assert.That(context.TryReserveDrag(BattleSide.Player, RobotDragSource.Owned(robot.InstanceId), out session), Is.EqualTo(ShopOperationResult.Success));
                 Assert.That(session.IsLifted, Is.False);
                 Assert.That(context.TryCommitShopDrop(session.InteractionId, null), Is.EqualTo(ShopOperationResult.InvalidSource));
-                Assert.That(context.TryStoreOrSwap(BattleSide.Player, robot.InstanceId), Is.EqualTo(ShopOperationResult.Busy));
+                Assert.That(context.TryDeploy(BattleSide.Player, robot.InstanceId, BattleSide.Player, new BoardModel(8, 2), new BoardCoordinate(0, 0)), Is.EqualTo(ShopOperationResult.Busy));
                 Assert.That(context.TryLiftDrag(session.InteractionId), Is.EqualTo(ShopOperationResult.Success));
                 Assert.That(session.IsLifted, Is.True);
                 Assert.That(context.TryCommitShopDrop(session.InteractionId, null), Is.EqualTo(ShopOperationResult.Success));

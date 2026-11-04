@@ -307,67 +307,7 @@ namespace GameLogic
             finally { FinishMutation(); }
         }
 
-        public ShopOperationResult TryCommitStorage(long interactionId, out RobotEntity robot)
-        {
-            robot = null;
-            RobotDragSession session;
-            var gate = CheckInteractionCommit(interactionId, out session);
-            if (gate != ShopOperationResult.Success) return gate;
-            RobotEntity owned;
-            ShopSlot sourceSlot;
-            Robot config;
-            int level;
-            PlaceableDefinition definition;
-            var result = ResolveDragSource(session.Side, session.Source, out owned, out sourceSlot,
-                out config, out level, out definition, true);
-            if (result != ShopOperationResult.Success) return result;
-            var state = GetState(session.Side);
-            RobotEntity stored = null;
-            var alreadyStored = owned != null && owned.Location == RobotLocation.Storage;
-            if (state.StorageInstanceId.HasValue && !alreadyStored)
-            {
-                if (sourceSlot == null)
-                {
-                    // 场上来源不能交换到商品槽；满存储自动回位并结束本手势。
-                    CancelInteraction(interactionId);
-                    return ShopOperationResult.StorageFull;
-                }
-                result = FindOwned(session.Side, state.StorageInstanceId.Value, out stored);
-                if (result != ShopOperationResult.Success) return result;
-            }
-            result = CheckOfferFunds(session.Side, sourceSlot);
-            if (result != ShopOperationResult.Success) return result;
-            _committing = true;
-            try
-            {
-                robot = owned;
-                if (!alreadyStored)
-                {
-                    if (robot == null)
-                    {
-                        result = CreateOfferRobot(session.Side, sourceSlot, out robot);
-                        if (result != ShopOperationResult.Success) return result;
-                        ConsumeOffer(session.Side, sourceSlot);
-                    }
-                    else
-                    {
-                        DetachSource(robot, stored != null);
-                    }
-                    if (stored != null)
-                    {
-                        sourceSlot.InstanceId = stored.InstanceId;
-                        stored.TrySetLocation(RobotLocation.PurchasedShopSlot, null);
-                    }
-                    if (stored == null && sourceSlot != null) state.RemoveSlot(sourceSlot);
-                    state.StorageInstanceId = robot.InstanceId;
-                    robot.TrySetLocation(RobotLocation.Storage, null);
-                }
-                CompleteInteraction();
-                Notify(session.Side);
-                return ShopOperationResult.Success;
-            }
-            finally { FinishMutation(); }
-        }
+
 
         public bool TryCreateActionToken(int instanceId, out RobotActionToken token)
         {

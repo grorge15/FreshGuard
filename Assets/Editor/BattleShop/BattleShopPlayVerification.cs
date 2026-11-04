@@ -26,7 +26,6 @@ namespace FreshGuard.Editor
             public bool longPressIconOnly;
             public bool invalidDropReturned;
             public bool deployedOriginalEntity;
-            public bool storageSwap;
             public bool refreshDiscardedOwned;
             public bool opponentWithoutUi;
             public bool cancelledLoadStayed;

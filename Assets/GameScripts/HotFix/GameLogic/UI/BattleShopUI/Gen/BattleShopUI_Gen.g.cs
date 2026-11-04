@@ -20,7 +20,6 @@ namespace GameLogic
 		private RectTransform m_rect_ShopPanel = null!;
 		private Image m_img_EnergyCoin = null!;
 		private Text m_text_EnergyCoins = null!;
-		private GameObject m_item_Storage = null!;
 		private Transform m_tf_Offers = null!;
 		private GameObject m_item_Template = null!;
 		private Button m_btn_Refresh = null!;
@@ -40,14 +39,13 @@ namespace GameLogic
 			m_rect_ShopPanel = m_bindComponent.GetComponent<RectTransform>(0);
 			m_img_EnergyCoin = m_bindComponent.GetComponent<Image>(1);
 			m_text_EnergyCoins = m_bindComponent.GetComponent<Text>(2);
-			m_item_Storage = m_bindComponent.GetComponent<RectTransform>(3).gameObject;
-			m_tf_Offers = m_bindComponent.GetComponent<Transform>(4);
-			m_item_Template = m_bindComponent.GetComponent<RectTransform>(5).gameObject;
-			m_btn_Refresh = m_bindComponent.GetComponent<Button>(6);
-			m_text_Price = m_bindComponent.GetComponent<Text>(7);
-			m_text_Message = m_bindComponent.GetComponent<Text>(8);
-			m_item_BerserkBar = m_bindComponent.GetComponent<RectTransform>(9).gameObject;
-			m_item_DragGhost = m_bindComponent.GetComponent<RectTransform>(10).gameObject;
+			m_tf_Offers = m_bindComponent.GetComponent<Transform>(3);
+			m_item_Template = m_bindComponent.GetComponent<RectTransform>(4).gameObject;
+			m_btn_Refresh = m_bindComponent.GetComponent<Button>(5);
+			m_text_Price = m_bindComponent.GetComponent<Text>(6);
+			m_text_Message = m_bindComponent.GetComponent<Text>(7);
+			m_item_BerserkBar = m_bindComponent.GetComponent<RectTransform>(8).gameObject;
+			m_item_DragGhost = m_bindComponent.GetComponent<RectTransform>(9).gameObject;
 			m_btn_Refresh.onClick.RemoveAllListeners();
 			m_btn_Refresh.onClick.AddListener(OnClick_RefreshBtn);
 		}
