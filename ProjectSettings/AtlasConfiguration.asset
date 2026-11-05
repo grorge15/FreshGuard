@@ -32,7 +32,7 @@ MonoBehaviour:
   blockOffset: 1
   tightPacking: 1
   compressionQuality: 50
-  autoGenerate: 1
+  autoGenerate: 0
   enableLogging: 1
   enableV2: 1
   checkMipmaps: 1
