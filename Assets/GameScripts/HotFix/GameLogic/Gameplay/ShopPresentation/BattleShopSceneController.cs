@@ -81,6 +81,13 @@ namespace GameLogic
         public EnemyBattleController Enemies => _enemies;
         public RobotCombatController Combat => _combat;
 
+        internal bool TryGetBoardCenter(BattleSide side, out Vector3 center)
+        {
+            var board = side == BattleSide.Player ? _playerBoard : side == BattleSide.Opponent ? _opponentBoard : null;
+            center = board != null ? board.transform.position : Vector3.zero;
+            return board != null;
+        }
+
         // 资源包和 Luban 配置由 Launcher/Procedure 异步完成；由 GameApp 在点击开始战斗后显式启动，
         // 避免 Main 场景作为 Launcher 入口时在资源包就绪前抢跑初始化。
         private void Start() { }

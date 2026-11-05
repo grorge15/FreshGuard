@@ -112,4 +112,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   lifetime: 0.5
   riseDistance: 0.35
+  driftDistance: 0.75
   color: {r: 1, g: 0.3, b: 0.15, a: 1}

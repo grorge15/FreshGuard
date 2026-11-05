@@ -171,17 +171,80 @@ namespace GameLogic.Tests
             var number = go.AddComponent(type);
             go.GetComponent<TextMesh>().font = null;
             go.GetComponent<MeshRenderer>().sharedMaterial = null;
-            Call(number, "Initialize", 20, Vector3.zero);
+            Call(number, "Initialize", 20, Vector3.zero, Vector2.left);
             var label = go.GetComponent<TextMesh>();
             Assert.IsNotNull(label.font, "伤害数字必须有可显示的字体");
             Assert.AreSame(label.font.material, go.GetComponent<MeshRenderer>().sharedMaterial);
             Assert.That((float)type.GetProperty("Lifetime").GetValue(number), Is.EqualTo(0.5f));
             Assert.IsFalse((bool)Call(number, "Advance", 0.25f));
-            Assert.That(go.transform.position.y, Is.EqualTo(0.175f).Within(0.0001f));
+            Assert.That(go.transform.position.y, Is.GreaterThan(0.20f), "前半段先向上弯出");
+            Assert.That(go.transform.position.x, Is.LessThan(-0.18f), "伤害数字必须同时向外侧飘移");
             Assert.That(label.color.a, Is.EqualTo(0.5f).Within(1f / 255f));
             Assert.IsFalse((bool)Call(number, "Advance", 0.24f));
             Assert.IsTrue((bool)Call(number, "Advance", 0.01f));
             Assert.That(label.color.a, Is.EqualTo(0f).Within(0.0001f));
+        }
+
+        [TestCase(-1f, 0f)]
+        [TestCase(1f, 0f)]
+        [TestCase(0f, 1f)]
+        [TestCase(0f, -1f)]
+        public void DamageNumberBendsBeforeStraighteningTowardTheOutside(float x, float y)
+        {
+            var go = new GameObject("CurvedDamageNumber");
+            go.transform.SetParent(_fixture.Root.transform);
+            var number = go.AddComponent<DamageNumberView>();
+            var start = new Vector3(2f, 3f, 4f);
+            var outward = new Vector2(x, y);
+            number.Initialize(20, start, outward);
+            Assert.That(Vector3.Distance(start, go.transform.position), Is.LessThan(0.04f), "起点只允许小幅随机偏移");
+            var actualStart = go.transform.position;
+            number.Advance(0.05f);
+            var early = (Vector2)(go.transform.position - actualStart);
+            Assert.Greater(Vector2.Dot(early, outward), 0f);
+            Assert.Less(Vector2.Dot(early.normalized, outward), 0.75f, "起步应明显弯出，不能直线斜飘");
+            number.Advance(0.40f);
+            var beforeTail = go.transform.position;
+            number.Advance(0.04f);
+            var tailDirection = (Vector2)(go.transform.position - beforeTail);
+            Assert.Greater(Vector2.Dot(tailDirection.normalized, outward), 0.99f, "末段应逐渐转为朝外侧平移");
+            Assert.AreEqual(start.z, go.transform.position.z);
+        }
+
+        [TestCase(BattleSide.Player, false)]
+        [TestCase(BattleSide.Player, true)]
+        [TestCase(BattleSide.Opponent, false)]
+        [TestCase(BattleSide.Opponent, true)]
+        public void EnemyDamageStartsNearBodyCenterOutsideItsOwnBoardAndFreezes(BattleSide side, bool usePrefab)
+        {
+            var f = _fixture;
+            var enemy = f.Views.First(v => f.Side(v) == side);
+            var bounds = enemy.GetVisualBounds();
+            var outward = side == BattleSide.Player ? Vector3.left : Vector3.right;
+            var board = new GameObject("DamageNumberBoard").AddComponent<PlacementBoardView>();
+            board.transform.SetParent(f.Root.transform);
+            board.transform.position = bounds.center - outward * 2f;
+            typeof(BattleShopSceneController).GetField(side == BattleSide.Player ? "_playerBoard" : "_opponentBoard",
+                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(f.Host, board);
+            if (usePrefab)
+                typeof(EnemyBattleController).GetField("_damageNumberPrefab", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(f.Controller, UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+                        "Assets/AssetRaw/Actor/DamageNumbers/Prefabs/DamageNumber.prefab"));
+            Assert.IsTrue(((EnemyBattleController)f.Controller).TryPlayDamageFeedback(side, enemy.InstanceId, 20));
+            var number = f.Root.GetComponentsInChildren<DamageNumberView>().Single();
+            var start = number.transform.position;
+            Assert.Greater(Vector3.Dot(start - bounds.center, outward), 0f, "出字点应偏向棋盘外侧");
+            Assert.IsTrue(bounds.Contains(start), "出字点仍应在敌人身体中心附近");
+            Assert.That(start.y, Is.EqualTo(bounds.center.y).Within(0.0251f));
+            f.Host.SetFrozen(true);
+            f.Advance(0.2f);
+            Assert.AreEqual(start, number.transform.position);
+            f.Host.SetFrozen(false);
+            f.Advance(0.1f);
+            Assert.Greater(Vector3.Dot(number.transform.position - start, outward), 0f);
+            Assert.Greater(number.transform.position.y, start.y);
+            f.Advance(0.4f);
+            Assert.IsTrue(number == null, "动画结束后应沿现有链路回收");
         }
 
         private Component Bullet(int targetId, int damage, Vector3 start)

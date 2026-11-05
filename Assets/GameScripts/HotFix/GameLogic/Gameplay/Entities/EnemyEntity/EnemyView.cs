@@ -148,6 +148,20 @@ namespace GameLogic
             for (var i = 0; i < _spriteRenderers.Length; i++) _baseSpriteColors[i] = _spriteRenderers[i].color;
         }
 
+        internal Bounds GetVisualBounds()
+        {
+            CacheVisuals();
+            var bounds = new Bounds(transform.position + Vector3.up * 0.25f, Vector3.one * 0.5f);
+            var found = false;
+            foreach (var renderer in _spriteRenderers)
+            {
+                if (renderer == null || !renderer.enabled || renderer.sprite == null || !renderer.gameObject.activeInHierarchy) continue;
+                if (!found) { bounds = renderer.bounds; found = true; }
+                else bounds.Encapsulate(renderer.bounds);
+            }
+            return bounds;
+        }
+
         private void ApplyHitFlash(bool active)
         {
             CacheVisuals();
