@@ -293,10 +293,16 @@ MonoBehaviour:
   - {fileID: 680952107}
   - {fileID: 1694597781}
   - {fileID: 436032438}
+  _playerSpawnRadius: 0.2
+  _playerP1Radius: 0.15
+  _playerP2Radius: 0.1
   _opponentRoutePoints:
   - {fileID: 1832132060}
   - {fileID: 1096092600}
   - {fileID: 1519177347}
+  _opponentSpawnRadius: 0.2
+  _opponentP1Radius: 0.1
+  _opponentP2Radius: 0.1
   _playerEnemyRoot: {fileID: 1576154972}
   _opponentEnemyRoot: {fileID: 900960162}
   _damageNumberPrefab: {fileID: 0}
@@ -1787,7 +1793,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 680952106}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2.27, y: -1.14, z: 0}
+  m_LocalPosition: {x: -2.3, y: -1.2, z: 0}
   m_LocalScale: {x: 0.7, y: 0.7, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2560,7 +2566,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1096092599}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2.2749999, y: -1.8, z: 0}
+  m_LocalPosition: {x: -2.22, y: -1.8, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

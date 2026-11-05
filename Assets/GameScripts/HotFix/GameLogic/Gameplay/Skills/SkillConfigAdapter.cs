@@ -18,12 +18,21 @@ namespace GameLogic
                     row.HitMode, row.Speed, row.FlightTime, row.ArcHeight, row.HitRadius));
             }
             var slowBuffId = 0;
+            var poisonBuffId = 0;
             foreach (var row in tables.TbBuff.DataList)
             {
                 catalog.Add(new BuffModel(row.Id, row.BehaviorKey, row.MaxStacks, row.Priority, row.TickInterval));
-                if (row.BehaviorKey != "slow") continue;
-                if (slowBuffId != 0) throw new InvalidOperationException("当前Slow字段必须对应唯一减速Buff。");
-                slowBuffId = row.Id;
+                if (row.BehaviorKey == "slow")
+                {
+                    if (slowBuffId != 0) throw new InvalidOperationException("当前Slow字段必须对应唯一减速Buff。");
+                    slowBuffId = row.Id;
+                }
+                if (row.BehaviorKey == "poison")
+                {
+                    if (poisonBuffId != 0 || row.MaxStacks != 1 || row.TickInterval != 0f)
+                        throw new InvalidOperationException("中毒必须对应唯一Buff、单实例单层且使用实例间隔。");
+                    poisonBuffId = row.Id;
+                }
             }
             foreach (var row in tables.TbSkill.DataList)
             {
@@ -36,27 +45,38 @@ namespace GameLogic
                 catalog.Add(new SkillModel(row.Id, (SkillType)row.SkillType, row.TimelineKey,
                     row.MaxLevel, row.Cooldown, (SkillTargetRule)row.TargetRule, row.PassiveBuffIds, row.BulletId));
             }
+            var poisonCap = 0;
             foreach (var row in tables.TbSkillLevel.DataList)
             {
                 if (!catalog.TryGet(row.SkillId, out var model) || row.Level < 1 || row.Level > model.MaxLevel ||
                     row.Damage < 0 || !EntityValidation.IsFiniteNonNegative(row.Slow) || row.Slow > 1f ||
                     !EntityValidation.IsFiniteNonNegative(row.Duration)) throw new InvalidOperationException("技能等级配置无效：" + row.Id);
                 ValidateRobotLevel(row, model, catalog);
-                var hitBuffs = new List<CombatBuffApplication>();
-                if (row.Slow > 0f)
+                if (row.Slow > 0f && (slowBuffId == 0 || row.Duration <= 0f))
+                    throw new InvalidOperationException("减速技能缺少Buff或有效持续时间：" + row.Id);
+                if (row.PoisonDamage < 0 || row.PoisonMaxLayers < 0 ||
+                    !EntityValidation.IsFiniteNonNegative(row.PoisonDuration) ||
+                    !EntityValidation.IsFiniteNonNegative(row.PoisonInterval))
+                    throw new InvalidOperationException("中毒等级参数无效：" + row.Id);
+                if (row.PoisonMaxLayers > 0 || row.SkillId == 1507 || row.PoisonDamage > 0 || row.PoisonDuration > 0f || row.PoisonInterval > 0f)
                 {
-                    if (slowBuffId == 0 || row.Duration <= 0f) throw new InvalidOperationException("减速技能缺少Buff或持续时间：" + row.Id);
-                    hitBuffs.Add(new CombatBuffApplication(slowBuffId, row.Duration,
-                        new Dictionary<string, float> { { "slow", row.Slow } }));
+                    if (poisonBuffId == 0 || row.PoisonMaxLayers <= 0 || row.PoisonDuration <= 0f || row.PoisonInterval <= 0f ||
+                        (poisonCap != 0 && poisonCap != row.PoisonMaxLayers))
+                        throw new InvalidOperationException("中毒缺少Buff、持续期或间隔，或各级上限不一致：" + row.Id);
+                    poisonCap = row.PoisonMaxLayers;
                 }
-                catalog.Add(new SkillLevelModel(row.SkillId, row.Level, new Dictionary<string, float>
+                var parameters = new Dictionary<string, float>
                 {
                     { "damage", row.Damage }, { "slow", row.Slow }, { "duration", row.Duration },
                     { "scatterCount", row.ScatterCount }, { "scatterAngle", row.ScatterAngle },
                     { "pierceTargetCount", row.PierceTargetCount }, { "burstCount", row.BurstCount },
-                    { "burstInterval", row.BurstInterval }, { "knockbackDistance", row.KnockbackDistance }
-                }, hitBuffs,
-                    parameters => CaptureSlowBuff(slowBuffId, parameters)));
+                    { "burstInterval", row.BurstInterval }, { "knockbackDistance", row.KnockbackDistance },
+                    { "poisonDamage", row.PoisonDamage }, { "poisonDuration", row.PoisonDuration },
+                    { "poisonInterval", row.PoisonInterval }, { "poisonMaxLayers", row.PoisonMaxLayers }
+                };
+                catalog.Add(new SkillLevelModel(row.SkillId, row.Level, parameters,
+                    CaptureHitBuffs(slowBuffId, poisonBuffId, row.SkillId, parameters),
+                    values => CaptureHitBuffs(slowBuffId, poisonBuffId, row.SkillId, values)));
             }
             foreach (var row in tables.TbSkill.DataList)
             {
@@ -104,6 +124,26 @@ namespace GameLogic
                 slow <= 0f || duration <= 0f) return Array.Empty<CombatBuffApplication>();
             if (buffId == 0) throw new InvalidOperationException("减速技能缺少Buff配置。");
             return new[] { new CombatBuffApplication(buffId, duration, new Dictionary<string, float> { { "slow", slow } }) };
+        }
+
+        private static IReadOnlyList<CombatBuffApplication> CaptureHitBuffs(int slowBuffId, int poisonBuffId,
+            int skillId, IReadOnlyDictionary<string, float> parameters)
+        {
+            var effects = new List<CombatBuffApplication>(CaptureSlowBuff(slowBuffId, parameters));
+            if (!parameters.TryGetValue("poisonMaxLayers", out var cap) || cap == 0f) return effects;
+            var damage = parameters["poisonDamage"];
+            var duration = parameters["poisonDuration"];
+            var interval = parameters["poisonInterval"];
+            if (poisonBuffId == 0 || !EntityValidation.IsFiniteNonNegative(damage) || damage >= int.MaxValue || damage != Math.Truncate(damage) ||
+                !EntityValidation.IsFiniteNonNegative(cap) || cap < 1f || cap >= int.MaxValue || cap != Math.Truncate(cap) ||
+                !EntityValidation.IsFiniteNonNegative(duration) || duration <= 0f ||
+                !EntityValidation.IsFiniteNonNegative(interval) || interval <= 0f)
+                throw new InvalidOperationException("中毒命中参数无效：" + skillId);
+            effects.Add(new CombatBuffApplication(poisonBuffId, duration, new Dictionary<string, float>
+            {
+                { "poisonDamage", damage }, { "poisonInterval", interval }, { "poisonMaxLayers", cap }, { "skillId", skillId }
+            }));
+            return effects;
         }
     }
 }

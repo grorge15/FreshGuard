@@ -29,6 +29,7 @@ namespace GameLogic
             Combat = combat ?? throw new ArgumentNullException(nameof(combat));
             if (combat.BattleId != battleId) throw new ArgumentException("结算运行时归属错误。");
             Combat.Bind(this);
+            BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
             Player = new BattlefieldRuntime(this, BattleSide.Player); Opponent = new BattlefieldRuntime(this, BattleSide.Opponent);
@@ -62,7 +63,7 @@ namespace GameLogic
         public void AddBuff(ISkillOwner target, BuffModel model, SkillOwnerRef source, float duration,
             System.Collections.Generic.IReadOnlyDictionary<string, float> parameters = null)
         {
-            if (IsDisposed || !TryResolveOwner(target.OwnerRef, out var resolved) || !ReferenceEquals(target, resolved) ||
+            if (IsDisposed || !Combat.AllowsGameplayTriggers || !TryResolveOwner(target.OwnerRef, out var resolved) || !ReferenceEquals(target, resolved) ||
                 source.BattleId != BattleId) return;
             target.Buffs.Add(model, source, duration, parameters, BuffBehaviors.Create(model.BehaviorKey));
         }
@@ -127,7 +128,7 @@ namespace GameLogic
         public BuffContainer Buffs { get; } = new BuffContainer();
         public bool CanCast => !_battle.IsDisposed;
         internal BattlefieldRuntime(BattleRuntime battle, BattleSide side)
-        { _battle = battle; OwnerRef = SkillOwnerRef.Battlefield(battle.BattleId, side); }
+        { _battle = battle; OwnerRef = SkillOwnerRef.Battlefield(battle.BattleId, side); Buffs.Owner = OwnerRef; }
         internal void Clear() { Skills.Clear(); Buffs.Dispose(); }
     }
 }

@@ -104,6 +104,7 @@ namespace GameLogic.Tests
             buffer.WriteInt(20); buffer.WriteFloat(0f); buffer.WriteFloat(0f);
             buffer.WriteInt(scatterCount); buffer.WriteFloat(scatterAngle); buffer.WriteInt(pierceCount);
             buffer.WriteInt(burstCount); buffer.WriteFloat(burstInterval); buffer.WriteFloat(knockbackDistance);
+            buffer.WriteInt(0); buffer.WriteFloat(0f); buffer.WriteFloat(0f); buffer.WriteInt(0);
             tables.TbSkillLevel = new GameConfig.skill.TbSkillLevel(buffer);
             Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
         }

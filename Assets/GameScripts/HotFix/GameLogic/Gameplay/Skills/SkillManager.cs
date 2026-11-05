@@ -92,7 +92,7 @@ namespace GameLogic
             owner = null; skill = null;
             if (_battle.IsDisposed) return SkillCastFailure.BattleEnded;
             if (!_battle.TryResolveOwner(request.Owner, out owner)) return SkillCastFailure.InvalidOwner;
-            if (!owner.CanCast || !_battle.CanCastNow()) return SkillCastFailure.NotAllowed;
+            if (!owner.CanCast || !_battle.CanCastNow() || !_battle.Combat.AllowsGameplayTriggers) return SkillCastFailure.NotAllowed;
             if (!owner.Skills.TryGet(request.SkillId, out skill)) return SkillCastFailure.MissingSkill;
             if (skill.CooldownRemaining > 0f) return SkillCastFailure.Cooldown;
             if ((!ownPreparation && _preparing.Contains(request.Owner)) || _battle.Timelines.HasChannel(request.Owner)) return SkillCastFailure.Busy;
