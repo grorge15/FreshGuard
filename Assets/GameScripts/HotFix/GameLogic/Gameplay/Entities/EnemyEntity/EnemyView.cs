@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GameLogic
@@ -16,11 +17,15 @@ namespace GameLogic
         private BattleEntityRegistry _registry;
         private SpriteRenderer[] _spriteRenderers;
         private Color[] _baseSpriteColors;
+        private Transform[] _shakeRoots;
+        private Vector3[] _shakeLocalOffsets;
         private bool _moving;
         private bool _attacking;
         private bool _removing;
         private float _hitFlashRemaining;
         private float _hitFlashDuration;
+        private float _hitShakeAmplitude;
+        private const float HIT_SHAKE_MAX_DISTANCE = 0.04f;
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
@@ -94,6 +99,7 @@ namespace GameLogic
                 return false;
             Entity existing;
             if (_registry.TryGet(InstanceId, out existing)) return false;
+            ClearHitFeedback();
             _registry = null;
             _removing = true;
             _attacking = false;
@@ -111,6 +117,8 @@ namespace GameLogic
 
         private void Update()
         {
+            // 在 Animator 写入本帧姿态前撤销上帧偏移，LateUpdate 再叠加本帧抖动。
+            RemoveHitShake();
             AdvanceHitFeedback(Time.unscaledDeltaTime);
             if (_registry == null || InstanceId <= 0) return;
             if (!HasAliveEntity())
@@ -121,12 +129,14 @@ namespace GameLogic
             }
         }
 
-        private void LateUpdate() { RefreshSortingOrder(); }
+        private void LateUpdate() { ApplyHitShake(); RefreshSortingOrder(); }
 
-        public bool PlayHitFeedback(float duration = 0.12f)
+        public bool PlayHitFeedback(float duration = 0.25f)
         {
             if (!HasAliveEntity() || duration <= 0f || float.IsNaN(duration) || float.IsInfinity(duration)) return false;
             CacheVisuals();
+            RemoveHitShake();
+            _hitShakeAmplitude = Mathf.Min(HIT_SHAKE_MAX_DISTANCE, GetVisualBounds().size.y * 0.056f);
             _hitFlashDuration = duration;
             _hitFlashRemaining = duration;
             ApplyHitFlash(true);
@@ -135,9 +145,46 @@ namespace GameLogic
 
         private void AdvanceHitFeedback(float deltaTime)
         {
-            if (_hitFlashRemaining <= 0f) return;
+            if (_hitFlashRemaining <= 0f || (_animator != null && _animator.speed <= 0f)) return;
             _hitFlashRemaining = Mathf.Max(0f, _hitFlashRemaining - Mathf.Max(0f, deltaTime));
             ApplyHitFlash(_hitFlashRemaining > 0f);
+            if (_hitFlashRemaining <= 0f) RemoveHitShake();
+        }
+
+        private void ApplyHitShake()
+        {
+            RemoveHitShake();
+            if (_hitFlashRemaining <= 0f || _shakeRoots == null) return;
+            var progress = 1f - _hitFlashRemaining / _hitFlashDuration;
+            var strength = _hitShakeAmplitude * (1f - progress);
+            var offset = new Vector3(Mathf.Cos(progress * Mathf.PI * 4.5f),
+                Mathf.Sin(progress * Mathf.PI * 3f) * 0.2f, 0f) * strength;
+            for (var i = 0; i < _shakeRoots.Length; i++)
+            {
+                var visual = _shakeRoots[i];
+                if (visual == null) continue;
+                _shakeLocalOffsets[i] = visual.parent.InverseTransformVector(offset);
+                visual.localPosition += _shakeLocalOffsets[i];
+            }
+        }
+
+        private void RemoveHitShake()
+        {
+            if (_shakeRoots == null) return;
+            for (var i = 0; i < _shakeRoots.Length; i++)
+            {
+                if (_shakeRoots[i] != null) _shakeRoots[i].localPosition -= _shakeLocalOffsets[i];
+                _shakeLocalOffsets[i] = Vector3.zero;
+            }
+        }
+
+        private void ClearHitFeedback()
+        {
+            RemoveHitShake();
+            _hitFlashRemaining = 0f;
+            _hitFlashDuration = 0f;
+            _hitShakeAmplitude = 0f;
+            ApplyHitFlash(false);
         }
 
         private void CacheVisuals()
@@ -145,7 +192,17 @@ namespace GameLogic
             if (_spriteRenderers != null) return;
             _spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
             _baseSpriteColors = new Color[_spriteRenderers.Length];
-            for (var i = 0; i < _spriteRenderers.Length; i++) _baseSpriteColors[i] = _spriteRenderers[i].color;
+            var roots = new List<Transform>();
+            for (var i = 0; i < _spriteRenderers.Length; i++)
+            {
+                _baseSpriteColors[i] = _spriteRenderers[i].color;
+                var visual = _spriteRenderers[i].transform;
+                if (visual == transform) continue;
+                while (visual.parent != transform) visual = visual.parent;
+                if (!roots.Contains(visual)) roots.Add(visual);
+            }
+            _shakeRoots = roots.ToArray();
+            _shakeLocalOffsets = new Vector3[_shakeRoots.Length];
         }
 
         internal Bounds GetVisualBounds()
@@ -207,9 +264,7 @@ namespace GameLogic
             _moving = false;
             _attacking = false;
             _removing = false;
-            _hitFlashRemaining = 0f;
-            _hitFlashDuration = 0f;
-            ApplyHitFlash(false);
+            ClearHitFeedback();
         }
 
         private void PlayState(string state, bool restart = false)

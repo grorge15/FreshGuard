@@ -106,8 +106,8 @@ namespace GameLogic.Tests
             Assert.AreEqual("Idle", Property<string>("AnimationState"));
         }
 
-        private void Lifecycle(string name) => _view.GetType().GetMethod(name,
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(_view, null);
+        private void Lifecycle(string name, params object[] args) => _view.GetType().GetMethod(name,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(_view, args);
 
         [Test]
         public void WrongSnapshotIsRejectedAndManualRemovalCompletesImmediately()
@@ -161,6 +161,91 @@ namespace GameLogic.Tests
 
             Assert.IsTrue((bool)Call("PlayHitFeedback", 0.12f));
             Assert.IsTrue(renderer.color.r > 0.8f && renderer.color.g < 0.4f && renderer.color.b < 0.4f);
+        }
+
+        [Test]
+        public void HitShakeMovesOnlyVisualAndRepeatedHitsRestoreWithoutDrift()
+        {
+            var visual = CreateHitVisual();
+            var origin = visual.localPosition;
+            var collider = _root.AddComponent<BoxCollider2D>();
+            _root.transform.position = new Vector3(2f, 3f, 0f);
+            var rootPosition = _root.transform.position;
+            var collisionCenter = collider.bounds.center;
+            for (var hit = 0; hit < 6; hit++)
+            {
+                Assert.IsTrue((bool)Call("PlayHitFeedback", 0.12f));
+                Lifecycle("LateUpdate");
+                var displacement = Vector3.Distance(origin, visual.localPosition);
+                Assert.Greater(displacement, 0f);
+                Assert.LessOrEqual(displacement, 0.041f, "连续受击不应叠加抖动幅度");
+                Lifecycle("AdvanceHitFeedback", 0.025f);
+                Lifecycle("LateUpdate");
+                Assert.AreEqual(rootPosition, _root.transform.position);
+                Assert.AreEqual(collisionCenter, collider.bounds.center);
+            }
+            Lifecycle("AdvanceHitFeedback", 0.2f);
+            Assert.That(Vector3.Distance(origin, visual.localPosition), Is.LessThan(0.00001f));
+            Assert.IsFalse(Property<bool>("IsHitFlashing"));
+        }
+
+        [Test]
+        public void HitShakePreservesAnimatedPoseAndFreezesWithAnimator()
+        {
+            var visual = CreateHitVisual();
+            Call("PlayHitFeedback", 0.12f);
+            Lifecycle("LateUpdate");
+            var frozenPosition = visual.localPosition;
+            _root.GetComponent<Animator>().speed = 0f;
+            Lifecycle("AdvanceHitFeedback", 1f);
+            Lifecycle("LateUpdate");
+            Assert.AreEqual(frozenPosition, visual.localPosition);
+            Assert.IsTrue(Property<bool>("IsHitFlashing"));
+            Lifecycle("Update");
+            var authoredPose = new Vector3(0.08f, 0.4f, 0f);
+            visual.localPosition = authoredPose;
+            Lifecycle("LateUpdate");
+            Assert.Greater(Vector3.Distance(authoredPose, visual.localPosition), 0f);
+            Lifecycle("Update");
+            Assert.That(Vector3.Distance(authoredPose, visual.localPosition), Is.LessThan(0.00001f),
+                "抖动应撤销自身偏移，保留动画本来写入的位置");
+            _root.GetComponent<Animator>().speed = 1f;
+            Lifecycle("AdvanceHitFeedback", 0.2f);
+            Lifecycle("LateUpdate");
+            Assert.That(Vector3.Distance(authoredPose, visual.localPosition), Is.LessThan(0.00001f));
+        }
+
+        [TestCase("Unbind")]
+        [TestCase("Disable")]
+        [TestCase("Death")]
+        public void HitShakeClearsBeforeUnbindDisableOrDeath(string transition)
+        {
+            var visual = CreateHitVisual();
+            var origin = visual.localPosition;
+            Call("PlayHitFeedback", 0.12f);
+            Lifecycle("LateUpdate");
+            if (transition == "Unbind") Call("Unbind");
+            else if (transition == "Disable") Lifecycle("OnDisable");
+            else
+            {
+                _registry.ApplyDamage(Property<int>("InstanceId"), int.MaxValue, out var removal);
+                Assert.IsTrue((bool)Call("PlayRemoval", removal));
+            }
+            Assert.That(Vector3.Distance(origin, visual.localPosition), Is.LessThan(0.00001f));
+            Assert.IsFalse(Property<bool>("IsHitFlashing"));
+            Assert.AreEqual(Color.white, visual.GetComponent<SpriteRenderer>().color);
+        }
+
+        private Transform CreateHitVisual()
+        {
+            CreateView();
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(_root.transform, false);
+            visual.localPosition = new Vector3(0f, 0.355f, 0f);
+            visual.gameObject.AddComponent<SpriteRenderer>().color = Color.white;
+            var id = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), BattleSide.Player);
+            Call("Bind", _registry, id);
+            return visual;
         }
 
         [Test]
