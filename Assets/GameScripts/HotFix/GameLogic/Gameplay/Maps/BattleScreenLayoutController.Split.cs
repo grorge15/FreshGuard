@@ -10,8 +10,10 @@ namespace GameLogic
         [SerializeField, Range(0.01f, 1f)] private float _opponentMaxSizeRatio = 1f;
         [SerializeField] private Color _playerClearColor = new Color32(33, 174, 216, 255);
         [SerializeField] private Color _opponentClearColor = new Color32(234, 178, 79, 255);
+        [SerializeField] private Sprite _battleBackground;
         private Camera _opponentCamera;
         private Camera _backgroundCamera;
+        private SpriteRenderer _backgroundRenderer;
         private CameraState _cameraState;
         private BattleScreenLayoutResult _layout;
         private Rect _lastInfoRect;
@@ -58,6 +60,7 @@ namespace GameLogic
             ApplyCamera(_opponentCamera, candidate.OpponentViewport, screen, opponentCenter, opponentSize);
             _sceneCamera.backgroundColor = _playerClearColor;
             _opponentCamera.backgroundColor = _opponentClearColor;
+            RefreshBackground(screen);
             _layout = candidate;
             _availableScreenRect = Rect.MinMaxRect(candidate.PlayerArea.xMin, candidate.PlayerArea.yMin,
                 candidate.OpponentArea.xMax, candidate.OpponentArea.yMax);
@@ -74,20 +77,35 @@ namespace GameLogic
         private void EnsureCameras()
         {
             if (_opponentCamera != null) return;
+            var backgroundMask = _battleBackground != null ? LayerMask.GetMask("BattleBackground") : 0;
+            if (_battleBackground != null && backgroundMask == 0)
+                throw new System.InvalidOperationException("战斗背景需要 BattleBackground 显示层。");
             _opponentCamera = CreateCamera("OpponentBattleCamera");
             _backgroundCamera = CreateCamera("BattleBackgroundCamera");
             var ui = _window.Canvas.rootCanvas.worldCamera;
             var depth = ui != null ? Mathf.Min(_cameraState.Depth, ui.depth - 2f) : _cameraState.Depth;
             _backgroundCamera.rect = new Rect(0, 0, 1, 1);
-            _backgroundCamera.cullingMask = 0;
+            _backgroundCamera.cullingMask = backgroundMask;
             _backgroundCamera.clearFlags = CameraClearFlags.SolidColor;
             _backgroundCamera.backgroundColor = _cameraState.Background;
             _backgroundCamera.depth = depth - 1f;
+            if (_battleBackground != null)
+            {
+                var background = new GameObject("BattleBackground");
+                background.layer = LayerMask.NameToLayer("BattleBackground");
+                background.transform.SetParent(_backgroundCamera.transform, false);
+                background.transform.localPosition = Vector3.forward *
+                    Mathf.Lerp(_backgroundCamera.nearClipPlane, _backgroundCamera.farClipPlane, 0.5f);
+                _backgroundRenderer = background.AddComponent<SpriteRenderer>();
+                _backgroundRenderer.sprite = _battleBackground;
+            }
             _sceneCamera.depth = depth;
             _opponentCamera.depth = depth + 0.1f;
-            _sceneCamera.cullingMask &= ~(1 << LayerMask.NameToLayer("UI"));
+            _sceneCamera.cullingMask &= ~((1 << LayerMask.NameToLayer("UI")) | backgroundMask);
             _opponentCamera.cullingMask = _sceneCamera.cullingMask;
-            _sceneCamera.clearFlags = _opponentCamera.clearFlags = CameraClearFlags.SolidColor;
+            // 两侧战场只清深度，让同一张全屏背景连续显示。
+            _sceneCamera.clearFlags = _opponentCamera.clearFlags = _backgroundRenderer != null
+                ? CameraClearFlags.Depth : CameraClearFlags.SolidColor;
             if (_renderRegistry == null) _renderRegistry = GetComponent<BattleSideRenderRegistry>();
             if (_renderRegistry == null) _renderRegistry = gameObject.AddComponent<BattleSideRenderRegistry>();
             _renderRegistry.BindCameras(_sceneCamera, _opponentCamera);
@@ -95,6 +113,17 @@ namespace GameLogic
             RegisterStatic(_opponentWorldRoot, _opponentBoard, _opponentFixedRenderers, BattleSide.Opponent);
             _backgroundCamera.enabled = true;
             _opponentCamera.enabled = true;
+        }
+
+        private void RefreshBackground(Vector2 screen)
+        {
+            if (_backgroundRenderer == null) return;
+            var size = _battleBackground.bounds.size;
+            var height = _backgroundCamera.orthographicSize * 2f;
+            _backgroundCamera.aspect = screen.x / screen.y;
+            // 等比铺满，超出屏幕的部分从两边居中裁切。
+            var scale = Mathf.Max(height * _backgroundCamera.aspect / size.x, height / size.y);
+            _backgroundRenderer.transform.localScale = new Vector3(scale, scale, 1f);
         }
 
         private Camera CreateCamera(string cameraName)
