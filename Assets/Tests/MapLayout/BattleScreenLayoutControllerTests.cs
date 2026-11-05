@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -109,6 +110,41 @@ namespace GameLogic.Tests
             Assert.That(_camera.transform.position, Is.EqualTo(originalPosition));
             Assert.That(_camera.orthographicSize, Is.EqualTo(originalSize));
             Assert.IsTrue(_placement.TryGetPointerWorldPosition(Vector2.zero, out ignored));
+        }
+
+        [UnityTest]
+        public IEnumerator BackgroundCoversScreenBehindBothSidesAndUnbindRestoresCamera()
+        {
+            var originalClear = _camera.clearFlags;
+            var originalMask = _camera.cullingMask;
+            Set(_layout, "_battleBackground", _sprite);
+            yield return _layout.BindAsync(_window, CancellationToken.None).ToCoroutine();
+
+            var backgroundCamera = _root.transform.Find("BattleBackgroundCamera").GetComponent<Camera>();
+            var background = backgroundCamera.GetComponentInChildren<SpriteRenderer>();
+            var backgroundMask = 1 << background.gameObject.layer;
+            Assert.AreEqual(CameraClearFlags.Depth, _camera.clearFlags);
+            Assert.AreEqual(CameraClearFlags.Depth, _layout.OpponentCamera.clearFlags);
+            Assert.AreEqual(CameraClearFlags.SolidColor, backgroundCamera.clearFlags);
+            Assert.AreEqual(backgroundMask, backgroundCamera.cullingMask);
+            Assert.AreEqual(0, _camera.cullingMask & backgroundMask);
+            Assert.AreEqual(0, _layout.OpponentCamera.cullingMask & backgroundMask);
+            Assert.Less(backgroundCamera.depth, _camera.depth);
+            var min = backgroundCamera.WorldToViewportPoint(background.bounds.min);
+            var max = backgroundCamera.WorldToViewportPoint(background.bounds.max);
+            Assert.LessOrEqual(min.x, 0.001f);
+            Assert.LessOrEqual(min.y, 0.001f);
+            Assert.GreaterOrEqual(max.x, 0.999f);
+            Assert.GreaterOrEqual(max.y, 0.999f);
+            Assert.That(min.z, Is.InRange(backgroundCamera.nearClipPlane, backgroundCamera.farClipPlane));
+
+            _layout.Unbind();
+            Assert.AreEqual(originalClear, _camera.clearFlags);
+            Assert.AreEqual(originalMask, _camera.cullingMask);
+            Assert.IsNull(_root.transform.Find("BattleBackgroundCamera"));
+            yield return _layout.BindAsync(_window, CancellationToken.None).ToCoroutine();
+            Assert.AreEqual(1, _root.GetComponentsInChildren<SpriteRenderer>()
+                .Count(renderer => renderer.gameObject.layer == LayerMask.NameToLayer("BattleBackground")));
         }
 
         [UnityTest]

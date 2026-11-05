@@ -116,6 +116,7 @@ namespace GameLogic
                 if (_placement != null) _placement.ClearScreenViews();
                 DestroyCamera(ref _opponentCamera);
                 DestroyCamera(ref _backgroundCamera);
+                _backgroundRenderer = null;
                 if (_sceneCamera != null)
                 {
                     _sceneCamera.transform.position = _originalPosition;

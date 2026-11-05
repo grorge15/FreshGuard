@@ -92,7 +92,7 @@ TextMesh:
   m_Alignment: 1
   m_TabSize: 4
   m_FontSize: 32
-  m_FontStyle: 0
+  m_FontStyle: 1
   m_RichText: 1
   m_Font: {fileID: 12800000, guid: 5cd36d6dd0ef80c4ebcfd113fb73cbe7, type: 3}
   m_Color:
@@ -114,3 +114,6 @@ MonoBehaviour:
   riseDistance: 0.35
   driftDistance: 0.75
   color: {r: 1, g: 0.3, b: 0.15, a: 1}
+  outlineMaterial: {fileID: 2100000, guid: 08a8c6f7b712d484eb969f89936b0ba9, type: 2}
+  gradientTop: {r: 1, g: 0.95, b: 0.55, a: 1}
+  gradientBottom: {r: 1, g: 0.25, b: 0.08, a: 1}

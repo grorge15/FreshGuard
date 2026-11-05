@@ -305,7 +305,7 @@ MonoBehaviour:
   _opponentP2Radius: 0.1
   _playerEnemyRoot: {fileID: 1576154972}
   _opponentEnemyRoot: {fileID: 900960162}
-  _damageNumberPrefab: {fileID: 0}
+  _damageNumberPrefab: {fileID: 5355598917011885402, guid: 70cd3a17ed1327345acef9e62e0e1f71, type: 3}
 --- !u!114 &164109972
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -337,6 +337,7 @@ MonoBehaviour:
   _opponentMaxSizeRatio: 1
   _playerClearColor: {r: 0.12941177, g: 0.68235296, b: 0.84705883, a: 1}
   _opponentClearColor: {r: 0.91764706, g: 0.69803923, b: 0.30980393, a: 1}
+  _battleBackground: {fileID: 21300000, guid: ff7e7c87b88b4bdebdcf4ff3b3be5836, type: 3}
 --- !u!114 &164109973
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2795,7 +2796,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1467540173
 Transform:
   m_ObjectHideFlags: 0
@@ -4787,7 +4788,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &2042964649
 Transform:
   m_ObjectHideFlags: 0

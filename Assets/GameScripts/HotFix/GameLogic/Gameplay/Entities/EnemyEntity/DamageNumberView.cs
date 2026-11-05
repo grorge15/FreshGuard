@@ -11,8 +11,12 @@ namespace GameLogic
         [SerializeField, Min(0f)] private float riseDistance = 0.35f;
         [SerializeField, Min(0f)] private float driftDistance = 0.75f;
         [SerializeField] private Color color = new Color(1f, 0.3f, 0.15f, 1f);
+        [SerializeField] private Material outlineMaterial;
+        [SerializeField] private Color gradientTop = new Color(1f, 0.95f, 0.55f, 1f);
+        [SerializeField] private Color gradientBottom = new Color(1f, 0.25f, 0.08f, 1f);
         private static readonly System.Random MotionRandom = new System.Random();
         private TextMesh _label;
+        private WorldPopupTextStyle _textStyle;
         private Color _initialColor;
         private Vector3 _startPosition;
         private Vector3 _firstControlOffset;
@@ -31,6 +35,7 @@ namespace GameLogic
             _label.anchor = TextAnchor.MiddleCenter;
             _label.alignment = TextAlignment.Center;
             _label.fontSize = 32;
+            _label.fontStyle = FontStyle.Bold;
             _label.characterSize = 0.08f;
             _label.color = color;
             var renderer = GetComponent<MeshRenderer>();
@@ -49,6 +54,8 @@ namespace GameLogic
             if (driftDistance < 0f || float.IsNaN(driftDistance) || float.IsInfinity(driftDistance)) driftDistance = 0.75f;
             if (_label == null) Awake();
             _label.text = damage.ToString();
+            _textStyle?.Dispose();
+            _textStyle = new WorldPopupTextStyle(_label, outlineMaterial, gradientTop, gradientBottom, 0.3f, 1.6f);
             _initialColor = _label.color;
             var outward = outwardDirection.sqrMagnitude > 0.0001f ? outwardDirection.normalized : Vector2.left;
             // 侧边轨道向上弯出；上下轨道旋转同一条弧线，终段始终朝棋盘外侧。
@@ -69,6 +76,8 @@ namespace GameLogic
         }
 
         private static float RandomRange(float min, float max) => Mathf.Lerp(min, max, (float)MotionRandom.NextDouble());
+
+        private void OnDestroy() => _textStyle?.Dispose();
 
         /// <returns>true when the number has finished and may be destroyed.</returns>
         public bool Advance(float deltaTime)
