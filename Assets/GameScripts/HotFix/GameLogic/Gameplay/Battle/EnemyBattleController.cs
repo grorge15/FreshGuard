@@ -530,13 +530,21 @@ namespace GameLogic
         {
             if (!OwnsBattle || damage <= 0 || !_active.TryGetValue(instanceId, out var entry) ||
                 entry.Group.Side != side || entry.View == null || !entry.View.PlayHitFeedback()) return false;
+            var bounds = entry.View.GetVisualBounds();
+            var outward = Vector2.left;
+            if (_host.TryGetBoardCenter(side, out var boardCenter))
+            {
+                var offset = (Vector2)(bounds.center - boardCenter);
+                if (offset.sqrMagnitude > 0.0001f) outward = offset.normalized;
+            }
+            var extent = Mathf.Abs(outward.x) * bounds.extents.x + Mathf.Abs(outward.y) * bounds.extents.y;
+            var start = bounds.center + (Vector3)outward * Mathf.Min(0.18f, extent * 0.35f);
             if (_damageNumberPrefab != null)
             {
-                var instance = Instantiate(_damageNumberPrefab, entry.View.transform.position + Vector3.up * 0.25f,
-                    Quaternion.identity, transform);
+                var instance = Instantiate(_damageNumberPrefab, start, Quaternion.identity, transform);
                 var number = instance.GetComponent<DamageNumberView>();
                 if (number == null) number = instance.AddComponent<DamageNumberView>();
-                number.Initialize(damage, instance.transform.position);
+                number.Initialize(damage, start, outward);
                 BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
                 _damageNumbers.Add(number);
             }
@@ -545,7 +553,7 @@ namespace GameLogic
                 var instance = new GameObject("DamageNumber");
                 instance.transform.SetParent(transform, true);
                 var number = instance.AddComponent<DamageNumberView>();
-                number.Initialize(damage, entry.View.transform.position + Vector3.up * 0.25f);
+                number.Initialize(damage, start, outward);
                 BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
                 _damageNumbers.Add(number);
             }
