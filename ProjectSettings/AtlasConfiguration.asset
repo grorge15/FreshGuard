@@ -17,6 +17,7 @@ MonoBehaviour:
   - Assets/AssetRaw/UIRaw/Atlas
   rootChildAtlasDir:
   - Assets/AssetRaw/UIRaw/Atlas/SingleAtlas
+  - 
   singleAtlasDir:
   - Assets/AssetRaw/UIRaw/Atlas/Background
   excludeFolder:
@@ -25,7 +26,7 @@ MonoBehaviour:
   iosFormat: 49
   webglFormat: 50
   padding: 4
-  enableRotation: 1
+  enableRotation: 0
   blockOffset: 1
   tightPacking: 1
   compressionQuality: 50
