@@ -61,15 +61,14 @@ SpriteAtlasAsset:
     packingSettings:
       serializedVersion: 2
       padding: 4
-      blockOffset: 1
+      blockOffset: 3
       allowAlphaSplitting: 0
-      enableRotation: 1
+      enableRotation: 0
       enableTightPacking: 1
       enableAlphaDilation: 1
     secondaryTextureSettings: {}
     variantMultiplier: 1
     packables:
-    - {fileID: 21300000, guid: aac3b55411dff4c428073018585faf10, type: 3}
     - {fileID: 21300000, guid: 9cb5d4f78ac785d4c83a2269dac5669d, type: 3}
     - {fileID: 21300000, guid: 8f9da8be04428424689242cb96e5197d, type: 3}
     - {fileID: 21300000, guid: eb5c755d67e33cb4c9b2ebc3f8ed74ca, type: 3}

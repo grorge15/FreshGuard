@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: DemoBattleProfile
   m_EditorClassIdentifier: 
   PlayerName: "\u6599\u7406\u5B88\u62A4\u8005"
-  PlayerAvatar: Main_playerAvatar 1
+  PlayerAvatar: Main_playerAvatar
   InitialTrophies: 2500
   OpponentName: "\u7F8E\u5473\u6599\u7406\u5BB6"
-  OpponentAvatar: Main_playerAvatar 1
+  OpponentAvatar: Main_playerAvatar
   Robots:
   - RobotId: 501
     Unlocked: 1
