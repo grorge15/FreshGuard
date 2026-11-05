@@ -17,7 +17,9 @@ MonoBehaviour:
   - Assets/AssetRaw/UIRaw/Atlas
   rootChildAtlasDir:
   - Assets/AssetRaw/UIRaw/Atlas/SingleAtlas
-  - 
+  - Assets/AssetRaw/Actor/Sprites
+  - "Assets/AssetRaw/Actor/Sprites/Enemy/Frame/\u9AB7\u9AC5\u5175"
+  - Assets/AssetRaw/UI/UISprites
   singleAtlasDir:
   - Assets/AssetRaw/UIRaw/Atlas/Background
   excludeFolder:
