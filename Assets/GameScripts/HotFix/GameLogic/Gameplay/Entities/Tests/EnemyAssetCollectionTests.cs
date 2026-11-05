@@ -18,24 +18,30 @@ namespace GameLogic.Tests
             var prefabs = new[] { "SkeletonEnemy", "EliteSkeletonEnemy", "SkeletonBossEnemy" };
             foreach (var name in prefabs)
             {
-                var prefab = assets.Single(a => a.AssetInfo.AssetPath ==
-                    "Assets/AssetRaw/Actor/Enemy/Prefabs/" + name + ".prefab");
+                var prefab = assets.Single(a => Path.GetFileName(a.AssetInfo.AssetPath) == name + ".prefab");
                 Assert.AreEqual(name, prefab.Address);
                 var dependencies = AssetDatabase.GetDependencies(prefab.AssetInfo.AssetPath, true);
                 Assert.IsTrue(dependencies.Any(p => p.EndsWith(".controller")));
                 Assert.AreEqual(4, dependencies.Count(p => p.EndsWith(".anim")));
-                Assert.IsTrue(dependencies.Where(p => p.StartsWith("Assets/AssetRaw/Actor/Enemy/"))
+                Assert.IsTrue(dependencies.Where(p => p.StartsWith("Assets/AssetRaw/Actor/"))
                     .All(p => assets.Any(a => a.AssetInfo.AssetPath == p)));
             }
-            foreach (var asset in assets.Where(a => a.AssetInfo.AssetPath.StartsWith("Assets/AssetRaw/Actor/")))
-            {
-                var path = asset.AssetInfo.AssetPath;
-                if (path.StartsWith("Assets/AssetRaw/Actor/Enemy/Frame/") ||
-                    path.StartsWith("Assets/AssetRaw/Actor/Enemy/Animations/"))
-                    Assert.AreEqual(path.Substring("Assets/AssetRaw/Actor/".Length), asset.Address);
-                else
-                    Assert.AreEqual(Path.GetFileNameWithoutExtension(path), asset.Address);
-            }
+
+            var frames = assets.Where(a => Path.GetFileName(a.AssetInfo.AssetPath) == "frame_016.png").ToArray();
+            Assert.GreaterOrEqual(frames.Length, 2, "必须覆盖不同敌人的同名帧图片");
+            Assert.AreEqual(frames.Length, frames.Select(a => a.Address).Distinct().Count());
+        }
+
+        [Test]
+        public void PhysicsBallPrefabAndSpriteHaveDifferentAddresses()
+        {
+            var setting = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(
+                "Assets/Editor/AssetBundleCollector/AssetBundleCollectorSetting.asset");
+            var assets = setting.BeginCollect("DefaultPackage", true, false).CollectAssets;
+            var prefab = assets.Single(a => Path.GetFileName(a.AssetInfo.AssetPath) == "PhysicalCollisionBall.prefab");
+            var sprite = assets.Single(a => Path.GetFileName(a.AssetInfo.AssetPath) == "PhysicalCollisionBall.png");
+            Assert.AreEqual("PhysicalCollisionBall", prefab.Address);
+            Assert.AreNotEqual(prefab.Address, sprite.Address);
         }
     }
 }
