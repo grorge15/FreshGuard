@@ -52,6 +52,7 @@ namespace GameLogic
             m_item_Template.SetActive(false);
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
             _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: false);
+            InitializeSlotMachine();
         }
         protected override void OnRefresh()
         {
@@ -60,6 +61,7 @@ namespace GameLogic
             if (context == null || host == null) return;
             if (Context != context || _host != host)
             {
+                CancelSlotRefresh();
                 Drag.Cancel();
                 Context = context;
                 _refreshHintShown = false;
@@ -87,20 +89,21 @@ namespace GameLogic
             _coins.text = state.EnergyCoins.ToString();
             _refreshPrice.text = _host != null ? _host.RefreshPrice.ToString() : "";
             _refreshPrice.color = _host != null && state.EnergyCoins < _host.RefreshPrice
-                ? new Color(0.8f, 0.12f, 0.1f) : new Color(0.23f, 0.13f, 0.08f);
-            while (_items.Count < state.Slots.Count && _items.Count < ShopRules.ShopCapacity)
+                ? new Color(1f, 0.3f, 0.2f) : new Color32(255, 246, 222, 255);
+            while (_items.Count < ShopRules.ShopCapacity)
                 _items.Add(CreateWidgetByPrefab<ShopRobotItemWidget>(m_item_Template, _offers));
             for (var i = 0; i < _items.Count; i++)
             {
                 if (i < state.Slots.Count) _items[i].Render(this, state.Slots[i].SlotId, state.Slots[i], state.EnergyCoins);
                 else _items[i].Visible = false;
             }
-            _refreshButton.interactable = !Context.IsBusy && Drag.Phase == RobotDragPhase.Idle;
+            LayoutSlotItems();
+            _refreshButton.interactable = !IsRefreshing && !Context.IsEndRequested && !Context.IsBusy && Drag.Phase == RobotDragPhase.Idle;
             ApplyOfferMergeHighlights();
         }
         public void PressSlot(int slotId, int pointerId, Vector2 position, float now)
         {
-            if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsEnded || Context.IsBusy ||
+            if (IsRefreshing || _host == null || !_host.CanInteractWithRobots || Context == null || Context.IsEnded || Context.IsBusy ||
                 Drag.Phase != RobotDragPhase.Idle) return;
             var slot = Context.GetState(BattleSide.Player).FindSlot(slotId);
             if (slot == null) return;
@@ -113,18 +116,26 @@ namespace GameLogic
         }
         private partial void OnClick_RefreshBtn()
         {
-            if (_host == null || !_host.CanInteractWithRobots || Context == null || Context.IsBusy ||
+            if (IsRefreshing || _host == null || !_host.CanInteractWithRobots || Context == null || Context.IsBusy ||
                 Drag.Phase != RobotDragPhase.Idle) return;
+            BeginSlotRefresh();
             var result = Context.TryRefresh(BattleSide.Player);
-            if (result != ShopOperationResult.Success) ShowFailure(result);
-            
+            if (result != ShopOperationResult.Success)
+            {
+                CancelSlotRefresh();
+                RefreshView();
+                ShowFailure(result);
+                return;
+            }
+            SetSlotRefreshTargets();
+            RefreshView();
         }
         public bool IsOverShop(Vector2 position) => RectTransformUtility.RectangleContainsScreenPoint(m_rect_ShopPanel, position, EventCamera);
 
         public bool TryGetShopSlot(Vector2 position, out int slotId)
         {
             slotId = -1;
-            if (_items == null) return false;
+            if (IsRefreshing || _items == null) return false;
             for (var i = 0; i < _items.Count; i++)
             {
                 var item = _items[i];
@@ -186,6 +197,7 @@ namespace GameLogic
         }
         protected override void OnUpdate()
         {
+            UpdateSlotRefresh();
             RefreshBerserkBar();
             Drag.Advance(Time.unscaledTime);
             var flashing = Time.unscaledTime < _flashUntil && Mathf.Repeat(Time.unscaledTime * 10f, 1f) < 0.5f;
@@ -196,9 +208,14 @@ namespace GameLogic
                 BattleNoticeEvents.Show(Context.BattleId, "刷新会清除店内所有机器人，已购机器人不退款。");
             }
         }
-        protected override void OnSetVisible(bool visible) { if (!visible) Drag?.Cancel(); }
+        protected override void OnSetVisible(bool visible)
+        {
+            if (!visible) { CancelSlotRefresh(); Drag?.Cancel(); }
+            else RefreshView();
+        }
         protected override void OnDestroy()
         {
+            CancelSlotRefresh();
             if (_refreshButton != null) _refreshButton.onClick.RemoveListener(OnClick_RefreshBtn);
             Drag?.Cancel();
             Context = null;

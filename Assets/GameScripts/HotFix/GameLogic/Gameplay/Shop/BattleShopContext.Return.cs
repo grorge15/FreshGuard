@@ -46,9 +46,17 @@ namespace GameLogic
             }
             // 店内来源只允许合成，不因松到空白/未购商品而新增或交换对象。
             if (sourceSlot != null) return ShopOperationResult.Success;
-            if (state.Slots.Count >= ShopRules.ShopCapacity) return ShopOperationResult.ShopFull;
+            if (FindReturnSlot(state, targetSlotId) == null) return ShopOperationResult.ShopFull;
             action = ShopDropAction.Return;
             return ShopOperationResult.Success;
+        }
+
+        private static ShopSlot FindReturnSlot(BattleShopState state, int? targetSlotId)
+        {
+            var target = targetSlotId.HasValue ? state.FindSlot(targetSlotId.Value) : null;
+            if (target != null && target.IsEmpty) return target;
+            foreach (var slot in state.Slots) if (slot.IsEmpty) return slot;
+            return null;
         }
 
         public ShopOperationResult TryCommitShopDrop(long interactionId, int? targetSlotId)
@@ -72,7 +80,7 @@ namespace GameLogic
                 {
                     var robot = _owned[session.Source.InstanceId];
                     DetachSource(robot);
-                    target = state.AddSlot();
+                    target = FindReturnSlot(state, targetSlotId);
                     target.InstanceId = robot.InstanceId;
                     robot.TrySetLocation(RobotLocation.PurchasedShopSlot, null);
                 }

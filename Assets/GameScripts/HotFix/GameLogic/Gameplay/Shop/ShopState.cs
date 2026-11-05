@@ -51,13 +51,14 @@ namespace GameLogic
         }
     }
 
-    /// <summary>SlotId为局内稳定身份，不是列表下标；Offer和InstanceId互斥，空项移除。</summary>
+    /// <summary>每批固定三个槽位；SlotId为稳定身份，Offer和InstanceId互斥，空槽保留原位。</summary>
     public sealed class ShopSlot
     {
         public int SlotId { get; }
         public ShopOffer Offer { get; internal set; }
         public int? InstanceId { get; internal set; }
         public bool IsPurchased => InstanceId.HasValue;
+        public bool IsEmpty => Offer == null && !InstanceId.HasValue;
 
         internal ShopSlot(int slotId) { SlotId = slotId; }
     }
@@ -86,13 +87,14 @@ namespace GameLogic
 
         internal bool HasIssuedSlot(int slotId) => slotId >= 0 && slotId < _nextSlotId;
 
-        internal ShopSlot AddSlot()
+        internal void ReplaceOffers(ShopOffer[] offers)
         {
-            var slot = new ShopSlot(_nextSlotId++);
-            _slots.Add(slot);
-            return slot;
+            if (offers == null || offers.Length != ShopRules.ShopCapacity)
+                throw new System.ArgumentException("每批必须提供三个商品。", nameof(offers));
+            _slots.Clear();
+            foreach (var offer in offers)
+                _slots.Add(new ShopSlot(_nextSlotId++) { Offer = offer });
         }
-        internal void RemoveSlot(ShopSlot slot) => _slots.Remove(slot);
         internal void ClearSlots() => _slots.Clear();
     }
 }
