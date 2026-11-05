@@ -29,10 +29,10 @@ namespace GameLogic
     public sealed class DemoBattleProfile : ScriptableObject
     {
         public string PlayerName = MainMenuPlayerState.DefaultPlayerName;
-        public string PlayerAvatar = "Main_playerAvatar 1";
+        public string PlayerAvatar = "Main_playerAvatar";
         public int InitialTrophies = 2500;
         public string OpponentName = "美味料理家";
-        public string OpponentAvatar = "Main_playerAvatar 1";
+        public string OpponentAvatar = "Main_playerAvatar";
         public List<DemoRobotReference> Robots = new List<DemoRobotReference>();
         public List<DemoBuffDefinition> Buffs = new List<DemoBuffDefinition>();
         public List<DemoBuffCarry> PlayerBuffs = new List<DemoBuffCarry>();

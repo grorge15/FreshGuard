@@ -28,11 +28,11 @@ MonoBehaviour:
   iosFormat: 49
   webglFormat: 50
   padding: 4
-  enableRotation: 1
-  blockOffset: 1
+  enableRotation: 0
+  blockOffset: 3
   tightPacking: 1
   compressionQuality: 50
-  autoGenerate: 1
+  autoGenerate: 0
   enableLogging: 1
   enableV2: 1
   checkMipmaps: 1
