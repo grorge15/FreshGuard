@@ -26,7 +26,7 @@ MonoBehaviour:
   iosFormat: 49
   webglFormat: 50
   padding: 4
-  enableRotation: 0
+  enableRotation: 1
   blockOffset: 1
   tightPacking: 1
   compressionQuality: 50
