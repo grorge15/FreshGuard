@@ -388,7 +388,7 @@ namespace GameLogic
                 _impactOutline = GetComponent<RobotImpactOutline>();
                 if (_impactOutline == null) _impactOutline = gameObject.AddComponent<RobotImpactOutline>();
             }
-            _impactOutline.Play(_iconRenderer, GetPhysicalCollider());
+            _impactOutline.Play(_iconRenderer, GetPhysicalCollider(), _robot.Level);
             if (_collisionVisuals == null)
             {
                 if (_iconRenderer == null || _iconRenderer.sprite == null) return;

@@ -25,7 +25,7 @@ namespace GameLogic
         private readonly IReadOnlyDictionary<int, double> _sharedRobotWeights;
         public int InitialCoins { get; }
         public const int OfferBatchCount = 3;
-        public const int ShopCapacity = 5;
+        public const int ShopCapacity = OfferBatchCount;
         public int SlotCount => OfferBatchCount;
         public int RefreshPrice { get; }
         public int MaxRobotLevel => 5;

@@ -115,6 +115,7 @@ namespace GameLogic
         {
             if (!visible)
             {
+                Shop?.CancelSlotRefresh();
                 Shop?.Drag?.Cancel();
                 Notices?.Clear();
                 CurrencyFlight?.Clear();

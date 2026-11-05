@@ -36,7 +36,7 @@ namespace GameLogic
 
         public bool Press(RobotDragSource source, int pointerId, Vector2 position, float now, BoardCoordinate grabbedCell)
         {
-            if (_host == null || !_host.CanInteractWithRobots || _ui == null || Phase != RobotDragPhase.Idle || _host.Context.IsBusy) return false;
+            if (_host == null || !_host.CanInteractWithRobots || _ui == null || _ui.IsRefreshing || Phase != RobotDragPhase.Idle || _host.Context.IsBusy) return false;
             GameConfig.robot.Robot config;
             int level;
             PlaceableDefinition definition;

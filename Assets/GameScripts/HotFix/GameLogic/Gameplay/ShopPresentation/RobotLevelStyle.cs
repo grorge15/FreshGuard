@@ -33,6 +33,19 @@ namespace GameLogic
             }
         }
 
+        /// <summary>碰撞描边使用同色系高亮色，提升瞬间反馈的辨识度。</summary>
+        public static Color ImpactColorForLevel(int level)
+        {
+            switch (Mathf.Clamp(level, 1, MaxLevel))
+            {
+                case 2: return new Color32(82, 255, 139, 255);
+                case 3: return new Color32(80, 195, 255, 255);
+                case 4: return new Color32(202, 125, 255, 255);
+                case 5: return new Color32(255, 216, 79, 255);
+                default: return Color.white;
+            }
+        }
+
         public static Color FrameColorForLevel(int level)
         {
             switch (Mathf.Clamp(level, 1, MaxLevel))

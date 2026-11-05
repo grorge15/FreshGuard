@@ -221,7 +221,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(target.Definition.Id, board.GetOccupant(new BoardCoordinate(1, 0)));
                 Assert.AreEqual(0f, target.TriggerCooldownRemaining);
 
-                Assert.IsNull(context.GetState(BattleSide.Player).FindSlot(1));
+                Assert.IsTrue(context.GetState(BattleSide.Player).FindSlot(1).IsEmpty);
                 Assert.IsNull(board.GetOccupant(new BoardCoordinate(3, 0)));
                 if (sourceRobot != null)
                 {
@@ -286,7 +286,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(1, robot.InstanceId);
                 Assert.AreEqual(RobotLocation.Board, robot.Location);
                 Assert.AreEqual(14, context.GetState(BattleSide.Player).EnergyCoins);
-                Assert.IsNull(context.GetState(BattleSide.Player).FindSlot(0));
+                Assert.IsTrue(context.GetState(BattleSide.Player).FindSlot(0).IsEmpty);
                 var deployed = robot;
                 Assert.AreEqual(ShopOperationResult.InvalidSource, context.TryCommitDeploy(session.InteractionId,
                     BattleSide.Player, board, new BoardCoordinate(0, 0), out robot));
@@ -416,7 +416,7 @@ namespace GameLogic.Tests
                     BattleSide.Player, board, new BoardCoordinate(0, 0), out robot));
                 Assert.AreEqual(8, state.EnergyCoins);
                 Assert.AreEqual(RobotLocation.Board, robot.Location);
-                Assert.IsNull(state.FindSlot(1));
+                Assert.IsTrue(state.FindSlot(1).IsEmpty);
                 Assert.AreEqual(ShopOperationResult.InvalidSource, context.TryCommitDeploy(session.InteractionId,
                     BattleSide.Player, board, new BoardCoordinate(2, 0), out robot));
                 Assert.IsNull(robot);
@@ -589,7 +589,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(17, context.GetState(BattleSide.Player).EnergyCoins);
                 Assert.AreEqual(ShopOperationResult.InvalidSource, context.TryCommitMerge(session.InteractionId, target.InstanceId));
                 Assert.AreEqual(17, context.GetState(BattleSide.Player).EnergyCoins);
-                Assert.AreEqual(2, ShopTestData.Purchase(context, context.GetState(BattleSide.Player).Slots[1].SlotId).InstanceId);
+                Assert.AreEqual(2, ShopTestData.Purchase(context, context.GetState(BattleSide.Player).Slots[2].SlotId).InstanceId);
             }
         }
 
@@ -614,7 +614,7 @@ namespace GameLogic.Tests
                 context.Rewards.TryGrantGlassBreak(context.BattleId, "swap-funds", BattleSide.Player, 20);
                 Assert.AreEqual(ShopOperationResult.Success, context.TryCommitDeploy(session.InteractionId, BattleSide.Player, new BoardModel(4, 2), new BoardCoordinate(0, 0), out robot));
                 Assert.AreEqual(2, robot.InstanceId, "失败部署不能分配实体ID。");
-                Assert.IsNull(context.GetState(BattleSide.Player).FindSlot(1));
+                Assert.IsTrue(context.GetState(BattleSide.Player).FindSlot(1).IsEmpty);
                 Assert.AreEqual(RobotLocation.Board, robot.Location);
                 Assert.AreEqual(0, context.GetState(BattleSide.Player).EnergyCoins);
             }

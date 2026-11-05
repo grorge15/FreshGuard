@@ -340,11 +340,11 @@ namespace GameLogic
             return null;
         }
 
-        private void DetachSource(RobotEntity robot, bool keepSlot = false)
+        private void DetachSource(RobotEntity robot)
         {
             var state = GetState(robot.Side);
             var slot = FindSlot(state, robot.InstanceId);
-            if (slot != null) { slot.InstanceId = null; if (!keepSlot) state.RemoveSlot(slot); }
+            if (slot != null) slot.InstanceId = null;
             BoardModel board;
             if (_boards.TryGetValue(robot.InstanceId, out board))
             {
@@ -471,11 +471,10 @@ namespace GameLogic
 
         private void ApplyBatch(BattleShopState state, ShopOffer[] offers)
         {
-            state.ClearSlots();
+            state.ReplaceOffers(offers);
             var ids = new List<int>(offers.Length);
             for (var index = 0; index < offers.Length; index++)
             {
-                state.AddSlot().Offer = offers[index];
                 ids.Add(offers[index].RobotId);
             }
             state.LastBatchRobotIds = ids.AsReadOnly();

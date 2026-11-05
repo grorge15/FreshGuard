@@ -183,7 +183,7 @@ namespace GameLogic
             {
                 _offerDefinitions.Remove(sourceSlot.Offer.OfferId);
                 _offerDefinitions.Remove(targetSlot.Offer.OfferId);
-                GetState(session.Side).RemoveSlot(sourceSlot);
+                sourceSlot.Offer = null;
                 targetSlot.Offer = merged;
                 _nextOfferId++;
                 CompleteInteraction();
@@ -249,7 +249,7 @@ namespace GameLogic
                     Registry.Remove(sourceRobot.InstanceId, EntityRemovalReason.Consumed, out removal);
                     _owned.Remove(sourceRobot.InstanceId);
                 }
-                else { ConsumeOffer(session.Side, slot); GetState(session.Side).RemoveSlot(slot); }
+                else ConsumeOffer(session.Side, slot);
                 CompleteInteraction();
                 var snapshot = new RobotMergeSnapshot(BattleId, session.InteractionId, session.Side, session.Source,
                     targetInstanceId, previousLevel, target.Level);
@@ -296,7 +296,7 @@ namespace GameLogic
                 // 无await/通知，Evaluate后占格不会被其他Context操作改变。
                 board.TryPlace(anchor, robot.Definition);
                 if (owned != null) DetachSource(owned);
-                else { ConsumeOffer(session.Side, slot); GetState(session.Side).RemoveSlot(slot); }
+                else ConsumeOffer(session.Side, slot);
                 _boards[robot.InstanceId] = board;
                 _boardSides[board] = session.Side;
                 robot.TrySetLocation(RobotLocation.Board, anchor);

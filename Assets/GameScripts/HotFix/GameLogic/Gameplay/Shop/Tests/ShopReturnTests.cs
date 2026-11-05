@@ -26,6 +26,65 @@ namespace GameLogic.Tests
             var session = Begin(context, robot);
             Assert.That(context.TryCommitShopDrop(session.InteractionId, target), Is.EqualTo(ShopOperationResult.Success));
         }
+        [TestCase(0, false)] [TestCase(1, false)] [TestCase(2, false)]
+        [TestCase(0, true)] [TestCase(1, true)] [TestCase(2, true)]
+        public void DeployingOfferOrPurchasedRobotKeepsThreeSlotsAndOtherOffersInPlace(int index, bool dragOffer)
+        {
+            foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
+            using (var context = ShopTestData.Context())
+            {
+                var state = context.GetState(side);
+                var slots = state.Slots.ToArray();
+                var offers = slots.Select(s => s.Offer).ToArray();
+                var board = new BoardModel(4, 2);
+                RobotEntity robot;
+                if (dragOffer)
+                {
+                    RobotDragSession session;
+                    Assert.That(context.TryBeginDrag(side, RobotDragSource.Offer(slots[index].SlotId, offers[index].OfferId), out session), Is.EqualTo(ShopOperationResult.Success));
+                    Assert.That(context.TryCommitDeploy(session.InteractionId, side, board, new BoardCoordinate(0, 0), out robot), Is.EqualTo(ShopOperationResult.Success));
+                }
+                else
+                {
+                    robot = ShopTestData.Purchase(context, slots[index].SlotId, side);
+                    Assert.That(context.TryDeploy(side, robot.InstanceId, side, board, new BoardCoordinate(0, 0)), Is.EqualTo(ShopOperationResult.Success));
+                }
+                Assert.That(state.Slots.Count, Is.EqualTo(3));
+                for (var i = 0; i < slots.Length; i++)
+                {
+                    Assert.That(state.Slots[i], Is.SameAs(slots[i]));
+                    if (i == index) Assert.That(state.Slots[i].IsEmpty, Is.True);
+                    else Assert.That(state.Slots[i].Offer, Is.SameAs(offers[i]));
+                }
+                Assert.That(robot.Location, Is.EqualTo(RobotLocation.Board));
+                Assert.That(state.EnergyCoins, Is.EqualTo(20 - offers[index].Price));
+            }
+        }
+
+        [Test]
+        public void ReturnUsesChosenEmptySlotOrFirstEmptySlotWithoutAddingSlots()
+        {
+            using (var context = ShopTestData.Context())
+            {
+                var state = context.GetState(BattleSide.Player);
+                var slots = state.Slots.ToArray();
+                var lastOffer = slots[2].Offer;
+                var board = new BoardModel(8, 2);
+                var first = Deployed(context, board, 0);
+                var second = Deployed(context, board, 2);
+                var coins = state.EnergyCoins;
+                Return(context, first, slots[1].SlotId);
+                Assert.That(slots[0].IsEmpty, Is.True);
+                Assert.That(slots[1].InstanceId, Is.EqualTo(first.InstanceId));
+                Return(context, second);
+                Assert.That(slots[0].InstanceId, Is.EqualTo(second.InstanceId));
+                Assert.That(slots[2].Offer, Is.SameAs(lastOffer));
+                Assert.That(state.Slots, Is.EqualTo(slots));
+                Assert.That(state.Slots.Count, Is.EqualTo(3));
+                Assert.That(state.EnergyCoins, Is.EqualTo(coins));
+            }
+        }
+
         [Test]
         public void BoardReturnKeepsIdentityAndMoneyAndRedeployIsFree()
         {
@@ -37,33 +96,32 @@ namespace GameLogic.Tests
                 var coins = state.EnergyCoins;
                 Return(context, robot, state.Slots[0].SlotId);
                 Assert.That(state.Slots.Count, Is.EqualTo(3));
-                Assert.That(state.Slots.Last().InstanceId, Is.EqualTo(robot.InstanceId));
+                Assert.That(state.Slots[0].InstanceId, Is.EqualTo(robot.InstanceId));
                 Assert.That(robot.Location, Is.EqualTo(RobotLocation.PurchasedShopSlot));
                 Assert.That(board.IsOccupied(new BoardCoordinate(0, 0)), Is.False);
                 Assert.That(context.TryDeploy(BattleSide.Player, robot.InstanceId, BattleSide.Player, board, new BoardCoordinate(2, 0)), Is.EqualTo(ShopOperationResult.Success));
-                Assert.That(state.Slots.Count, Is.EqualTo(2));
+                Assert.That(state.Slots.Count, Is.EqualTo(3));
+                Assert.That(state.Slots[0].IsEmpty, Is.True);
                 Assert.That(state.EnergyCoins, Is.EqualTo(coins));
             }
         }
         [Test]
         public void FullShopRejectsBoardReturnButAcceptsMergeWithoutSwappingTargetOntoBoard()
         {
-            using (var context = ShopTestData.Context())
+            using (var context = ShopTestData.Context(random: new ShopSequenceRandom { DefaultValue = 0.99 }))
             {
                 typeof(BattleShopState).GetProperty("EnergyCoins").SetValue(context.GetState(BattleSide.Player), 100);
                 var board = new BoardModel(10, 2);
-                var first = Deployed(context, board, 0);
-                var second = Deployed(context, board, 2);
-                var third = Deployed(context, board, 4);
+                var third = Deployed(context, board, 0);
                 Assert.That(context.TryRefresh(BattleSide.Player), Is.EqualTo(ShopOperationResult.Success));
-                Return(context, first); Return(context, second);
                 var state = context.GetState(BattleSide.Player);
+                var first = ShopTestData.Purchase(context, state.Slots[0].SlotId);
                 var session = Begin(context, third);
                 Assert.That(context.TryCommitShopDrop(session.InteractionId, null).ToString(), Is.EqualTo("ShopFull"));
                 context.CancelInteraction(session.InteractionId);
-                Assert.That(board.GetOccupant(new BoardCoordinate(4, 0)), Is.EqualTo(third.Definition.Id));
+                Assert.That(board.GetOccupant(new BoardCoordinate(0, 0)), Is.EqualTo(third.Definition.Id));
                 Return(context, third, state.Slots.Single(s => s.InstanceId == first.InstanceId).SlotId);
-                Assert.That(state.Slots.Count, Is.EqualTo(5));
+                Assert.That(state.Slots.Count, Is.EqualTo(3));
                 Assert.That(first.Level, Is.EqualTo(2));
                 Assert.That(first.Location, Is.EqualTo(RobotLocation.PurchasedShopSlot));
                 Assert.That(third.IsRemoved, Is.True);
@@ -115,7 +173,8 @@ namespace GameLogic.Tests
                 Assert.That(state.FindSlot(1).InstanceId, Is.EqualTo(target.InstanceId));
                 if (expected == ShopOperationResult.Success)
                 {
-                    Assert.That(state.Slots.Select(s => s.SlotId), Is.EqualTo(new[] { 1, 2 }));
+                    Assert.That(state.Slots.Select(s => s.SlotId), Is.EqualTo(new[] { 0, 1, 2 }));
+                    Assert.That(state.FindSlot(0).IsEmpty, Is.True);
                     Assert.That(source.IsRemoved, Is.True);
                 }
                 else { context.CancelInteraction(session.InteractionId); Assert.That(source.IsRemoved, Is.False); }
@@ -129,19 +188,19 @@ namespace GameLogic.Tests
             {
                 Coins(context, 100);
                 var board = new BoardModel(12, 2);
-                var a = Deployed(context, board, 0); var b = Deployed(context, board, 2); var c = Deployed(context, board, 4);
+                var c = Deployed(context, board, 0);
                 Assert.That(context.TryRefresh(BattleSide.Player), Is.EqualTo(ShopOperationResult.Success));
-                Return(context, a); Return(context, b);
+                var a = ShopTestData.Purchase(context, context.GetState(BattleSide.Player).Slots[0].SlotId);
                 UpgradeTo(a, 2);
                 var target = context.GetState(BattleSide.Player).Slots.Single(s => s.InstanceId == a.InstanceId);
                 var session = Begin(context, c);
                 Assert.That(context.TryCommitShopDrop(session.InteractionId, target.SlotId), Is.EqualTo(ShopOperationResult.ShopFull));
                 context.CancelInteraction(session.InteractionId);
-                Assert.That(board.GetOccupant(new BoardCoordinate(4, 0)), Is.EqualTo(c.Definition.Id));
+                Assert.That(board.GetOccupant(new BoardCoordinate(0, 0)), Is.EqualTo(c.Definition.Id));
                 Assert.That(target.InstanceId, Is.EqualTo(a.InstanceId));
                 Assert.That(a.Location, Is.EqualTo(RobotLocation.PurchasedShopSlot));
                 Assert.That(c.Location, Is.EqualTo(RobotLocation.Board));
-                Assert.That(context.GetState(BattleSide.Player).Slots.Count, Is.EqualTo(5));
+                Assert.That(context.GetState(BattleSide.Player).Slots.Count, Is.EqualTo(3));
             }
         }
 

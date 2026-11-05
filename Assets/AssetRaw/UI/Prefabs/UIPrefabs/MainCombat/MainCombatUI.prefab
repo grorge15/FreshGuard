@@ -688,6 +688,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: BattleShopUI
       objectReference: {fileID: 0}
+    - target: {fileID: 1326061504703341808, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 14.780029
+      objectReference: {fileID: 0}
     - target: {fileID: 2383778795266920369, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
       propertyPath: m_AnchorMax.x
       value: 0
@@ -746,7 +750,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3518249346223234436, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 246
+      value: 324
       objectReference: {fileID: 0}
     - target: {fileID: 3518249346223234436, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
       propertyPath: m_LocalPosition.x
@@ -823,6 +827,10 @@ PrefabInstance:
     - target: {fileID: 4046361956566585598, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4528375926798339375, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 14.780029
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 7702393278346075077, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
