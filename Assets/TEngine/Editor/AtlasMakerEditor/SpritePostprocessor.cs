@@ -10,8 +10,6 @@ namespace TEngine.Editor
 
     public class SpritePostprocessor : AssetPostprocessor
     {
-        private static List<string> m_resourcesToDelete = new List<string>();
-
         // 文件名缓存：key=小写文件名(不含扩展名), value=完整路径列表
         private static Dictionary<string, HashSet<string>> s_fileNameCache;
         private static bool s_cacheInitialized = false;
@@ -108,7 +106,6 @@ namespace TEngine.Editor
             string[] movedAssets,
             string[] movedFromAssetPaths)
         {
-            m_resourcesToDelete.Clear();
             var config = AtlasConfiguration.Instance;
 
             if (!config.autoGenerate) return;
@@ -140,17 +137,6 @@ namespace TEngine.Editor
                 if (showProgress)
                 {
                     EditorUtility.ClearProgressBar();
-                }
-
-                bool isDelete = m_resourcesToDelete.Count > 0;
-                foreach (var res in m_resourcesToDelete)
-                {
-                    AssetDatabase.DeleteAsset(res);
-                }
-                if (isDelete)
-                {
-                    Debug.LogError($"<color=red>针对 {config.sourceAtlasRootDir} 路径下资源</color>\n<color=red>移除了空格和同名资源，请检查重新合入相关资源</color>");
-                    AssetDatabase.Refresh();
                 }
             }
         }
@@ -241,8 +227,7 @@ namespace TEngine.Editor
 
             if (fileName.Contains(" "))
             {
-                m_resourcesToDelete.Add(assetPath);
-                Debug.LogError($"<color=red>发现资源名存在空格: {assetPath}</color>");
+                Debug.LogWarning($"资源名存在空格，已跳过图集更新并保留原文件: {assetPath}");
                 return true;
             }
             return false;
@@ -273,8 +258,7 @@ namespace TEngine.Editor
                     // 确保文件确实存在（防止缓存过期）
                     if (File.Exists(existingPath))
                     {
-                        m_resourcesToDelete.Add(assetPath);
-                        Debug.LogError($"<color=red>发现同名资源冲突: 合入资源: {assetPath} 存在资源: {existingPath}</color>");
+                        Debug.LogWarning($"同名资源冲突，已跳过图集更新并保留原文件: 合入资源: {assetPath} 存在资源: {existingPath}");
                         return true;
                     }
                     else
