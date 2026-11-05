@@ -305,7 +305,7 @@ MonoBehaviour:
   _opponentP2Radius: 0.1
   _playerEnemyRoot: {fileID: 1576154972}
   _opponentEnemyRoot: {fileID: 900960162}
-  _damageNumberPrefab: {fileID: 0}
+  _damageNumberPrefab: {fileID: 5355598917011885402, guid: 70cd3a17ed1327345acef9e62e0e1f71, type: 3}
 --- !u!114 &164109972
 MonoBehaviour:
   m_ObjectHideFlags: 0

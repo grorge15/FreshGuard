@@ -174,7 +174,8 @@ namespace GameLogic.Tests
             Call(number, "Initialize", 20, Vector3.zero, Vector2.left);
             var label = go.GetComponent<TextMesh>();
             Assert.IsNotNull(label.font, "伤害数字必须有可显示的字体");
-            Assert.AreSame(label.font.material, go.GetComponent<MeshRenderer>().sharedMaterial);
+            Assert.AreEqual("FreshGuard/ComboOutlinedText", go.GetComponent<MeshRenderer>().sharedMaterial.shader.name);
+            Assert.AreEqual(FontStyle.Bold, label.fontStyle);
             Assert.That((float)type.GetProperty("Lifetime").GetValue(number), Is.EqualTo(0.5f));
             Assert.IsFalse((bool)Call(number, "Advance", 0.25f));
             Assert.That(go.transform.position.y, Is.GreaterThan(0.20f), "前半段先向上弯出");
