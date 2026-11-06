@@ -66,7 +66,8 @@ namespace GameLogic
             result = new BattleScreenLayoutResult(playerTarget, opponentTarget, infoTarget,
                 new Rect(safe.xMin + margin, bottom, width, playerTarget.height),
                 new Rect(safe.xMin + margin, enemyBottom, width, enemyHeight),
-                new Rect(0, 0, screenSize.x, split),
+                // 我方相机覆盖整条信息栏，允许高个敌人的头部越过栏底而不被视口截断。
+                new Rect(0, 0, screenSize.x, Mathf.Ceil(infoTarget.yMax)),
                 new Rect(0, split, screenSize.x, screenSize.y - split), playerPpu, opponentPpu);
             return true;
         }

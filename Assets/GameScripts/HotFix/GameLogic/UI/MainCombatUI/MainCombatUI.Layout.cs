@@ -157,7 +157,8 @@ namespace GameLogic
             var x = rect.localRotation * Vector3.Scale(Vector3.right * rect.rect.width, localScale);
             var y = rect.localRotation * Vector3.Scale(Vector3.up * rect.rect.height, localScale);
             // 仅累计到根Canvas的线性变换，不让节点位置或UI相机浮点投影参与参考尺寸。
-            for (var parent = rect.parent; parent != null && parent != Canvas.rootCanvas.transform; parent = parent.parent)
+            var rootCanvas = rect.GetComponentInParent<Canvas>().rootCanvas.transform;
+            for (var parent = rect.parent; parent != null && parent != rootCanvas; parent = parent.parent)
             {
                 x = parent.localRotation * Vector3.Scale(x, parent.localScale);
                 y = parent.localRotation * Vector3.Scale(y, parent.localScale);
