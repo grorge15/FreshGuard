@@ -30,7 +30,7 @@ MonoBehaviour:
   padding: 4
   enableRotation: 0
   blockOffset: 3
-  tightPacking: 1
+  tightPacking: 0
   compressionQuality: 50
   autoGenerate: 0
   enableLogging: 1
