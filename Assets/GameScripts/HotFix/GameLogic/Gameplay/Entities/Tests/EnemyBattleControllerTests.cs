@@ -18,6 +18,72 @@ namespace GameLogic.Tests
 
         [TearDown] public void TearDown() { _fixture?.Dispose(); _fixture = null; }
 
+        [TestCase(2001)]
+        [TestCase(2002)]
+        [TestCase(2003)]
+        public void OnlyNormalEnemiesRandomizeSpawnAndWaypointsOnBothSidesAndLaterSpawns(int enemyId)
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 2, enemyId, 2) }));
+            var f = _fixture;
+            foreach (var prefix in new[] { "_player", "_opponent" })
+            {
+                SetField(f.Controller, prefix + "SpawnRadius", 0.2f);
+                SetField(f.Controller, prefix + "P1Radius", 0.3f);
+                SetField(f.Controller, prefix + "P2Radius", 0.4f);
+            }
+            f.Prepare(); f.Start();
+            var normal = f.Tables.TbEnemy.Get(enemyId).EnemyType == 1;
+            for (var batch = 0; batch < 2; batch++)
+            {
+                if (batch > 0) f.Advance(1f);
+                foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
+                {
+                    var view = f.Views.Where(v => f.Side(v) == side).OrderBy(v => v.InstanceId).Last();
+                    var points = GetEnemyRoute(f, view);
+                    var centers = new[] { new Vector3(-3f, 1f, 0f), new Vector3(-3f, 0f, 0f), new Vector3(-1f, 0f, 0f) };
+                    for (var p = 0; p < centers.Length; p++)
+                    {
+                        var center = centers[p] + (side == BattleSide.Player ? Vector3.zero : Vector3.right * 10f);
+                        if (normal)
+                            Assert.That(Vector3.Distance(points[p], center), Is.InRange(0.000001f, 0.2f + p * 0.1f + 0.00001f));
+                        else
+                            Assert.AreEqual(center, points[p], "精英怪与 Boss 的出生点、P1、P2 都必须使用圆心");
+                    }
+                    Assert.AreEqual(points[0], view.transform.position, "首批和后续出兵都应立即位于自己的路线起点");
+                }
+            }
+        }
+
+        [TestCase(2002)]
+        [TestCase(2003)]
+        public void EliteAndBossMovementAndKnockbackKeepUsingCircleCenters(int enemyId)
+        {
+            _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
+                new[] { WaveTestData.Spawn(1, 0, 1, enemyId, 1) }));
+            var f = _fixture;
+            foreach (var prefix in new[] { "_player", "_opponent" })
+                foreach (var suffix in new[] { "SpawnRadius", "P1Radius", "P2Radius" })
+                    SetField(f.Controller, prefix + suffix, 0.5f);
+            f.Prepare(); f.Start();
+            f.Context.Registry.TryGet(f.PlayerView.InstanceId, out var entity);
+            f.Advance(1.5f / ((EnemyEntity)entity).MoveSpeed);
+            foreach (var view in f.Views)
+            {
+                var side = f.Side(view);
+                var sideOffset = side == BattleSide.Player ? Vector3.zero : Vector3.right * 10f;
+                Assert.That(Vector3.Distance(view.transform.position, new Vector3(-2.5f, 0f, 0f) + sideOffset), Is.LessThan(0.0001f),
+                    "实际移动应经过 P1 圆心后向 P2 圆心前进");
+                f.Context.Registry.TryGet(view.InstanceId, out entity);
+                var enemy = (EnemyEntity)entity;
+                Assert.That(enemy.RouteProgress, Is.EqualTo(1.5f).Within(0.0001f));
+                var beforeKnockback = view.transform.position;
+                Assert.IsTrue(((EnemyBattleController)f.Controller).TryKnockback(side, view.InstanceId, 100f));
+                var expected = enemy.Configuration.KnockbackResist > 0f ? new Vector3(-3f, 1f, 0f) + sideOffset : beforeKnockback;
+                Assert.That(Vector3.Distance(view.transform.position, expected), Is.LessThan(0.0001f));
+            }
+        }
+
         [Test]
         public void BothSidesChooseIndependentP1AndP2PositionsForInitialAndLaterEnemies()
         {
