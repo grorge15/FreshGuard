@@ -17,6 +17,10 @@ namespace GameLogic
         [SerializeField] private SpriteRenderer _slotPrefab;
         [SerializeField, Tooltip("当前棋盘的格子图片；Player 和 Enemy 可分别配置。留空使用 Slot Prefab 的图片。")]
         private Sprite _slotSprite;
+        [SerializeField, Tooltip("不可部署格子的图片；留空时沿用原有地形染色。")]
+        private Sprite _blockedSlotSprite;
+        [SerializeField, Tooltip("仅包围地块区域的九宫格背景，不包含敌人路径传送带。")]
+        private SpriteRenderer _boardBackground;
         [SerializeField] private PhysicalCollisionBoundary _boundary;
         private SpriteRenderer[,] _slots;
         private Color[,] _slotBaseColors;
@@ -38,6 +42,7 @@ namespace GameLogic
         public bool IsInitialized => _initialized;
         public Vector2 Size => new Vector2(_columns * _cellSize, _rows * _cellSize);
         public PhysicalCollisionBoundary Boundary => _boundary;
+        internal Transform BackgroundRoot => _boardBackground != null ? _boardBackground.transform : null;
 
         public float CellSize => _cellSize;
         public float ReferenceCellSize => _referenceCellSize;
@@ -141,6 +146,9 @@ namespace GameLogic
                 if (_boundary == null) _boundary = boundaryRoot.gameObject.AddComponent<PhysicalCollisionBoundary>();
                 _boundary.Configure(Size, _wallThickness * _boundaryThicknessScale);
                 _initialized = true;
+                RefreshBoardBackground();
+                if (_boardBackground != null) _boardBackground.gameObject.SetActive(true);
+                RefreshAllCells();
                 return true;
             }
             catch (Exception exception)
@@ -164,6 +172,7 @@ namespace GameLogic
         public void SetBattleContentVisible(bool visible)
         {
             if (!visible) ClearPreview();
+            if (_boardBackground != null) _boardBackground.gameObject.SetActive(visible);
             var slots = transform.Find("Slots");
             if (slots != null) slots.gameObject.SetActive(visible);
             var glasses = transform.Find("Glasses");
@@ -280,12 +289,37 @@ namespace GameLogic
         private void RefreshBase(BoardCoordinate coordinate)
         {
             if (!_initialized || !_model.IsInside(coordinate)) return;
-            _slots[coordinate.Column, coordinate.Row].color = _model.IsHighlighted(coordinate) ? HighlightedColor :
-                _model.IsTerrainMap && _model.GetBaseTerrain(coordinate) == BaseTerrainType.Track
+            var slot = _slots[coordinate.Column, coordinate.Row];
+            var sprite = _blockedSlotSprite != null && !_model.IsOpen(coordinate) ? _blockedSlotSprite :
+                (_slotSprite != null ? _slotSprite : _slotPrefab.sprite);
+            if (slot.sprite != sprite && sprite != null)
+            {
+                slot.sprite = sprite;
+                var size = sprite.bounds.size;
+                slot.transform.localScale = new Vector3(_cellSize * 0.94f / size.x, _cellSize * 0.94f / size.y, 1f);
+            }
+            slot.color = _model.IsHighlighted(coordinate) ? HighlightedColor :
+                _blockedSlotSprite == null && _model.IsTerrainMap && _model.GetBaseTerrain(coordinate) == BaseTerrainType.Track
                     ? _slotBaseColors[coordinate.Column, coordinate.Row] * TrackTint : _slotBaseColors[coordinate.Column, coordinate.Row];
         }
 
         private void OnDisable() { ClearPreview(); }
+
+        private void RefreshBoardBackground()
+        {
+            if (_boardBackground == null || _boardBackground.sprite == null || _cellSize <= 0f) return;
+            var sprite = _boardBackground.sprite;
+            var border = sprite.border;
+            var borderPixels = Mathf.Max(Mathf.Max(border.x, border.y), Mathf.Max(border.z, border.w));
+            if (borderPixels <= 0f) return;
+            // 四角和边框保持固定的格距比例，仅拉伸中间底色；外沿只比地块多出四分之一格。
+            var scale = _cellSize * 0.2f * sprite.pixelsPerUnit / borderPixels;
+            _boardBackground.transform.localPosition = Vector3.zero;
+            _boardBackground.transform.localRotation = Quaternion.identity;
+            _boardBackground.transform.localScale = Vector3.one * scale;
+            _boardBackground.drawMode = SpriteDrawMode.Sliced;
+            _boardBackground.size = (Size + Vector2.one * (_cellSize * 0.5f)) / scale;
+        }
 
         [ContextMenu("Refresh Slot Sprites")]
         private void RefreshSlotSprites()
@@ -309,6 +343,8 @@ namespace GameLogic
                 }
                 slot.transform.localScale = new Vector3(_cellSize * 0.94f / size.x, _cellSize * 0.94f / size.y, 1f);
             }
+            RefreshBoardBackground();
+            if (_initialized) RefreshAllCells();
         }
 
 #if UNITY_EDITOR

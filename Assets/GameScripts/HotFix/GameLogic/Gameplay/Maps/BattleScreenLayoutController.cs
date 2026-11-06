@@ -144,7 +144,8 @@ namespace GameLogic
             foreach (var renderer in renderers)
             {
                 if (renderer == null || renderer.sprite == null) throw new InvalidOperationException("战场固定显示对象缺少 Sprite。");
-                var local = renderer.sprite.bounds;
+                // 九宫格背景的实际尺寸由 Renderer 决定，不能按原图尺寸计算可见范围。
+                var local = renderer.localBounds;
                 for (var i = 0; i < 8; i++)
                     result.Encapsulate(renderer.transform.TransformPoint(new Vector3(
                         (i & 1) == 0 ? local.min.x : local.max.x, (i & 2) == 0 ? local.min.y : local.max.y,

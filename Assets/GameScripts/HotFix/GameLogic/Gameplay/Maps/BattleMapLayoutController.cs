@@ -87,10 +87,10 @@ namespace GameLogic
                 OriginalScale = board.transform.localScale;
                 ReferenceCellSize = board.ReferenceCellSize;
                 ReferenceWorldCellSize = board.transform.TransformVector(Vector3.right * ReferenceCellSize).magnitude;
-                // 当前场景的塔和路线是棋盘子节点；仅网格内容参与缩放。
+                // 塔和路线保持固定；网格及其背景一起参与缩放。
                 foreach (Transform child in board.transform)
                     if (child.name != "Slots" && child.name != "Boundary" && child.name != "Glasses" &&
-                        child.GetComponent<RobotView>() == null)
+                        child != board.BackgroundRoot && child.GetComponent<RobotView>() == null)
                         _fixedChildren.Add(new FixedChild(child));
             }
             public bool Matches(PlacementBoardView board, PhysicalCollisionBall ball) => Board == board && _ball == ball;
