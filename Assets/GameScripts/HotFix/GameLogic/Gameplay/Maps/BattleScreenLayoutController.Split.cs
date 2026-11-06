@@ -11,6 +11,11 @@ namespace GameLogic
         [SerializeField] private Color _playerClearColor = new Color32(33, 174, 216, 255);
         [SerializeField] private Color _opponentClearColor = new Color32(234, 178, 79, 255);
         [SerializeField] private Sprite _battleBackground;
+        [SerializeField, Min(0.01f), Tooltip("9:16竖屏的环境背景缩放，以背景相机半高5为基准。")]
+        private float _battleBackgroundScale9By16 = 0.57f;
+        [SerializeField, Min(0.01f), Tooltip("9:18竖屏的环境背景缩放，以背景相机半高5为基准。")]
+        private float _battleBackgroundScale9By18 = 0.52f;
+        private const float BACKGROUND_REFERENCE_CAMERA_HEIGHT = 10f;
         private Camera _opponentCamera;
         private Camera _backgroundCamera;
         private SpriteRenderer _backgroundRenderer;
@@ -121,8 +126,14 @@ namespace GameLogic
             var size = _battleBackground.bounds.size;
             var height = _backgroundCamera.orthographicSize * 2f;
             _backgroundCamera.aspect = screen.x / screen.y;
-            // 等比铺满，超出屏幕的部分从两边居中裁切。
-            var scale = Mathf.Max(height * _backgroundCamera.aspect / size.x, height / size.y);
+            // 按屏幕高宽比在两种已确认的构图之间过渡；相机高度变化时保持相同的屏幕构图。
+            var ratio = screen.y / screen.x;
+            var blend = Mathf.InverseLerp(16f / 9f, 18f / 9f, ratio);
+            var calibratedScale = Mathf.Lerp(_battleBackgroundScale9By16, _battleBackgroundScale9By18, blend) *
+                height / BACKGROUND_REFERENCE_CAMERA_HEIGHT;
+            // 更宽或更长的屏幕也必须铺满，避免背景边缘露底。
+            var coverScale = Mathf.Max(height * _backgroundCamera.aspect / size.x, height / size.y);
+            var scale = Mathf.Max(coverScale, calibratedScale);
             _backgroundRenderer.transform.localScale = new Vector3(scale, scale, 1f);
         }
 
