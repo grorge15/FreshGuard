@@ -171,7 +171,8 @@ namespace GameLogic
                 if (!TryGetTarget(action, id, out var enemy, true) || !enemy.OwnerRef.Equals(reference)) break;
                 if (!_battle.Catalog.TryGetBuff(effect.BuffId, out var model))
                     throw new InvalidOperationException("命中效果引用了未配置Buff：" + effect.BuffId);
-                _battle.AddBuff(enemy, model, source, effect.Duration, effect.Parameters);
+                _battle.Buffs.Submit(new AddBuffInfo(model, source, reference, effect.Duration,
+                    durationSetTo: true, param: effect.Parameters));
             }
         }
 

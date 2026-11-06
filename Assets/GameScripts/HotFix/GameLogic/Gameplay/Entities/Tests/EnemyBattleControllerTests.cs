@@ -66,16 +66,16 @@ namespace GameLogic.Tests
             var secondLength = Vector3.Distance(points[1], points[2]);
             f.Context.Registry.TryGet(view.InstanceId, out var entity);
             var enemy = (EnemyEntity)entity;
-            f.Advance(firstLength / enemy.EffectiveSpeed);
+            f.Advance(firstLength / enemy.MoveSpeed);
             Assert.That(Vector3.Distance(view.transform.position, points[1]), Is.LessThan(0.0001f));
-            f.Advance(secondLength * 0.4f / enemy.EffectiveSpeed);
+            f.Advance(secondLength * 0.4f / enemy.MoveSpeed);
             Assert.That(Vector3.Distance(view.transform.position, Vector3.Lerp(points[1], points[2], 0.4f)), Is.LessThan(0.0001f));
             Assert.That(enemy.RouteProgress, Is.EqualTo(firstLength + secondLength * 0.4f).Within(0.0001f));
             var knockback = secondLength * 0.4f + firstLength * 0.5f;
             Assert.IsTrue(((EnemyBattleController)f.Controller).TryKnockback(side, view.InstanceId,
                 knockback / enemy.Configuration.KnockbackResist));
             Assert.That(Vector3.Distance(view.transform.position, Vector3.Lerp(points[0], points[1], 0.5f)), Is.LessThan(0.0001f));
-            f.Advance(firstLength * 0.5f / enemy.EffectiveSpeed);
+            f.Advance(firstLength * 0.5f / enemy.MoveSpeed);
             Assert.That(Vector3.Distance(view.transform.position, points[1]), Is.LessThan(0.0001f), "击退后继续使用原采样点，不能重新随机");
         }
 
@@ -164,7 +164,7 @@ namespace GameLogic.Tests
             opponentBelt.localScale = new Vector3(0.6f, 0.6f, 1f);
             SetField(f.Controller, "_playerEnemyRoot", playerBelt);
             SetField(f.Controller, "_opponentEnemyRoot", opponentBelt);
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Enemy/Prefabs/" +
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/Prefabs/" +
                 f.Tables.TbEnemy.Get(enemyId).EnemyPrefab + ".prefab");
             var authoredScale = prefab.transform.localScale;
             f.Prepare(); f.Start();
@@ -419,7 +419,7 @@ namespace GameLogic.Tests
             f = Create(); f.Start();
             var view = f.PlayerView;
             f.Context.Registry.TryGet(view.InstanceId, out var entity);
-            SetField(entity, "<BaseSpeed>k__BackingField", 0f);
+            ((EnemyEntity)entity).SetMoveSpeed(0f);
             f.Advance(4f);
             Assert.AreEqual(new Vector3(-3f, 1f, 0f), view.transform.position);
             Assert.AreEqual(5, f.Host.Towers.PlayerTower.CurrentHp);
@@ -720,7 +720,7 @@ namespace GameLogic.Tests
                 foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
                 {
                     var tower = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                        "Assets/AssetRaw/Actor/Tower/Prefabs/Tower.prefab"), Root.transform).GetComponent<TowerView>();
+                        "Assets/AssetRaw/Actor/Prefabs/Tower/Tower.prefab"), Root.transform).GetComponent<TowerView>();
                     tower.transform.position = side == BattleSide.Player ? Vector3.zero : Vector3.right * 10f;
                     tower.Bind(side == BattleSide.Player ? session.PlayerTower : session.OpponentTower);
                     SetField(Host, side == BattleSide.Player ? "_playerTowerView" : "_opponentTowerView", tower);
@@ -744,7 +744,7 @@ namespace GameLogic.Tests
             public UniTask<GameObject> Load(string name, Transform parent, CancellationToken token)
             {
                 token.ThrowIfCancellationRequested();
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Enemy/Prefabs/" + name + ".prefab");
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/Prefabs/" + name + ".prefab");
                 return UniTask.FromResult(UnityEngine.Object.Instantiate(prefab, parent));
             }
             public UniTask PrepareTask(Func<string, Transform, CancellationToken, UniTask<GameObject>> load = null) =>
