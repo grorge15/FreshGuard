@@ -25,6 +25,8 @@ public sealed partial class Bullet : Luban.BeanBase
         FlightTime = _buf.ReadFloat();
         ArcHeight = _buf.ReadFloat();
         HitRadius = _buf.ReadFloat();
+        BehaviorKey = _buf.ReadString();
+        HitEffectPrefab = _buf.ReadString();
     }
 
     public static Bullet DeserializeBullet(ByteBuf _buf)
@@ -68,6 +70,14 @@ public sealed partial class Bullet : Luban.BeanBase
     /// 碰撞半径
     /// </summary>
     public readonly float HitRadius;
+    /// <summary>
+    /// 命中行为：direct普通弹；chain闪电链
+    /// </summary>
+    public readonly string BehaviorKey;
+    /// <summary>
+    /// 命中特效资源名；空表示无特效
+    /// </summary>
+    public readonly string HitEffectPrefab;
    
     public const int __ID__ = 997870478;
     public override int GetTypeId() => __ID__;
@@ -88,6 +98,8 @@ public sealed partial class Bullet : Luban.BeanBase
         + "flightTime:" + FlightTime + ","
         + "arcHeight:" + ArcHeight + ","
         + "hitRadius:" + HitRadius + ","
+        + "behaviorKey:" + BehaviorKey + ","
+        + "hitEffectPrefab:" + HitEffectPrefab + ","
         + "}";
     }
 }

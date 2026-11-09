@@ -21,6 +21,7 @@ public sealed partial class Buff : Luban.BeanBase
         MaxStacks = _buf.ReadInt();
         Priority = _buf.ReadInt();
         TickInterval = _buf.ReadFloat();
+        TriggerSkillId = _buf.ReadInt();
     }
 
     public static Buff DeserializeBuff(ByteBuf _buf)
@@ -48,6 +49,10 @@ public sealed partial class Buff : Luban.BeanBase
     /// tickInterval
     /// </summary>
     public readonly float TickInterval;
+    /// <summary>
+    /// 被动满足触发条件后释放的技能ID，0表示没有
+    /// </summary>
+    public readonly int TriggerSkillId;
    
     public const int __ID__ = 9300270;
     public override int GetTypeId() => __ID__;
@@ -64,6 +69,7 @@ public sealed partial class Buff : Luban.BeanBase
         + "maxStacks:" + MaxStacks + ","
         + "priority:" + Priority + ","
         + "tickInterval:" + TickInterval + ","
+        + "triggerSkillId:" + TriggerSkillId + ","
         + "}";
     }
 }

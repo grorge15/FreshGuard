@@ -33,6 +33,18 @@ public sealed partial class SkillLevel : Luban.BeanBase
         PoisonDuration = _buf.ReadFloat();
         PoisonInterval = _buf.ReadFloat();
         PoisonMaxLayers = _buf.ReadInt();
+        ChainCount = _buf.ReadInt();
+        ChainRange = _buf.ReadFloat();
+        ChainDamageRatio = _buf.ReadFloat();
+        IsolateDuration = _buf.ReadFloat();
+        JuiceRequired = _buf.ReadInt();
+        DropCount = _buf.ReadInt();
+        DropSpacing = _buf.ReadFloat();
+        SplashRadius = _buf.ReadFloat();
+        ContactsRequired = _buf.ReadInt();
+        AttackCycleCount = _buf.ReadInt();
+        ChainBulletId = _buf.ReadInt();
+        ChainTargetCount = _buf.ReadInt();
     }
 
     public static SkillLevel DeserializeSkillLevel(ByteBuf _buf)
@@ -105,6 +117,54 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// 目标中毒总层数上限
     /// </summary>
     public readonly int PoisonMaxLayers;
+    /// <summary>
+    /// 额外跳跃次数，不含首个目标
+    /// </summary>
+    public readonly int ChainCount;
+    /// <summary>
+    /// 每跳搜索半径，世界单位
+    /// </summary>
+    public readonly float ChainRange;
+    /// <summary>
+    /// 每跳相对上一跳的伤害保留比例
+    /// </summary>
+    public readonly float ChainDamageRatio;
+    /// <summary>
+    /// 保鲜盒收纳持续时间，秒
+    /// </summary>
+    public readonly float IsolateDuration;
+    /// <summary>
+    /// 释放技能所需果汁量
+    /// </summary>
+    public readonly int JuiceRequired;
+    /// <summary>
+    /// 每次沿路果汁轰炸的滴数量
+    /// </summary>
+    public readonly int DropCount;
+    /// <summary>
+    /// 相邻落点沿道路中心线的间距，世界单位
+    /// </summary>
+    public readonly float DropSpacing;
+    /// <summary>
+    /// 每滴落地伤害半径，世界单位
+    /// </summary>
+    public readonly float SplashRadius;
+    /// <summary>
+    /// 触发额外技能所需的有效碰球次数，未使用填0
+    /// </summary>
+    public readonly int ContactsRequired;
+    /// <summary>
+    /// 成功攻击循环次数，至少1
+    /// </summary>
+    public readonly int AttackCycleCount;
+    /// <summary>
+    /// 循环末次替换弹丸ID
+    /// </summary>
+    public readonly int ChainBulletId;
+    /// <summary>
+    /// 闪电链总人数，包含首名
+    /// </summary>
+    public readonly int ChainTargetCount;
    
     public const int __ID__ = -65736816;
     public override int GetTypeId() => __ID__;
@@ -133,6 +193,18 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "poisonDuration:" + PoisonDuration + ","
         + "poisonInterval:" + PoisonInterval + ","
         + "poisonMaxLayers:" + PoisonMaxLayers + ","
+        + "chainCount:" + ChainCount + ","
+        + "chainRange:" + ChainRange + ","
+        + "chainDamageRatio:" + ChainDamageRatio + ","
+        + "isolateDuration:" + IsolateDuration + ","
+        + "juiceRequired:" + JuiceRequired + ","
+        + "dropCount:" + DropCount + ","
+        + "dropSpacing:" + DropSpacing + ","
+        + "splashRadius:" + SplashRadius + ","
+        + "contactsRequired:" + ContactsRequired + ","
+        + "attackCycleCount:" + AttackCycleCount + ","
+        + "chainBulletId:" + ChainBulletId + ","
+        + "chainTargetCount:" + ChainTargetCount + ","
         + "}";
     }
 }
