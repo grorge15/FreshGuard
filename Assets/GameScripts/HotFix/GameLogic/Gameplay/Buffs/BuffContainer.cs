@@ -195,6 +195,8 @@ namespace GameLogic
                 }
             });
         }
+        internal void OnAttackLaunched(SkillCastSnapshot cast, Func<bool> active)
+            => DispatchCombat((behavior, buff) => behavior.OnAttackLaunched(this, buff, cast), active);
         internal void OnAttack(CombatOutcomeDraft attack, Func<bool> active)
             => DispatchCombat((behavior, buff) => behavior.OnAttack(this, buff, attack), active);
         internal void OnHit(CombatDamageContext context, Func<bool> active)

@@ -11,16 +11,45 @@ namespace GameLogic
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
             var catalog = new SkillCatalog();
+            var enabledSkills = new HashSet<int>();
+            var requiredBullets = new HashSet<int>();
+            var requiredBuffs = new HashSet<int>();
+            foreach (var row in tables.TbSkill.DataList)
+            {
+                if (!row.Enabled) continue;
+                enabledSkills.Add(row.Id);
+                if (row.BulletId != 0) requiredBullets.Add(row.BulletId);
+                foreach (var id in row.PassiveBuffIds) requiredBuffs.Add(id);
+            }
+            var needsSlow = false;
+            var needsPoison = false;
+            foreach (var row in tables.TbSkillLevel.DataList)
+            {
+                if (!enabledSkills.Contains(row.SkillId)) continue;
+                if (row.ChainBulletId != 0) requiredBullets.Add(row.ChainBulletId);
+                needsSlow |= row.Slow > 0f;
+                needsPoison |= HasPoison(row);
+            }
             foreach (var row in tables.TbBullet.DataList)
             {
+                if (!requiredBullets.Contains(row.Id)) continue;
                 ValidateBullet(row);
                 catalog.Add(new BulletModel(row.Id, row.Prefab, row.FlightType, row.TrackTarget,
-                    row.HitMode, row.Speed, row.FlightTime, row.ArcHeight, row.HitRadius));
+                    row.HitMode, row.Speed, row.FlightTime, row.ArcHeight, row.HitRadius,
+                    row.BehaviorKey, row.HitEffectPrefab));
             }
+            foreach (var id in requiredBullets)
+                if (!catalog.TryGetBullet(id, out _)) throw new InvalidOperationException("缺少启用技能依赖的弹丸：" + id);
             var slowBuffId = 0;
             var poisonBuffId = 0;
             foreach (var row in tables.TbBuff.DataList)
             {
+                if (!requiredBuffs.Contains(row.Id) && !(needsSlow && row.BehaviorKey == "slow") &&
+                    !(needsPoison && row.BehaviorKey == "poison")) continue;
+                if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "chain_cycle")
+                    throw new InvalidOperationException("启用技能引用了未知Buff行为：" + row.Id + "/" + row.BehaviorKey);
+                if (row.BehaviorKey == "chain_cycle" && (row.MaxStacks != 1 || row.TriggerSkillId != 0))
+                    throw new InvalidOperationException("攻击循环被动必须单实例且不触发其他技能：" + row.Id);
                 catalog.Add(new BuffModel(row.Id, row.BehaviorKey, row.MaxStacks, row.Priority, row.TickInterval));
                 if (row.BehaviorKey == "slow")
                 {
@@ -36,6 +65,7 @@ namespace GameLogic
             }
             foreach (var row in tables.TbSkill.DataList)
             {
+                if (!row.Enabled) continue;
                 if (!Enum.IsDefined(typeof(SkillType), row.SkillType) || !Enum.IsDefined(typeof(SkillTargetRule), row.TargetRule))
                     throw new InvalidOperationException("技能类型或目标规则无效：" + row.Id);
                 if (row.BulletId < 0 || (row.BulletId != 0 && !catalog.TryGetBullet(row.BulletId, out _)))
@@ -48,6 +78,7 @@ namespace GameLogic
             var poisonCap = 0;
             foreach (var row in tables.TbSkillLevel.DataList)
             {
+                if (!enabledSkills.Contains(row.SkillId)) continue;
                 if (!catalog.TryGet(row.SkillId, out var model) || row.Level < 1 || row.Level > model.MaxLevel ||
                     row.Damage < 0 || !EntityValidation.IsFiniteNonNegative(row.Slow) || row.Slow > 1f ||
                     !EntityValidation.IsFiniteNonNegative(row.Duration)) throw new InvalidOperationException("技能等级配置无效：" + row.Id);
@@ -58,7 +89,7 @@ namespace GameLogic
                     !EntityValidation.IsFiniteNonNegative(row.PoisonDuration) ||
                     !EntityValidation.IsFiniteNonNegative(row.PoisonInterval))
                     throw new InvalidOperationException("中毒等级参数无效：" + row.Id);
-                if (row.PoisonMaxLayers > 0 || row.SkillId == 1507 || row.PoisonDamage > 0 || row.PoisonDuration > 0f || row.PoisonInterval > 0f)
+                if (HasPoison(row))
                 {
                     if (poisonBuffId == 0 || row.PoisonMaxLayers <= 0 || row.PoisonDuration <= 0f || row.PoisonInterval <= 0f ||
                         (poisonCap != 0 && poisonCap != row.PoisonMaxLayers))
@@ -72,7 +103,10 @@ namespace GameLogic
                     { "pierceTargetCount", row.PierceTargetCount }, { "burstCount", row.BurstCount },
                     { "burstInterval", row.BurstInterval }, { "knockbackDistance", row.KnockbackDistance },
                     { "poisonDamage", row.PoisonDamage }, { "poisonDuration", row.PoisonDuration },
-                    { "poisonInterval", row.PoisonInterval }, { "poisonMaxLayers", row.PoisonMaxLayers }
+                    { "poisonInterval", row.PoisonInterval }, { "poisonMaxLayers", row.PoisonMaxLayers },
+                    { "attackCycleCount", row.AttackCycleCount }, { "chainBulletId", row.ChainBulletId },
+                    { "chainTargetCount", row.ChainTargetCount }, { "chainRange", row.ChainRange },
+                    { "chainDamageRatio", row.ChainDamageRatio }
                 };
                 catalog.Add(new SkillLevelModel(row.SkillId, row.Level, parameters,
                     CaptureHitBuffs(slowBuffId, poisonBuffId, row.SkillId, parameters),
@@ -80,6 +114,7 @@ namespace GameLogic
             }
             foreach (var row in tables.TbSkill.DataList)
             {
+                if (!row.Enabled) continue;
                 for (var level = 1; level <= row.MaxLevel; level++)
                     if (!catalog.TryGetLevel(row.Id, level, out _)) throw new InvalidOperationException("缺少技能等级：" + row.Id + "/" + level);
                 foreach (var id in row.PassiveBuffIds)
@@ -90,6 +125,8 @@ namespace GameLogic
 
         private static void ValidateBullet(Bullet row)
         {
+            if (row.BehaviorKey != "direct" && row.BehaviorKey != "chain")
+                throw new InvalidOperationException("启用技能引用了未知弹丸行为：" + row.Id + "/" + row.BehaviorKey);
             var validParabolic = row.FlightType == BulletFlightType.Parabolic && row.TrackTarget &&
                 row.HitMode == BulletHitMode.LockedTarget && row.FlightTime > 0f;
             var validStraight = row.FlightType == BulletFlightType.Straight && !row.TrackTarget &&
@@ -99,7 +136,14 @@ namespace GameLogic
                 !EntityValidation.IsFiniteNonNegative(row.ArcHeight) || !EntityValidation.IsFiniteNonNegative(row.HitRadius) ||
                 (!validParabolic && !validStraight))
                 throw new InvalidOperationException("弹丸配置或轨迹命中组合无效：" + row.Id);
+            if (row.BehaviorKey == "chain" && (!validStraight || row.HitMode != BulletHitMode.FirstEnemy ||
+                string.IsNullOrWhiteSpace(row.HitEffectPrefab)))
+                throw new InvalidOperationException("闪电链必须使用直线首次碰敌弹与命中特效：" + row.Id);
         }
+
+        private static bool HasPoison(GameConfig.skill.SkillLevel row)
+            => row.PoisonMaxLayers > 0 || row.SkillId == 1507 || row.PoisonDamage > 0 ||
+                row.PoisonDuration > 0f || row.PoisonInterval > 0f;
 
         private static void ValidateRobotLevel(GameConfig.skill.SkillLevel row, SkillModel skill, SkillCatalog catalog)
         {
@@ -115,6 +159,16 @@ namespace GameLogic
             if (skill.BulletId != 0 && catalog.TryGetBullet(skill.BulletId, out var bullet) &&
                 bullet.HitMode == BulletHitMode.PierceEnemies && row.PierceTargetCount < 1)
                 throw new InvalidOperationException("穿透人数必须至少为1：" + row.Id);
+            if (skill.Id == 1605 || row.AttackCycleCount != 0 || row.ChainBulletId != 0 || row.ChainTargetCount != 0)
+            {
+                if (row.AttackCycleCount < 1 || row.ChainTargetCount < 1 ||
+                    !EntityValidation.IsFiniteNonNegative(row.ChainRange) || row.ChainRange <= 0f ||
+                    !EntityValidation.IsFiniteNonNegative(row.ChainDamageRatio) || row.ChainDamageRatio <= 0f || row.ChainDamageRatio > 1f ||
+                    !catalog.TryGetBullet(row.ChainBulletId, out var chain) || chain.BehaviorKey != "chain" ||
+                    !catalog.TryGetBullet(skill.BulletId, out var normal) || normal.BehaviorKey != "direct" ||
+                    !string.Equals(chain.Prefab, normal.Prefab, StringComparison.Ordinal))
+                    throw new InvalidOperationException("攻击循环参数或替换弹丸配置无效：" + row.Id);
+            }
         }
 
         private static IReadOnlyList<CombatBuffApplication> CaptureSlowBuff(int buffId, IReadOnlyDictionary<string, float> parameters)

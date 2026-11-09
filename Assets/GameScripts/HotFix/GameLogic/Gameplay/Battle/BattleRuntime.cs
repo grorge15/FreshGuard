@@ -15,6 +15,7 @@ namespace GameLogic
         public BuffManager Buffs { get; }
         public TimelineManager Timelines { get; }
         public BulletManager Bullets { get; } = new BulletManager();
+        public BulletBehaviorRegistry BulletBehaviors { get; } = new BulletBehaviorRegistry();
         public BattlefieldRuntime Player { get; }
         public BattlefieldRuntime Opponent { get; }
         public bool IsDisposed { get; private set; }
@@ -33,6 +34,7 @@ namespace GameLogic
             Buffs = new BuffManager(this);
             BuffBehaviors.Register("slow", () => new SlowBuffBehavior(this));
             BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
+            BuffBehaviors.Register("chain_cycle", () => new ChainCycleBuffBehavior());
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
             Player = new BattlefieldRuntime(this, BattleSide.Player); Opponent = new BattlefieldRuntime(this, BattleSide.Opponent);

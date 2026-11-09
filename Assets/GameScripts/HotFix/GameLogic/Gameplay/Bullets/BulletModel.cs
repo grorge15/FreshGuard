@@ -17,12 +17,16 @@ namespace GameLogic
         public float FlightTime { get; }
         public float ArcHeight { get; }
         public float HitRadius { get; }
+        public string BehaviorKey { get; }
+        public string HitEffectPrefab { get; }
 
         public BulletModel(int id, string prefab, BulletFlightType flightType, bool trackTarget,
-            BulletHitMode hitMode, float speed, float flightTime, float arcHeight, float hitRadius)
+            BulletHitMode hitMode, float speed, float flightTime, float arcHeight, float hitRadius,
+            string behaviorKey = "direct", string hitEffectPrefab = "")
         {
             EntityValidation.RequirePositive(id, nameof(id));
             if (string.IsNullOrWhiteSpace(prefab)) throw new ArgumentException(nameof(prefab));
+            if (string.IsNullOrWhiteSpace(behaviorKey)) throw new ArgumentException(nameof(behaviorKey));
             if (flightType != BulletFlightType.Straight && flightType != BulletFlightType.Parabolic)
                 throw new ArgumentOutOfRangeException(nameof(flightType));
             if (hitMode != BulletHitMode.LockedTarget && hitMode != BulletHitMode.FirstEnemy &&
@@ -37,6 +41,7 @@ namespace GameLogic
                 throw new ArgumentOutOfRangeException(nameof(flightTime));
             Id = id; Prefab = prefab; FlightType = flightType; TrackTarget = trackTarget;
             HitMode = hitMode; Speed = speed; FlightTime = flightTime; ArcHeight = arcHeight; HitRadius = hitRadius;
+            BehaviorKey = behaviorKey; HitEffectPrefab = hitEffectPrefab ?? string.Empty;
         }
 
         // 保留旧调用的追踪抛物线语义，不伪造配置表ID。
@@ -47,6 +52,7 @@ namespace GameLogic
             if (flightTime <= 0f) throw new ArgumentOutOfRangeException(nameof(flightTime));
             Prefab = string.Empty; FlightType = BulletFlightType.Parabolic; TrackTarget = true;
             HitMode = BulletHitMode.LockedTarget; FlightTime = flightTime; ArcHeight = arcHeight;
+            BehaviorKey = "direct"; HitEffectPrefab = string.Empty;
         }
     }
 

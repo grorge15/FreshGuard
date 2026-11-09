@@ -36,8 +36,24 @@ namespace GameLogic.Tests
             var catalog = SkillConfigAdapter.FromTables(tables);
             foreach (var row in tables.TbSkill.DataList)
             {
+                if (!row.Enabled)
+                {
+                    Assert.IsFalse(catalog.TryGet(row.Id, out _));
+                    continue;
+                }
                 Assert.IsTrue(catalog.TryGet(row.Id, out var skill));
                 Assert.IsTrue(catalog.TryGetBullet(skill.BulletId, out var bullet));
+                if (row.Id == 1605)
+                {
+                    Assert.AreEqual(3605, bullet.Id);
+                    Assert.AreEqual("InductionBolt", bullet.Prefab);
+                    Assert.AreEqual(BulletFlightType.Straight, bullet.FlightType);
+                    Assert.IsFalse(bullet.TrackTarget);
+                    Assert.AreEqual(BulletHitMode.FirstEnemy, bullet.HitMode);
+                    Assert.AreEqual(20f, bullet.Speed);
+                    Assert.AreEqual(0.05f, bullet.HitRadius);
+                    continue;
+                }
                 Assert.AreEqual("RobotBullet", bullet.Prefab);
                 if (row.Id == 1501 || row.Id == 1502)
                 {
@@ -79,12 +95,12 @@ namespace GameLogic.Tests
             bool trackTarget, BulletHitMode hitMode, float speed, float flightTime)
         {
             var tables = LoadTables();
-            var buffer = new ByteBuf();
-            buffer.WriteSize(1);
-            buffer.WriteInt(3500); buffer.WriteString("RobotBullet"); buffer.WriteInt((int)flightType);
-            buffer.WriteBool(trackTarget); buffer.WriteInt((int)hitMode); buffer.WriteFloat(speed);
-            buffer.WriteFloat(flightTime); buffer.WriteFloat(1f); buffer.WriteFloat(0.1f);
-            tables.TbBullet = new TbBullet(buffer);
+            var row = tables.TbBullet.Get(3500);
+            SetField(row, "FlightType", flightType);
+            SetField(row, "TrackTarget", trackTarget);
+            SetField(row, "HitMode", hitMode);
+            SetField(row, "Speed", speed);
+            SetField(row, "FlightTime", flightTime);
             Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
         }
 
@@ -98,14 +114,13 @@ namespace GameLogic.Tests
             float scatterAngle, int pierceCount, int burstCount, float burstInterval, float knockbackDistance)
         {
             var tables = LoadTables();
-            var buffer = new ByteBuf();
-            buffer.WriteSize(1);
-            buffer.WriteInt(skillId * 100 + 1); buffer.WriteInt(skillId); buffer.WriteInt(1);
-            buffer.WriteInt(20); buffer.WriteFloat(0f); buffer.WriteFloat(0f);
-            buffer.WriteInt(scatterCount); buffer.WriteFloat(scatterAngle); buffer.WriteInt(pierceCount);
-            buffer.WriteInt(burstCount); buffer.WriteFloat(burstInterval); buffer.WriteFloat(knockbackDistance);
-            buffer.WriteInt(0); buffer.WriteFloat(0f); buffer.WriteFloat(0f); buffer.WriteInt(0);
-            tables.TbSkillLevel = new GameConfig.skill.TbSkillLevel(buffer);
+            var row = tables.TbSkillLevel.Get(skillId * 100 + 1);
+            SetField(row, "ScatterCount", scatterCount);
+            SetField(row, "ScatterAngle", scatterAngle);
+            SetField(row, "PierceTargetCount", pierceCount);
+            SetField(row, "BurstCount", burstCount);
+            SetField(row, "BurstInterval", burstInterval);
+            SetField(row, "KnockbackDistance", knockbackDistance);
             Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
         }
 
@@ -137,5 +152,8 @@ namespace GameLogic.Tests
 
         private static Tables LoadTables() => new Tables(name => new ByteBuf(File.ReadAllBytes(
             Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+
+        private static void SetField(object row, string field, object value)
+            => row.GetType().GetField(field).SetValue(row, value);
     }
 }

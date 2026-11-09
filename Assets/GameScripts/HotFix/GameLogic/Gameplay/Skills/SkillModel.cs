@@ -79,6 +79,7 @@ namespace GameLogic
         private readonly Dictionary<(int, int), SkillLevelModel> _levels = new Dictionary<(int, int), SkillLevelModel>();
         private readonly Dictionary<int, BuffModel> _buffs = new Dictionary<int, BuffModel>();
         private readonly Dictionary<int, BulletModel> _bullets = new Dictionary<int, BulletModel>();
+        public IEnumerable<BulletModel> Bullets => _bullets.Values;
         public void Add(SkillModel model) => _skills.Add(model.Id, model);
         public void Add(SkillLevelModel model) => _levels.Add((model.SkillId, model.Level), model);
         public void Add(BuffModel model) => _buffs.Add(model.Id, model);

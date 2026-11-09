@@ -29,6 +29,7 @@ namespace GameLogic.Tests
         [TestCase(601, "FrostRobotEntity")]
         [TestCase(602, "TractorRobotEntity")]
         [TestCase(603, "PoisonRobotEntity")]
+        [TestCase(701, "InductionRobotEntity")]
         public void ConfigCreatesConcreteRobotAndKeepsRegistryLifecycle(int configId, string typeName)
         {
             var config = _tables.TbRobot.Get(configId);
@@ -92,23 +93,28 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void AllEightRobotsHaveCollectedPrefabAndIconAddresses()
+        public void AllEnabledRobotsHaveCollectedPrefabAndIconAddresses()
         {
             var settings = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(
                 "Assets/Editor/AssetBundleCollector/AssetBundleCollectorSetting.asset");
+            Assert.IsNotNull(settings);
             var assets = settings.BeginCollect("DefaultPackage", true, false).CollectAssets;
-            Assert.AreEqual(8, _tables.TbRobot.DataList.Count);
+            Assert.AreEqual(12, _tables.TbRobot.DataList.Count, "源表保留尚未启用的机器人。");
+            Assert.AreEqual(9, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
             Assert.AreEqual(28, _tables.TbRobotShape.DataList.Count);
-            foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603 })
+            foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603, 701 })
             {
                 var config = _tables.TbRobot.Get(id);
                 Assert.AreEqual(config.RobotPrefab, assets.Single(asset => asset.AssetInfo.AssetPath ==
-                    "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab").Address);
+                    "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab").Address);
                 Assert.AreEqual(config.RobotIcon, assets.Single(asset => asset.AssetInfo.AssetPath ==
-                    "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png").Address);
+                    "Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png").Address);
                 var portrait = RobotLevelStyle.PortraitForIcon(config.RobotIcon);
                 Assert.AreEqual(portrait, assets.Single(asset => asset.AssetInfo.AssetPath ==
-                    "Assets/AssetRaw/Actor/Robots/Portraits/" + portrait + ".png").Address);
+                    "Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + portrait + ".png").Address);
+                var frame = RobotLevelStyle.FrameForIcon(config.RobotIcon);
+                Assert.AreEqual(frame, assets.Single(asset => asset.AssetInfo.AssetPath ==
+                    "Assets/AssetRaw/Actor/Sprites/Robots/LevelFrames/" + frame + ".png").Address);
             }
         }
 
@@ -126,7 +132,7 @@ namespace GameLogic.Tests
             var cells = config.ShapeId_Ref.CellOffsets;
             Assert.AreEqual(expectedOffsets, string.Join(";", cells.Select(cell => string.Join(",", cell))));
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab");
+                "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab");
             Assert.IsNotNull(prefab, "配置中的预制体必须存在");
             var view = prefab.GetComponent("RobotView");
             Assert.IsNotNull(view);
@@ -150,7 +156,7 @@ namespace GameLogic.Tests
                 Assert.IsNull(cell.GetComponent<Collider2D>(), "格子只负责显示，不再保留独立碰撞体。");
             }
             Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Sprite>(
-                "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"));
+                "Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png"));
             var body = prefab.GetComponent<PolygonCollider2D>();
             Assert.IsNotNull(body, "机器人需要根据占格生成整体实体碰撞轮廓。");
             Assert.IsTrue(body.enabled);

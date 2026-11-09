@@ -7,7 +7,14 @@ namespace GameLogic
     {
         public CombatActionSnapshot Action { get; }
         private readonly HashSet<int> _resolvedTargets = new HashSet<int>();
+        private bool _chainStarted;
         internal ProjectileAttackSnapshot(CombatActionSnapshot action) { Action = action; }
         internal bool TryConsume(int targetId) => _resolvedTargets.Add(targetId);
+        public bool TryBeginChain()
+        {
+            if (_chainStarted) return false;
+            _chainStarted = true;
+            return true;
+        }
     }
 }
