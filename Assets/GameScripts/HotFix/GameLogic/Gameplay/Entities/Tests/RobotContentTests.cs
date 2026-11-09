@@ -30,6 +30,9 @@ namespace GameLogic.Tests
         [TestCase(602, "TractorRobotEntity")]
         [TestCase(603, "PoisonRobotEntity")]
         [TestCase(701, "InductionRobotEntity")]
+        [TestCase(702, "RollingPinRobotEntity")]
+        [TestCase(703, "FoodContainerRobotEntity")]
+        [TestCase(704, "JuicerRobotEntity")]
         public void ConfigCreatesConcreteRobotAndKeepsRegistryLifecycle(int configId, string typeName)
         {
             var config = _tables.TbRobot.Get(configId);
@@ -93,16 +96,16 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void AllEnabledRobotsHaveCollectedPrefabAndIconAddresses()
+        public void AllConfiguredRobotsHaveCollectedPrefabAndIconAddresses()
         {
             var settings = AssetDatabase.LoadAssetAtPath<AssetBundleCollectorSetting>(
                 "Assets/Editor/AssetBundleCollector/AssetBundleCollectorSetting.asset");
             Assert.IsNotNull(settings);
             var assets = settings.BeginCollect("DefaultPackage", true, false).CollectAssets;
             Assert.AreEqual(12, _tables.TbRobot.DataList.Count, "源表保留尚未启用的机器人。");
-            Assert.AreEqual(9, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
+            Assert.AreEqual(10, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
             Assert.AreEqual(28, _tables.TbRobotShape.DataList.Count);
-            foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603, 701 })
+            foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603, 701, 702, 703, 704 })
             {
                 var config = _tables.TbRobot.Get(id);
                 Assert.AreEqual(config.RobotPrefab, assets.Single(asset => asset.AssetInfo.AssetPath ==
@@ -116,6 +119,9 @@ namespace GameLogic.Tests
                 Assert.AreEqual(frame, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Sprites/Robots/LevelFrames/" + frame + ".png").Address);
             }
+            foreach (var name in new[] { "JuiceBullet", "JuiceBulletLandingEffect" })
+                Assert.AreEqual(name, assets.Single(asset => asset.AssetInfo.AssetPath ==
+                    "Assets/AssetRaw/Actor/Prefabs/bullets/" + name + ".prefab").Address);
         }
 
         [TestCase(501, "0,0;1,0")]
@@ -126,6 +132,9 @@ namespace GameLogic.Tests
         [TestCase(601, "0,0;1,0;0,1;1,1")]
         [TestCase(602, "0,0;0,1;1,1")]
         [TestCase(603, "0,0;1,0;1,1;2,1")]
+        [TestCase(702, "0,0;1,0;2,0")]
+        [TestCase(703, "0,0;1,0")]
+        [TestCase(704, "0,0;0,1")]
         public void PrefabAndIconMatchRequestedFootprint(int configId, string expectedOffsets)
         {
             var config = _tables.TbRobot.Get(configId);

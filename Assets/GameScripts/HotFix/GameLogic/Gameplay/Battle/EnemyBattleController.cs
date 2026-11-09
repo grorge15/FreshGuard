@@ -41,6 +41,7 @@ namespace GameLogic
         [Tooltip("机器人命中时显示的世界空间伤害数字预制体。未指定时使用运行时后备样式。")]
         [SerializeField] private GameObject _damageNumberPrefab;
         private readonly List<SpawnGroup> _groups = new List<SpawnGroup>();
+        private readonly Vector3[][] _centerRoutes = new Vector3[2][];
         private readonly Dictionary<int, MoveEntry> _active = new Dictionary<int, MoveEntry>();
         private readonly Dictionary<int, DeathEntry> _dying = new Dictionary<int, DeathEntry>();
         // 只保存本局的值快照，死亡表现回收后仍供在途子弹查询。
@@ -148,6 +149,7 @@ namespace GameLogic
                         throw new InvalidOperationException("当前战场缺少有效 Tower：" + side);
                     var authored = side == BattleSide.Player ? _playerRoutePoints : _opponentRoutePoints;
                     var points = ReadRoute(authored, tower);
+                    _centerRoutes[(int)side] = points;
                     var radii = (side == BattleSide.Player
                         ? new[] { _playerSpawnRadius, _playerP1Radius, _playerP2Radius }
                         : new[] { _opponentSpawnRadius, _opponentP1Radius, _opponentP2Radius })
@@ -590,6 +592,12 @@ namespace GameLogic
             if (!OwnsBattle) return;
             foreach (var pair in _active)
                 if (TryGetTargetPosition(side, pair.Key, out _)) destination.Add(pair.Key);
+        }
+
+        public IReadOnlyList<Vector3> GetJuiceDropPositions(BattleSide side, Vector3 target, int count, float spacing)
+        {
+            EntityValidation.RequireSide(side);
+            return OwnsBattle ? BattleRouteSampler.SampleDrops(_centerRoutes[(int)side], target, count, spacing) : Array.Empty<Vector3>();
         }
 
         public bool TryGetTargetPosition(BattleSide side, int instanceId, out Vector3 position)

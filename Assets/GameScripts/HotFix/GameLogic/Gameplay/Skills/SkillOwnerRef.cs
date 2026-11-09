@@ -48,16 +48,20 @@ namespace GameLogic
         public static SkillTarget Battlefield(BattleSide side) => new SkillTarget(SkillTargetKind.Battlefield, side, 0, default(Vector3));
         public static SkillTarget Entity(BattleSide side, int id)
         { EntityValidation.RequirePositive(id, nameof(id)); return new SkillTarget(SkillTargetKind.Entity, side, id, default(Vector3)); }
+        public static SkillTarget Entity(BattleSide side, int id, Vector3 position)
+        { EntityValidation.RequirePositive(id, nameof(id)); return new SkillTarget(SkillTargetKind.Entity, side, id, position); }
         public static SkillTarget AtPosition(BattleSide side, Vector3 position) => new SkillTarget(SkillTargetKind.Position, side, 0, position);
     }
-    public enum SkillTriggerSource { Contact, Button, AI }
+    public enum SkillTriggerSource { Contact, Button, AI, Buff }
     public sealed class SkillCastRequest
     {
         public SkillOwnerRef Owner { get; }
         public int SkillId { get; }
         public SkillTriggerSource Trigger { get; }
         public SkillTarget Target { get; }
-        public SkillCastRequest(SkillOwnerRef owner, int skillId, SkillTriggerSource trigger, SkillTarget target)
-        { Owner = owner; SkillId = skillId; Trigger = trigger; Target = target; }
+        public long? SourceBuffInstanceId { get; }
+        public SkillCastRequest(SkillOwnerRef owner, int skillId, SkillTriggerSource trigger, SkillTarget target,
+            long? sourceBuffInstanceId = null)
+        { Owner = owner; SkillId = skillId; Trigger = trigger; Target = target; SourceBuffInstanceId = sourceBuffInstanceId; }
     }
 }

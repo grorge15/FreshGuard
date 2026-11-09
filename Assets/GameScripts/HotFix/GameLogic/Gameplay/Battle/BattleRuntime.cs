@@ -11,6 +11,7 @@ namespace GameLogic
         public CombatRuntime Combat { get; }
         public SkillCatalog Catalog { get; private set; } = new SkillCatalog();
         public SkillManager Skills { get; }
+        public BuffTriggeredSkillQueue TriggeredSkills { get; }
         public BuffBehaviorRegistry BuffBehaviors { get; } = new BuffBehaviorRegistry();
         public BuffManager Buffs { get; }
         public TimelineManager Timelines { get; }
@@ -35,6 +36,8 @@ namespace GameLogic
             BuffBehaviors.Register("slow", () => new SlowBuffBehavior(this));
             BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
             BuffBehaviors.Register("chain_cycle", () => new ChainCycleBuffBehavior());
+            BuffBehaviors.Register("juice_charge", () => new JuiceChargeBuffBehavior(this));
+            TriggeredSkills = new BuffTriggeredSkillQueue(this);
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
             Player = new BattlefieldRuntime(this, BattleSide.Player); Opponent = new BattlefieldRuntime(this, BattleSide.Opponent);
@@ -61,9 +64,18 @@ namespace GameLogic
             var existed = owner.Skills.TryGet(model.Id, out var existing);
             if (existed) return existing;
             var obj = owner.Skills.Add(model);
+            if (owner is RobotEntity robot) obj.SetLevel(Math.Min(robot.Level, model.MaxLevel));
             foreach (var buffId in model.PassiveBuffIds)
                 if (Catalog.TryGetBuff(buffId, out var buff))
+                {
+                    if (buff.TriggerSkillId > 0)
+                    {
+                        if (!Catalog.TryGet(buff.TriggerSkillId, out var triggered))
+                            throw new InvalidOperationException("缺少被动触发技能：" + buff.TriggerSkillId);
+                        Grant(owner, triggered);
+                    }
                     Buffs.Submit(new AddBuffInfo(buff, owner.OwnerRef, owner.OwnerRef, permanent: true));
+                }
                 else throw new InvalidOperationException("缺少被动Buff配置：" + buffId);
             return obj;
         }
@@ -110,6 +122,7 @@ namespace GameLogic
         public void Dispose()
         {
             if (IsDisposed) return; IsDisposed = true;
+            TriggeredSkills.Clear();
             Exception failure = null;
             Action<Action> clean = action =>
             {

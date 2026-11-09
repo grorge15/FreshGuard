@@ -45,5 +45,8 @@ MonoBehaviour:
   - RobotId: 701
     Unlocked: 1
     ReferenceLevel: 5
+  - RobotId: 704
+    Unlocked: 1
+    ReferenceLevel: 5
   Buffs: []
   PlayerBuffs: []

@@ -30,7 +30,9 @@ namespace GameLogic
             if (flightType != BulletFlightType.Straight && flightType != BulletFlightType.Parabolic)
                 throw new ArgumentOutOfRangeException(nameof(flightType));
             if (hitMode != BulletHitMode.LockedTarget && hitMode != BulletHitMode.FirstEnemy &&
-                hitMode != BulletHitMode.PierceEnemies) throw new ArgumentOutOfRangeException(nameof(hitMode));
+                hitMode != BulletHitMode.PierceEnemies && hitMode != BulletHitMode.AreaAtLanding) throw new ArgumentOutOfRangeException(nameof(hitMode));
+            if (hitMode == BulletHitMode.AreaAtLanding && (flightType != BulletFlightType.Parabolic || trackTarget))
+                throw new ArgumentException("落地区域弹需要不追踪的抛物线。");
             EntityValidation.RequireFiniteNonNegative(speed, nameof(speed));
             EntityValidation.RequireFiniteNonNegative(flightTime, nameof(flightTime));
             EntityValidation.RequireFiniteNonNegative(arcHeight, nameof(arcHeight));
@@ -94,8 +96,10 @@ namespace GameLogic
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             Action = action ?? throw new ArgumentNullException(nameof(action));
-            if (model.FlightType == BulletFlightType.Parabolic && action.TargetInstanceIds.Count != 1)
+            if (model.FlightType == BulletFlightType.Parabolic && model.HitMode != BulletHitMode.AreaAtLanding && action.TargetInstanceIds.Count != 1)
                 throw new ArgumentException("抛物线子弹必须是单目标。", nameof(action));
+            if (model.HitMode == BulletHitMode.AreaAtLanding && action.TargetInstanceIds.Count != 0)
+                throw new ArgumentException("位置落地弹不得绑定实体目标。", nameof(action));
             EntityValidation.RequirePositive(maxHitTargets, nameof(maxHitTargets));
             var heading = direction ?? (action.AimPoint - action.Origin);
             if (!Finite(heading.x) || !Finite(heading.y) || !Finite(heading.z))

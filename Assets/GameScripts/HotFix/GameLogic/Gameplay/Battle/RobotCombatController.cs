@@ -25,12 +25,20 @@ namespace GameLogic
         private readonly Transform _flightRoot;
         private readonly Dictionary<string, Queue<GameObject>> _effectReady = new Dictionary<string, Queue<GameObject>>();
         private readonly HashSet<string> _effectLoading = new HashSet<string>();
-        private readonly List<ChainEffectEntry> _effects = new List<ChainEffectEntry>();
-        private sealed class ChainEffectEntry
+        private readonly Dictionary<string, int> _effectCapacity = new Dictionary<string, int>();
+        private readonly List<EffectEntry> _effects = new List<EffectEntry>();
+        private readonly Queue<EffectRequest> _pendingEffects = new Queue<EffectRequest>();
+        private sealed class EffectRequest
+        {
+            internal string Prefab;
+            internal BattleSide Side;
+            internal Vector3[] Positions;
+        }
+        private sealed class EffectEntry
         {
             internal string Prefab;
             internal GameObject Instance;
-            internal LightningChainEffectView View;
+            internal IBattleEffectView View;
         }
         private bool _prepared;
         private bool _disposed;
@@ -39,11 +47,16 @@ namespace GameLogic
         {
             internal RobotEntity Robot;
             internal RobotView View;
+            internal readonly Dictionary<(int SkillId, string Prefab), ProjectilePool> Pools = new Dictionary<(int, string), ProjectilePool>();
+            internal CancellationTokenSource Cancellation;
+        }
+        private sealed class ProjectilePool
+        {
+            internal string Prefab;
             internal readonly Queue<GameObject> Ready = new Queue<GameObject>();
             internal int Capacity = 1;
             internal bool Loading;
             internal float RetryRemaining;
-            internal CancellationTokenSource Cancellation;
         }
 
         public int LiveBulletCount => _context.Battle.Bullets.Count;
@@ -105,19 +118,29 @@ namespace GameLogic
                 }
                 foreach (var location in catalog.Bullets.Select(r => r.HitEffectPrefab).Where(r => !string.IsNullOrEmpty(r)).Distinct())
                 {
-                    var effect = await _load(location, _preparedRoot, linked.Token);
-                    if (effect == null) throw new InvalidOperationException("闪电链表现资源为空：" + location);
-                    if (linked.IsCancellationRequested || !OwnsBattle) { Release(effect); linked.Token.ThrowIfCancellationRequested(); throw new OperationCanceledException(); }
-                    if (effect.GetComponent<LightningChainEffectView>() == null)
-                    { Release(effect); throw new InvalidOperationException("闪电链表现缺少LightningChainEffectView：" + location); }
-                    effect.SetActive(false);
-                    if (!_effectReady.TryGetValue(location, out var pool)) _effectReady.Add(location, pool = new Queue<GameObject>());
-                    pool.Enqueue(effect);
+                    var capacity = tables.TbSkillLevel.DataList.Where(level =>
+                        catalog.TryGet(level.SkillId, out var skill) && catalog.TryGetBullet(skill.BulletId, out var bullet) &&
+                        bullet.HitEffectPrefab == location).Select(level => level.DropCount).DefaultIfEmpty(1).Max();
+                    _effectCapacity[location] = Math.Max(1, capacity);
+                    for (var i = 0; i < _effectCapacity[location]; i++)
+                    {
+                        var effect = await _load(location, _preparedRoot, linked.Token);
+                        if (effect == null) throw new InvalidOperationException("命中表现资源为空：" + location);
+                        if (linked.IsCancellationRequested || !OwnsBattle) { Release(effect); linked.Token.ThrowIfCancellationRequested(); throw new OperationCanceledException(); }
+                        if (GetEffectView(effect) == null)
+                        { Release(effect); throw new InvalidOperationException("命中表现缺少IBattleEffectView：" + location); }
+                        effect.SetActive(false);
+                        if (!_effectReady.TryGetValue(location, out var pool)) _effectReady.Add(location, pool = new Queue<GameObject>());
+                        pool.Enqueue(effect);
+                    }
                 }
                 _context.Battle.Configure(catalog);
             }
             _context.Battle.Timelines.RegisterAction("robot.bullet", new RobotBulletAction(this));
             _context.Battle.Timelines.RegisterAction("robot.burst.shot", new BurstBulletAction(this));
+            _context.Battle.Timelines.RegisterAction("robot.juice.drops", new JuiceBulletAction(this));
+            _context.Battle.Timelines.Register(new TimelineModel("robot.juice", 0f,
+                new[] { new TimelineNode(0f, "robot.juice.drops") }));
             _context.Battle.Timelines.Register(new TimelineModel("robot.single", 0f,
                 new[] { new TimelineNode(0f, "robot.bullet") }));
             foreach (var key in new[] { "robot.scatter", "robot.pierce", "robot.impact" })
@@ -146,10 +169,14 @@ namespace GameLogic
                 if (_reserves.TryGetValue(pair.Key, out var existing)) { existing.View = view; continue; }
                 if (robot.Location != RobotLocation.Board || !_context.Battle.Catalog.TryGet(robot.SkillId, out _)) continue;
                 robot.InitializeCombat(_context.BattleId);
-                var reserve = new Reserve { Robot = robot, View = view, Capacity = GetReadyCapacity(robot),
+                var reserve = new Reserve { Robot = robot, View = view,
                     Cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token) };
                 _reserves.Add(pair.Key, reserve);
-                PrepareNextAsync(reserve).Forget();
+                PrepareSkillPools(reserve, robot.SkillId);
+                if (_context.Battle.Catalog.TryGet(robot.SkillId, out var primary))
+                    foreach (var id in primary.PassiveBuffIds)
+                        if (_context.Battle.Catalog.TryGetBuff(id, out var buff) && buff.TriggerSkillId > 0)
+                            PrepareSkillPools(reserve, buff.TriggerSkillId);
             }
         }
 
@@ -160,13 +187,14 @@ namespace GameLogic
             // 先推进已有表现，本段命中新创建的闪电不额外消耗整段时间。
             foreach (var effect in _effects.ToArray())
             {
-                if (effect.View != null && !effect.View.Advance(deltaTime)) continue;
+                if (effect.Instance != null && effect.View != null && !effect.View.Advance(deltaTime)) continue;
                 _effects.Remove(effect);
                 if (effect.Instance == null) continue;
                 effect.Instance.SetActive(false); effect.Instance.transform.SetParent(_preparedRoot, false);
                 _effectReady[effect.Prefab].Enqueue(effect.Instance);
             }
             _context.Battle.Bullets.Advance(deltaTime);
+            PlayPendingEffects();
         }
 
         public void AdvanceAttacks(float deltaTime)
@@ -178,10 +206,14 @@ namespace GameLogic
             {
                 if (!IsRunning) return;
                 var reserve = pair.Value;
-                reserve.RetryRemaining = Mathf.Max(0f, reserve.RetryRemaining - deltaTime);
-                if (!reserve.Loading && reserve.Ready.Count < reserve.Capacity && reserve.RetryRemaining <= 0f)
-                    PrepareNextAsync(reserve).Forget();
+                foreach (var pool in reserve.Pools.Values.ToArray())
+                {
+                    pool.RetryRemaining = Mathf.Max(0f, pool.RetryRemaining - deltaTime);
+                    if (!pool.Loading && pool.Ready.Count < pool.Capacity && pool.RetryRemaining <= 0f)
+                        PrepareNextAsync(reserve, pool).Forget();
+                }
             }
+            _context.Battle.TriggeredSkills.Process();
         }
 
         /// <summary>每次接触只尝试一次；冷却、无目标或资源未就绪时直接丢弃，不排队补发。</summary>
@@ -193,20 +225,21 @@ namespace GameLogic
                 robot.Side != side || !robot.CanParticipate || robot.TriggerCooldownRemaining > 0f) return false;
             var fired = TryFire(robot);
             robot.TickCombat(fired);
+            if (IsRunning) _context.Battle.TriggeredSkills.Process();
             return fired;
         }
 
         private bool TryFire(RobotEntity robot)
         {
             if (!IsRunning || !robot.CanParticipate || robot.TriggerCooldownRemaining > 0f ||
-                !_reserves.TryGetValue(robot.InstanceId, out var reserve) || reserve.Ready.Count == 0 ||
+                !_reserves.TryGetValue(robot.InstanceId, out var reserve) ||
                 !ReferenceEquals(reserve.Robot, robot) || reserve.View == null ||
                 reserve.View.InstanceId != robot.InstanceId || !reserve.View.isActiveAndEnabled ||
                 !_context.Registry.TryGet(robot.InstanceId, out var current) || !ReferenceEquals(current, robot)) return false;
             var target = _targets.GetTarget(robot.Side);
             if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out var aimPoint)) return false;
             return _context.Battle.Skills.TryCast(new SkillCastRequest(robot.OwnerRef, robot.SkillId,
-                SkillTriggerSource.Contact, SkillTarget.Entity(robot.Side, target.Value)),
+                SkillTriggerSource.Contact, SkillTarget.Entity(robot.Side, target.Value, aimPoint)),
                 () => robot.TryConsumeAttackTrigger(robot.Configuration.MinTriggerInterval)).Accepted;
         }
 
@@ -228,6 +261,16 @@ namespace GameLogic
                 _controller.TryPrepareBullet(cast, node, out execute, out _);
             public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute, out Action release) =>
                 _controller.TryPrepareBullet(cast, node, out execute, out release);
+        }
+
+        private sealed class JuiceBulletAction : ISingleUseTimelineAction, IReleasableTimelineAction
+        {
+            private readonly RobotCombatController _controller;
+            internal JuiceBulletAction(RobotCombatController controller) { _controller = controller; }
+            public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute) =>
+                _controller.TryPrepareJuice(cast, out execute, out _);
+            public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute, out Action release) =>
+                _controller.TryPrepareJuice(cast, out execute, out release);
         }
 
         private static bool TryCount(float value, out int count)
@@ -252,16 +295,38 @@ namespace GameLogic
             return new TimelineModel(cast.TimelineKey, duration, nodes);
         }
 
-        private int GetReadyCapacity(RobotEntity robot)
+        private int GetReadyCapacity(int skillId)
         {
-            if (!_context.Battle.Catalog.TryGet(robot.SkillId, out var skill)) return 1;
+            if (!_context.Battle.Catalog.TryGet(skillId, out var skill)) return 1;
             var count = 1;
             for (var i = 1; i <= skill.MaxLevel; i++)
                 if (_context.Battle.Catalog.TryGetLevel(skill.Id, i, out var level))
-                    foreach (var key in new[] { "scatterCount", "burstCount" })
+                    foreach (var key in new[] { "scatterCount", "burstCount", "dropCount" })
                         if (level.Parameters.TryGetValue(key, out var value) && TryCount(value, out var configured))
                             count = Math.Max(count, configured);
             return count;
+        }
+
+        private ProjectilePool GetPool(Reserve reserve, int skillId, BulletModel model)
+        {
+            var key = (skillId, model.Prefab);
+            if (!reserve.Pools.TryGetValue(key, out var pool))
+            {
+                pool = new ProjectilePool { Prefab = model.Prefab, Capacity = GetReadyCapacity(skillId) };
+                reserve.Pools.Add(key, pool);
+            }
+            return pool;
+        }
+        private void PrepareSkillPools(Reserve reserve, int skillId)
+        {
+            if (!_context.Battle.Catalog.TryGet(skillId, out var skill) ||
+                !_context.Battle.Catalog.TryGetBullet(skill.BulletId, out var model)) return;
+            PrepareNextAsync(reserve, GetPool(reserve, skillId, model)).Forget();
+            for (var level = 1; level <= skill.MaxLevel; level++)
+                if (_context.Battle.Catalog.TryGetLevel(skillId, level, out var values) &&
+                    values.Parameters.TryGetValue("chainBulletId", out var id) &&
+                    _context.Battle.Catalog.TryGetBullet((int)id, out var replacement))
+                    PrepareNextAsync(reserve, GetPool(reserve, skillId, replacement)).Forget();
         }
 
         private bool TryPrepareBullet(SkillCastSnapshot cast, TimelineNode node, out Action execute, out Action release)
@@ -275,9 +340,8 @@ namespace GameLogic
                 reserve.View.InstanceId != robot.InstanceId || !reserve.View.isActiveAndEnabled ||
                 !_enemies.TryGetTargetPosition(robot.Side, cast.Target.EntityId, out _) ||
                 !_context.Battle.Catalog.TryGet(cast.SkillId, out var model) ||
-                !_context.Battle.Catalog.TryGetBullet(cast.BulletId, out var bulletModel) ||
-                !_context.Battle.Catalog.TryGetBullet(model.BulletId, out var normalBullet) ||
-                !string.Equals(normalBullet.Prefab, bulletModel.Prefab, StringComparison.Ordinal)) return false;
+                !_context.Battle.Catalog.TryGetBullet(cast.BulletId, out var bulletModel)) return false;
+            var pool = GetPool(reserve, cast.SkillId, bulletModel);
             _context.Battle.BulletBehaviors.Create(bulletModel.BehaviorKey);
             if (bulletModel.BehaviorKey == "chain")
                 new ChainBulletSnapshot(checked((int)cast.Get("chainTargetCount")), cast.Get("chainRange"), cast.Get("chainDamageRatio"));
@@ -295,26 +359,88 @@ namespace GameLogic
             if (!EntityValidation.IsFiniteNonNegative(angle) || angle > 360f ||
                 !EntityValidation.IsFiniteNonNegative(knockback) ||
                 !EntityValidation.IsFiniteNonNegative(cast.Get("damage")) || cast.Get("damage") >= int.MaxValue) return false;
-            if (shotIndex == 0 && reserve.Ready.Count < total)
+            if (shotIndex == 0 && pool.Ready.Count < total)
             {
-                reserve.Capacity = Math.Max(reserve.Capacity, total);
-                PrepareNextAsync(reserve).Forget();
-                if (reserve.Ready.Count < total) return false;
+                pool.Capacity = Math.Max(pool.Capacity, total);
+                PrepareNextAsync(reserve, pool).Forget();
+                if (pool.Ready.Count < total) return false;
             }
-            if (reserve.Ready.Count < count) return false;
+            if (pool.Ready.Count < count) return false;
             var sourceId = robot.InstanceId;
             var damage = model.Type == SkillType.NormalAttack ? robot.GetAttackDamage() : checked((int)cast.Get("damage"));
             var ready = new GameObject[count];
-            for (var i = 0; i < count; i++) ready[i] = reserve.Ready.Dequeue();
+            for (var i = 0; i < count; i++) ready[i] = pool.Ready.Dequeue();
             // 闭包只捕获标识、只读配置与预留表现；不捕获池化实体。
             execute = () => FirePrepared(sourceId, cast, damage, bulletModel, ready, burst, angle, maxHits, knockback);
             release = () =>
             {
                 foreach (var instance in ready)
-                    ReturnPrepared(sourceId, instance);
+                    ReturnPrepared(sourceId, cast.SkillId, bulletModel.Prefab, instance);
                 Array.Clear(ready, 0, ready.Length);
             };
             return true;
+        }
+
+        private bool TryPrepareJuice(SkillCastSnapshot cast, out Action execute, out Action release)
+        {
+            execute = null; release = null;
+            if (!IsRunning || cast.Target.Kind != SkillTargetKind.Position || cast.Owner.Kind != SkillOwnerKind.Entity ||
+                !cast.Owner.EntityId.HasValue || !_reserves.TryGetValue(cast.Owner.EntityId.Value, out var reserve) ||
+                !reserve.Robot.CanParticipate || reserve.View == null || !reserve.View.isActiveAndEnabled ||
+                !_context.Battle.Catalog.TryGetBullet(cast.BulletId, out var model) || model.HitMode != BulletHitMode.AreaAtLanding ||
+                !TryCount(cast.Get("dropCount"), out var count) || cast.Get("dropSpacing") <= 0 || cast.Get("splashRadius") <= 0 ||
+                !EntityValidation.IsFiniteNonNegative(cast.Get("damage")) || cast.Get("damage") >= int.MaxValue) return false;
+            var drops = _enemies.GetJuiceDropPositions(cast.Owner.Side, cast.Target.Position, count, cast.Get("dropSpacing")).ToArray();
+            if (drops.Length == 0) return false;
+            var pool = GetPool(reserve, cast.SkillId, model);
+            if (pool.Ready.Count < drops.Length)
+            {
+                pool.Capacity = Math.Max(pool.Capacity, drops.Length);
+                PrepareNextAsync(reserve, pool).Forget();
+                if (pool.Ready.Count < drops.Length) return false;
+            }
+            var ready = new GameObject[drops.Length];
+            for (var i = 0; i < ready.Length; i++) ready[i] = pool.Ready.Dequeue();
+            var sourceId = cast.Owner.EntityId.Value;
+            var damage = checked((int)cast.Get("damage"));
+            var radius = cast.Get("splashRadius");
+            execute = () => FireJuice(sourceId, cast, model, ready, drops, damage, radius);
+            release = () =>
+            {
+                foreach (var instance in ready) ReturnPrepared(sourceId, cast.SkillId, model.Prefab, instance);
+                Array.Clear(ready, 0, ready.Length);
+            };
+            return true;
+        }
+
+        private void FireJuice(int sourceId, SkillCastSnapshot cast, BulletModel model, GameObject[] ready,
+            Vector3[] drops, int damage, float radius)
+        {
+            if (!_reserves.TryGetValue(sourceId, out var reserve) || reserve.View == null) return;
+            var origin = reserve.View.GetAttackOrigin();
+            for (var i = 0; i < ready.Length; i++)
+            {
+                if (!CanEmit(cast)) return;
+                var instance = ready[i]; ready[i] = null;
+                var launched = false;
+                try
+                {
+                    if (instance == null) throw new InvalidOperationException("果汁预留弹丸丢失。");
+                    var attack = _context.Combat.CaptureProjectileAttack(new CombatActionSnapshot(_context.BattleId,
+                        sourceId, cast.Owner.Side, cast.SkillId, Array.Empty<int>(), CombatOutcomeTag.SingleDamage,
+                        damage, origin, drops[i], i + 1, hitBuffs: cast.HitBuffs));
+                    if (!CanEmit(cast)) return;
+                    var behavior = _context.Battle.BulletBehaviors.Create(model.BehaviorKey);
+                    var state = new BulletState(new BulletLauncher(model, attack.Action), _bulletWorld,
+                        (hit, id) => behavior.OnHit(new BulletHitContext(hit, id, attack, _context.Combat,
+                            (IProjectileWorld)_bulletWorld, present: positions => PlayHitEffect(model.HitEffectPrefab, cast.Owner.Side, positions),
+                            splashRadius: radius)));
+                    Launch(reserve, instance, state); launched = true;
+                    if (OwnsBattle && !state.IsResolved && instance != null) instance.SetActive(true);
+                }
+                finally { if (!launched) ReturnPrepared(sourceId, cast.SkillId, model.Prefab, instance); }
+            }
+            PrepareNextAsync(reserve, GetPool(reserve, cast.SkillId, model)).Forget();
         }
 
         private void FirePrepared(int sourceId, SkillCastSnapshot cast, int damage, BulletModel model,
@@ -356,59 +482,88 @@ namespace GameLogic
                         checked((int)cast.Get("chainTargetCount")), cast.Get("chainRange"), cast.Get("chainDamageRatio")) : null;
                     var state = new BulletState(new BulletLauncher(model, projectile.Action, direction, maxHits), _bulletWorld,
                         (hit, id) => behavior.OnHit(new BulletHitContext(hit, id, projectile, _context.Combat,
-                            (IProjectileWorld)_bulletWorld, chain, positions => PlayChainEffect(model.HitEffectPrefab, cast.Owner.Side, positions))));
+                            (IProjectileWorld)_bulletWorld, chain, positions => PlayHitEffect(model.HitEffectPrefab, cast.Owner.Side, positions))));
                     Launch(reserve, instance, state);
                     launched = true;
                     _context.Battle.Timelines.NotifyAttackLaunched(cast);
                     // 注册即为成功发射；激活表现的OnEnable可重入取消施法，不能影响已提交的次数。
                     if (OwnsBattle && !state.IsResolved && instance != null) instance.SetActive(true);
                 }
-                finally { if (!launched) ReturnPrepared(sourceId, instance); }
+                finally { if (!launched) ReturnPrepared(sourceId, cast.SkillId, model.Prefab, instance); }
             }
-            PrepareNextAsync(reserve).Forget();
+            PrepareNextAsync(reserve, GetPool(reserve, cast.SkillId, model)).Forget();
         }
 
-        private void PlayChainEffect(string prefab, BattleSide side, IReadOnlyList<Vector3> positions)
+        private void PlayHitEffect(string prefab, BattleSide side, IReadOnlyList<Vector3> positions)
         {
             if (!IsRunning || string.IsNullOrEmpty(prefab)) return;
-            if (!_effectReady.TryGetValue(prefab, out var pool) || pool.Count == 0)
-            { PrepareChainEffectAsync(prefab).Forget(); return; }
-            var instance = pool.Dequeue();
-            if (instance == null) { PrepareChainEffectAsync(prefab).Forget(); return; }
-            instance.transform.SetParent(_flightRoot, false);
-            BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
-            var view = instance.GetComponent<LightningChainEffectView>();
-            view.Play(positions); instance.SetActive(true);
-            _effects.Add(new ChainEffectEntry { Prefab = prefab, Instance = instance, View = view });
-            if (pool.Count == 0) PrepareChainEffectAsync(prefab).Forget();
+            // 仅延迟表现；伤害已在命中时提交，队列不持有敌人或机器人引用。
+            _pendingEffects.Enqueue(new EffectRequest { Prefab = prefab, Side = side, Positions = positions.ToArray() });
+            PlayPendingEffects();
         }
-        private async UniTaskVoid PrepareChainEffectAsync(string prefab)
+        private void PlayPendingEffects()
+        {
+            if (!IsRunning) return;
+            var count = _pendingEffects.Count;
+            for (var i = 0; i < count; i++)
+            {
+                var request = _pendingEffects.Dequeue();
+                if (!_effectReady.TryGetValue(request.Prefab, out var pool) || pool.Count == 0)
+                {
+                    _pendingEffects.Enqueue(request);
+                    PrepareHitEffectAsync(request.Prefab).Forget();
+                    continue;
+                }
+                var instance = pool.Dequeue();
+                if (instance == null)
+                {
+                    _pendingEffects.Enqueue(request);
+                    PrepareHitEffectAsync(request.Prefab).Forget();
+                    continue;
+                }
+                instance.transform.SetParent(_flightRoot, false);
+                BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), request.Side);
+                var view = GetEffectView(instance);
+                view.Play(request.Positions); instance.SetActive(true);
+                _effects.Add(new EffectEntry { Prefab = request.Prefab, Instance = instance, View = view });
+                if (pool.Count == 0) PrepareHitEffectAsync(request.Prefab).Forget();
+            }
+        }
+        private async UniTaskVoid PrepareHitEffectAsync(string prefab)
         {
             if (!OwnsBattle || !_effectLoading.Add(prefab)) return;
             GameObject instance = null;
             try
             {
-                instance = await _load(prefab, _preparedRoot, _lifetime.Token);
-                if (!OwnsBattle || _lifetime.IsCancellationRequested) return;
-                if (instance == null || instance.GetComponent<LightningChainEffectView>() == null)
-                    throw new InvalidOperationException("闪电链表现预备失败：" + prefab);
-                instance.SetActive(false);
+                var capacity = _effectCapacity.TryGetValue(prefab, out var target) ? target : 1;
                 if (!_effectReady.TryGetValue(prefab, out var pool)) _effectReady.Add(prefab, pool = new Queue<GameObject>());
-                pool.Enqueue(instance); instance = null;
+                while (pool.Count < capacity)
+                {
+                    instance = await _load(prefab, _preparedRoot, _lifetime.Token);
+                    if (!OwnsBattle || _lifetime.IsCancellationRequested) return;
+                    if (instance == null || GetEffectView(instance) == null)
+                        throw new InvalidOperationException("命中表现预备失败：" + prefab);
+                    instance.SetActive(false);
+                    pool.Enqueue(instance); instance = null;
+                }
             }
             catch (OperationCanceledException) { }
-            catch (Exception exception) { if (OwnsBattle) Debug.LogWarning("闪电链表现预备失败：" + exception.Message, _host); }
+            catch (Exception exception) { if (OwnsBattle) Debug.LogWarning("命中表现预备失败：" + exception.Message, _host); }
             finally { Release(instance); _effectLoading.Remove(prefab); }
         }
 
         private bool CanEmit(SkillCastSnapshot cast) => IsRunning && _context.Battle.Timelines.IsActive(cast) &&
             _context.Battle.TryResolveOwner(cast.Owner, out var owner) && owner.CanCast;
 
-        private void ReturnPrepared(int sourceId, GameObject instance)
+        private static IBattleEffectView GetEffectView(GameObject instance) => instance == null ? null :
+            instance.GetComponents<MonoBehaviour>().OfType<IBattleEffectView>().FirstOrDefault();
+
+        private void ReturnPrepared(int sourceId, int skillId, string prefab, GameObject instance)
         {
             if (instance == null) return;
-            if (OwnsBattle && _reserves.TryGetValue(sourceId, out var reserve) && reserve.Ready.Count < reserve.Capacity)
-                reserve.Ready.Enqueue(instance);
+            if (OwnsBattle && _reserves.TryGetValue(sourceId, out var reserve) &&
+                reserve.Pools.TryGetValue((skillId, prefab), out var pool) && pool.Ready.Count < pool.Capacity)
+                pool.Ready.Enqueue(instance);
             else Release(instance);
         }
 
@@ -421,27 +576,24 @@ namespace GameLogic
             _context.Battle.Bullets.Add(state, bullet.Present, () => Release(instance));
         }
 
-        private async UniTaskVoid PrepareNextAsync(Reserve reserve)
+        private async UniTaskVoid PrepareNextAsync(Reserve reserve, ProjectilePool pool)
         {
-            if (reserve.Loading || reserve.Ready.Count >= reserve.Capacity || reserve.Cancellation.IsCancellationRequested || !OwnsBattle) return;
-            reserve.Loading = true;
+            if (pool.Loading || pool.Ready.Count >= pool.Capacity || pool.RetryRemaining > 0f || reserve.Cancellation.IsCancellationRequested || !OwnsBattle) return;
+            pool.Loading = true;
             GameObject instance = null;
             var token = reserve.Cancellation.Token;
             try
             {
-                if (!_context.Battle.Catalog.TryGet(reserve.Robot.SkillId, out var skill) ||
-                    !_context.Battle.Catalog.TryGetBullet(skill.BulletId, out var model))
-                    throw new InvalidOperationException("机器人技能缺少弹丸配置。");
-                while (reserve.Ready.Count < reserve.Capacity)
+                while (pool.Ready.Count < pool.Capacity)
                 {
-                    instance = await _load(model.Prefab, _preparedRoot, token);
+                    instance = await _load(pool.Prefab, _preparedRoot, token);
                     token.ThrowIfCancellationRequested();
                     if (!OwnsBattle || !_reserves.TryGetValue(reserve.Robot.InstanceId, out var current) ||
                         !ReferenceEquals(current, reserve) || reserve.Robot.IsRemoved) return;
                     if (instance == null || instance.GetComponent<RobotBulletView>() == null)
                         throw new InvalidOperationException("子弹加载失败或缺少 RobotBulletView。");
                     instance.SetActive(false);
-                    reserve.Ready.Enqueue(instance);
+                    pool.Ready.Enqueue(instance);
                     instance = null;
                 }
             }
@@ -450,11 +602,11 @@ namespace GameLogic
             {
                 if (OwnsBattle && !token.IsCancellationRequested)
                 {
-                    reserve.RetryRemaining = 1f;
+                    pool.RetryRemaining = 1f;
                     Debug.LogError("机器人子弹准备失败，1秒战斗时间后重试：" + e.Message, _host);
                 }
             }
-            finally { Release(instance); reserve.Loading = false; }
+            finally { Release(instance); pool.Loading = false; }
         }
 
         private void RemoveReserve(int id)
@@ -464,7 +616,7 @@ namespace GameLogic
             _context.Battle.Timelines.Cancel(reserve.Robot.OwnerRef);
             reserve.Robot.ClearCombat();
             reserve.Cancellation.Cancel(); reserve.Cancellation.Dispose();
-            while (reserve.Ready.Count > 0) Release(reserve.Ready.Dequeue());
+            foreach (var pool in reserve.Pools.Values) while (pool.Ready.Count > 0) Release(pool.Ready.Dequeue());
         }
 
         public void Dispose()
@@ -474,6 +626,7 @@ namespace GameLogic
             _lifetime.Cancel();
             foreach (var effect in _effects) Release(effect.Instance);
             _effects.Clear();
+            _pendingEffects.Clear();
             foreach (var pool in _effectReady.Values) while (pool.Count > 0) Release(pool.Dequeue());
             _effectReady.Clear();
             _targets.Clear();

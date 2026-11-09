@@ -15,6 +15,7 @@ namespace GameLogic
     public sealed class SkillCastContext
     {
         private readonly SkillLevelModel _level;
+        private readonly List<Action> _acceptanceCommits = new List<Action>();
         public SkillCastRequest Request { get; }
         public int Level { get; }
         public string TimelineKey { get; set; }
@@ -30,6 +31,14 @@ namespace GameLogic
             foreach (var pair in level.Parameters) Parameters.Add(pair.Key, pair.Value);
         }
         public void Cancel() => IsCancelled = true;
+        // 仅暂存本次同步施法的状态变化；不是Buff生命周期回调。
+        public void DeferUntilAccepted(Action commit) => _acceptanceCommits.Add(commit ?? throw new ArgumentNullException(nameof(commit)));
+        internal void CommitAcceptance()
+        {
+            var commits = _acceptanceCommits.ToArray();
+            _acceptanceCommits.Clear();
+            foreach (var commit in commits) commit();
+        }
     }
     public sealed class SkillCastSnapshot
     {
@@ -84,6 +93,7 @@ namespace GameLogic
                     if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
                     if (commitContact != null && !commitContact()) return new SkillCastResult(SkillCastFailure.NotAllowed);
                     skill.CooldownRemaining = skill.Model.Cooldown;
+                    context.CommitAcceptance();
                     started = true;
                     _battle.Timelines.Start(timeline);
                     return new SkillCastResult(SkillCastFailure.None);
@@ -97,6 +107,12 @@ namespace GameLogic
             owner = null; skill = null;
             if (_battle.IsDisposed) return SkillCastFailure.BattleEnded;
             if (!_battle.TryResolveOwner(request.Owner, out owner)) return SkillCastFailure.InvalidOwner;
+            if (request.SourceBuffInstanceId.HasValue)
+            {
+                var exists = false;
+                foreach (var buff in owner.Buffs.Items) if (buff.InstanceId == request.SourceBuffInstanceId.Value) { exists = true; break; }
+                if (!exists || request.Trigger != SkillTriggerSource.Buff) return SkillCastFailure.Cancelled;
+            }
             if (!owner.CanCast || !_battle.CanCastNow() || !_battle.Combat.AllowsGameplayTriggers) return SkillCastFailure.NotAllowed;
             if (!owner.Skills.TryGet(request.SkillId, out skill)) return SkillCastFailure.MissingSkill;
             if (skill.CooldownRemaining > 0f) return SkillCastFailure.Cooldown;

@@ -6,7 +6,7 @@ namespace GameLogic
 {
     /// <summary>命中快照上的火花与逐跳闪电序列帧；不选敌、不结算伤害。</summary>
     [DisallowMultipleComponent]
-    public sealed class LightningChainEffectView : MonoBehaviour
+    public sealed class LightningChainEffectView : MonoBehaviour, IBattleEffectView
     {
         [SerializeField] private BattleSpriteAnimation _chainTemplate;
         [SerializeField] private BattleSpriteAnimation _sparkTemplate;

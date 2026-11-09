@@ -8,6 +8,9 @@ namespace GameLogic
         public CombatActionSnapshot Action { get; }
         private readonly HashSet<int> _resolvedTargets = new HashSet<int>();
         private bool _chainStarted;
+        private bool _splashStarted;
+        public bool TryBeginSplash()
+        { if (_splashStarted) return false; _splashStarted = true; return true; }
         internal ProjectileAttackSnapshot(CombatActionSnapshot action) { Action = action; }
         internal bool TryConsume(int targetId) => _resolvedTargets.Add(targetId);
         public bool TryBeginChain()

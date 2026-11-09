@@ -54,7 +54,8 @@ namespace GameLogic
 
         private bool AdvanceParabolic(float deltaTime)
         {
-            if (!_targetLost)
+            var landing = Launcher.Model.HitMode == BulletHitMode.AreaAtLanding;
+            if (!landing && !_targetLost)
             {
                 if (_world.TryGetPosition(Action.SourceSide, Action.TargetInstanceIds[0], out var target))
                 {
@@ -78,6 +79,11 @@ namespace GameLogic
             if (movement.sqrMagnitude > 0f) Direction = movement.normalized;
             if (Elapsed < Launcher.Model.FlightTime) return false;
             IsResolved = true; // 命中回调之前封住重入。
+            if (landing)
+            {
+                if (_world.IsValid(Action.BattleId)) _onHit(this, 0); // 位置事件，不表示实体命中。
+                return true;
+            }
             if (!_targetLost && _world.IsValid(Action.BattleId) &&
                 _world.TryGetPosition(Action.SourceSide, Action.TargetInstanceIds[0], out _))
             {

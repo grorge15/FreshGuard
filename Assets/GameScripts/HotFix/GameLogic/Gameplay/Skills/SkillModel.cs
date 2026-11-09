@@ -66,6 +66,8 @@ namespace GameLogic
             var obj = new SkillObj(model); _items.Add(model.Id, obj); return obj;
         }
         public bool Remove(int id) => _items.Remove(id);
+        internal void SyncRobotLevel(int level)
+        { foreach (var skill in _items.Values) skill.SetLevel(Math.Min(level, skill.Model.MaxLevel)); }
         public void Clear() => _items.Clear();
         public void Advance(float deltaTime)
         {

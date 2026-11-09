@@ -10,13 +10,16 @@ namespace GameLogic
         public int MaxStacks { get; }
         public int Priority { get; }
         public float TickInterval { get; }
-        public BuffModel(int id, string behaviorKey, int maxStacks = 1, int priority = 0, float tickInterval = 0f)
+        public int TriggerSkillId { get; }
+        public BuffModel(int id, string behaviorKey, int maxStacks = 1, int priority = 0, float tickInterval = 0f, int triggerSkillId = 0)
         {
             EntityValidation.RequirePositive(id, nameof(id));
             EntityValidation.RequirePositive(maxStacks, nameof(maxStacks));
             EntityValidation.RequireFiniteNonNegative(tickInterval, nameof(tickInterval));
             if (string.IsNullOrWhiteSpace(behaviorKey)) throw new ArgumentException(nameof(behaviorKey));
             Id = id; BehaviorKey = behaviorKey; MaxStacks = maxStacks; Priority = priority; TickInterval = tickInterval;
+            if (triggerSkillId < 0) throw new ArgumentOutOfRangeException(nameof(triggerSkillId));
+            TriggerSkillId = triggerSkillId;
         }
     }
     public sealed class BuffObj

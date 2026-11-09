@@ -54,6 +54,16 @@ namespace GameLogic.Tests
                     Assert.AreEqual(0.05f, bullet.HitRadius);
                     continue;
                 }
+                if (row.Id == 1603 || row.Id == 1604)
+                {
+                    Assert.AreEqual("JuiceBullet", bullet.Prefab);
+                    Assert.AreEqual(BulletFlightType.Parabolic, bullet.FlightType);
+                    Assert.AreEqual(row.Id == 1603, bullet.TrackTarget);
+                    Assert.AreEqual(row.Id == 1603 ? BulletHitMode.LockedTarget : BulletHitMode.AreaAtLanding, bullet.HitMode);
+                    Assert.AreEqual(row.Id == 1603 ? 0.6f : 0.7f, bullet.FlightTime);
+                    Assert.AreEqual(row.Id == 1603 ? 1f : 1.2f, bullet.ArcHeight);
+                    continue;
+                }
                 Assert.AreEqual("RobotBullet", bullet.Prefab);
                 if (row.Id == 1501 || row.Id == 1502)
                 {

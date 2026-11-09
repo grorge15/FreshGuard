@@ -46,11 +46,13 @@ namespace GameLogic
             {
                 if (!requiredBuffs.Contains(row.Id) && !(needsSlow && row.BehaviorKey == "slow") &&
                     !(needsPoison && row.BehaviorKey == "poison")) continue;
-                if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "chain_cycle")
+                if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "chain_cycle" && row.BehaviorKey != "juice_charge")
                     throw new InvalidOperationException("启用技能引用了未知Buff行为：" + row.Id + "/" + row.BehaviorKey);
                 if (row.BehaviorKey == "chain_cycle" && (row.MaxStacks != 1 || row.TriggerSkillId != 0))
                     throw new InvalidOperationException("攻击循环被动必须单实例且不触发其他技能：" + row.Id);
-                catalog.Add(new BuffModel(row.Id, row.BehaviorKey, row.MaxStacks, row.Priority, row.TickInterval));
+                if (row.BehaviorKey == "juice_charge" && (row.MaxStacks != 1 || row.TriggerSkillId <= 0))
+                    throw new InvalidOperationException("蓄汁被动需要单实例与触发技能：" + row.Id);
+                catalog.Add(new BuffModel(row.Id, row.BehaviorKey, row.MaxStacks, row.Priority, row.TickInterval, row.TriggerSkillId));
                 if (row.BehaviorKey == "slow")
                 {
                     if (slowBuffId != 0) throw new InvalidOperationException("当前Slow字段必须对应唯一减速Buff。");
@@ -106,7 +108,9 @@ namespace GameLogic
                     { "poisonInterval", row.PoisonInterval }, { "poisonMaxLayers", row.PoisonMaxLayers },
                     { "attackCycleCount", row.AttackCycleCount }, { "chainBulletId", row.ChainBulletId },
                     { "chainTargetCount", row.ChainTargetCount }, { "chainRange", row.ChainRange },
-                    { "chainDamageRatio", row.ChainDamageRatio }
+                    { "chainDamageRatio", row.ChainDamageRatio },
+                    { "juiceRequired", row.JuiceRequired }, { "dropCount", row.DropCount },
+                    { "dropSpacing", row.DropSpacing }, { "splashRadius", row.SplashRadius }
                 };
                 catalog.Add(new SkillLevelModel(row.SkillId, row.Level, parameters,
                     CaptureHitBuffs(slowBuffId, poisonBuffId, row.SkillId, parameters),
@@ -118,27 +122,35 @@ namespace GameLogic
                 for (var level = 1; level <= row.MaxLevel; level++)
                     if (!catalog.TryGetLevel(row.Id, level, out _)) throw new InvalidOperationException("缺少技能等级：" + row.Id + "/" + level);
                 foreach (var id in row.PassiveBuffIds)
-                    if (!catalog.TryGetBuff(id, out _)) throw new InvalidOperationException("缺少被动Buff：" + id);
+                {
+                    if (!catalog.TryGetBuff(id, out var passive)) throw new InvalidOperationException("缺少被动Buff：" + id);
+                    if (passive.TriggerSkillId > 0 && !catalog.TryGet(passive.TriggerSkillId, out _))
+                        throw new InvalidOperationException("缺少启用的被动触发技能：" + passive.TriggerSkillId);
+                }
             }
             return catalog;
         }
 
         private static void ValidateBullet(Bullet row)
         {
-            if (row.BehaviorKey != "direct" && row.BehaviorKey != "chain")
+            if (row.BehaviorKey != "direct" && row.BehaviorKey != "chain" && row.BehaviorKey != "splash")
                 throw new InvalidOperationException("启用技能引用了未知弹丸行为：" + row.Id + "/" + row.BehaviorKey);
             var validParabolic = row.FlightType == BulletFlightType.Parabolic && row.TrackTarget &&
                 row.HitMode == BulletHitMode.LockedTarget && row.FlightTime > 0f;
             var validStraight = row.FlightType == BulletFlightType.Straight && !row.TrackTarget &&
                 (row.HitMode == BulletHitMode.FirstEnemy || row.HitMode == BulletHitMode.PierceEnemies) && row.Speed > 0f;
+            var validLanding = row.FlightType == BulletFlightType.Parabolic && !row.TrackTarget &&
+                row.HitMode == BulletHitMode.AreaAtLanding && row.FlightTime > 0f && row.BehaviorKey == "splash";
             if (row.Id <= 0 || string.IsNullOrWhiteSpace(row.Prefab) ||
                 !EntityValidation.IsFiniteNonNegative(row.Speed) || !EntityValidation.IsFiniteNonNegative(row.FlightTime) ||
                 !EntityValidation.IsFiniteNonNegative(row.ArcHeight) || !EntityValidation.IsFiniteNonNegative(row.HitRadius) ||
-                (!validParabolic && !validStraight))
+                (!validParabolic && !validStraight && !validLanding))
                 throw new InvalidOperationException("弹丸配置或轨迹命中组合无效：" + row.Id);
             if (row.BehaviorKey == "chain" && (!validStraight || row.HitMode != BulletHitMode.FirstEnemy ||
                 string.IsNullOrWhiteSpace(row.HitEffectPrefab)))
                 throw new InvalidOperationException("闪电链必须使用直线首次碰敌弹与命中特效：" + row.Id);
+            if (row.BehaviorKey == "splash" && (!validLanding || string.IsNullOrWhiteSpace(row.HitEffectPrefab)))
+                throw new InvalidOperationException("范围弹需要固定落点及落地表现：" + row.Id);
         }
 
         private static bool HasPoison(GameConfig.skill.SkillLevel row)
@@ -147,6 +159,13 @@ namespace GameLogic
 
         private static void ValidateRobotLevel(GameConfig.skill.SkillLevel row, SkillModel skill, SkillCatalog catalog)
         {
+            if (row.SkillId == 1603 && row.JuiceRequired < 1)
+                throw new InvalidOperationException("蓄汁数量至少为1：" + row.Id);
+            if (skill.TimelineKey == "robot.juice" && (skill.TargetRule != SkillTargetRule.SameSidePosition ||
+                row.DropCount < 1 || !EntityValidation.IsFiniteNonNegative(row.DropSpacing) || row.DropSpacing <= 0f ||
+                !EntityValidation.IsFiniteNonNegative(row.SplashRadius) || row.SplashRadius <= 0f ||
+                !catalog.TryGetBullet(skill.BulletId, out var juice) || juice.BehaviorKey != "splash"))
+                throw new InvalidOperationException("果汁轰炸参数无效：" + row.Id);
             if (row.ScatterCount < 0 || row.PierceTargetCount < 0 || row.BurstCount < 0 ||
                 !EntityValidation.IsFiniteNonNegative(row.ScatterAngle) || row.ScatterAngle > 360f ||
                 !EntityValidation.IsFiniteNonNegative(row.BurstInterval) ||

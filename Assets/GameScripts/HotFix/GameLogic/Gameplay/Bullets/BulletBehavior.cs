@@ -13,7 +13,9 @@ namespace GameLogic
     public sealed class BulletHitContext
     {
         public BulletState Bullet { get; }
-        public int TargetId { get; }
+        public int? TargetId { get; }
+        public Vector3 HitPosition => Bullet.Position;
+        public float SplashRadius { get; }
         public ProjectileAttackSnapshot Attack { get; }
         public CombatRuntime Combat { get; }
         public IProjectileWorld World { get; }
@@ -21,11 +23,17 @@ namespace GameLogic
         public Action<IReadOnlyList<Vector3>> Present { get; }
         public BulletHitContext(BulletState bullet, int targetId, ProjectileAttackSnapshot attack,
             CombatRuntime combat, IProjectileWorld world, ChainBulletSnapshot chain = null,
-            Action<IReadOnlyList<Vector3>> present = null)
+            Action<IReadOnlyList<Vector3>> present = null, float splashRadius = 0f)
         {
             Bullet = bullet ?? throw new ArgumentNullException(nameof(bullet));
-            EntityValidation.RequirePositive(targetId, nameof(targetId));
-            TargetId = targetId;
+            if (bullet.Launcher.Model.HitMode == GameConfig.bullet.BulletHitMode.AreaAtLanding)
+            {
+                if (targetId != 0) throw new ArgumentException("位置命中不应携带实体ID。", nameof(targetId));
+                TargetId = null;
+            }
+            else { EntityValidation.RequirePositive(targetId, nameof(targetId)); TargetId = targetId; }
+            EntityValidation.RequireFiniteNonNegative(splashRadius, nameof(splashRadius));
+            SplashRadius = splashRadius;
             Attack = attack ?? throw new ArgumentNullException(nameof(attack));
             Combat = combat ?? throw new ArgumentNullException(nameof(combat));
             World = world ?? throw new ArgumentNullException(nameof(world));
@@ -41,6 +49,7 @@ namespace GameLogic
         {
             Register("direct", () => new DirectBulletBehavior());
             Register("chain", () => new ChainBulletBehavior());
+            Register("splash", () => new SplashBulletBehavior());
         }
         public void Register(string key, Func<IBulletBehavior> factory)
         {
@@ -60,7 +69,7 @@ namespace GameLogic
         public void OnHit(BulletHitContext context)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
-            context.Combat.ResolveProjectileHit(context.Attack, context.TargetId);
+            context.Combat.ResolveProjectileHit(context.Attack, context.TargetId ?? throw new InvalidOperationException("普通弹缺少目标。"));
         }
     }
 
@@ -73,12 +82,12 @@ namespace GameLogic
             var world = context.World;
             var action = context.Attack.Action;
             if (!world.IsValid(action.BattleId) || !world.IsRunning ||
-                !world.TryGetPosition(action.SourceSide, context.TargetId, out var position) ||
+                !context.TargetId.HasValue || !world.TryGetPosition(action.SourceSide, context.TargetId.Value, out var position) ||
                 !context.Attack.TryBeginChain()) return;
 
-            var ids = new List<int> { context.TargetId };
+            var ids = new List<int> { context.TargetId.Value };
             var positions = new List<Vector3> { position };
-            var selected = new HashSet<int> { context.TargetId };
+            var selected = new HashSet<int> { context.TargetId.Value };
             // 世界查询返回共享缓存也可安全使用：所有选择都先于任意扣血回调。
             var candidates = world.GetTargets(action.SourceSide);
             var rangeSquared = (double)chain.Range * chain.Range;
@@ -106,6 +115,33 @@ namespace GameLogic
             var frozenPositions = positions.AsReadOnly();
             context.Combat.ResolveChainHit(context.Attack, ids, chain.DamageRatio);
             context.Present?.Invoke(frozenPositions);
+        }
+    }
+
+    public sealed class SplashBulletBehavior : IBulletBehavior
+    {
+        public void OnHit(BulletHitContext context)
+        {
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            var action = context.Attack.Action;
+            if (context.TargetId.HasValue || context.SplashRadius <= 0f ||
+                !context.World.IsValid(action.BattleId) || !context.World.IsRunning || !context.Attack.TryBeginSplash()) return;
+            var ids = new SortedSet<int>();
+            var center = context.HitPosition;
+            var radiusSquared = (double)context.SplashRadius * context.SplashRadius;
+            var candidates = context.World.GetTargets(action.SourceSide);
+            if (candidates != null) foreach (var candidate in candidates)
+            {
+                if (!context.World.TryGetPosition(action.SourceSide, candidate.InstanceId, out var position)) continue;
+                var dx = (double)position.x - center.x; var dy = (double)position.y - center.y;
+                if (dx * dx + dy * dy <= radiusSquared) ids.Add(candidate.InstanceId);
+            }
+            foreach (var id in ids)
+            {
+                if (!context.World.IsValid(action.BattleId) || !context.World.IsRunning) break;
+                context.Combat.ResolveProjectileHit(context.Attack, id);
+            }
+            context.Present?.Invoke(new[] { center });
         }
     }
 }
