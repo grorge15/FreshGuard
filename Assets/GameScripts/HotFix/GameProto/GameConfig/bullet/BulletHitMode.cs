@@ -28,6 +28,10 @@ namespace GameConfig.bullet
         /// 穿透不同敌人
         /// </summary>
         PierceEnemies = 2,
+        /// <summary>
+        /// 固定落点到达后做范围判定
+        /// </summary>
+        AreaAtLanding = 3,
     }
 
 } 

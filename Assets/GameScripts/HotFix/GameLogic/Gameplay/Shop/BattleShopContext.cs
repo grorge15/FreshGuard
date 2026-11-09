@@ -54,14 +54,27 @@ namespace GameLogic
 
         public BattleShopContext(ShopRules rules, IReadOnlyList<int> playerCandidates,
             IReadOnlyList<int> opponentCandidates, Func<int, Robot> robotResolver, IShopRandom random = null,
-            MatchEntrySnapshot entry = null)
+            MatchEntrySnapshot entry = null, Func<int, bool> isRobotEnabled = null)
         {
             Rules = rules ?? throw new ArgumentNullException(nameof(rules));
             Entry = entry;
             if (robotResolver == null) throw new ArgumentNullException(nameof(robotResolver));
             _random = random ?? new ShopRandom();
-            _candidates = new[] { CopyCandidates(entry?.Candidates ?? playerCandidates), CopyCandidates(entry?.Candidates ?? opponentCandidates) };
-            _slotWeights = new[] { MapSlotWeights(_candidates[0]), MapSlotWeights(_candidates[1]) };
+            var originals = new[] { CopyCandidates(entry?.Candidates ?? playerCandidates), CopyCandidates(entry?.Candidates ?? opponentCandidates) };
+            _candidates = new int[2][];
+            _slotWeights = new Dictionary<int, double>[2][];
+            for (var side = 0; side < 2; side++)
+            {
+                var filtered = new List<int>(); var ordinals = new Dictionary<int,int>();
+                for (var i = 0; i < originals[side].Length; i++)
+                {
+                    var id = originals[side][i];
+                    if (isRobotEnabled != null && !isRobotEnabled(id)) continue;
+                    filtered.Add(id); ordinals.Add(id, i);
+                }
+                _candidates[side] = CopyCandidates(filtered);
+                _slotWeights[side] = MapSlotWeights(_candidates[side], ordinals);
+            }
             foreach (var candidates in _candidates)
                 foreach (var id in candidates)
                     if (!_configs.ContainsKey(id))
@@ -394,7 +407,7 @@ namespace GameLogic
             return copy;
         }
 
-        private Dictionary<int, double>[] MapSlotWeights(int[] candidates)
+        private Dictionary<int, double>[] MapSlotWeights(int[] candidates, IReadOnlyDictionary<int,int> ordinals)
         {
             var slots = new Dictionary<int, double>[Rules.SlotCount];
             for (var slot = 0; slot < slots.Length; slot++)
@@ -403,7 +416,7 @@ namespace GameLogic
                 var hasPositive = false;
                 for (var index = 0; index < candidates.Length; index++)
                 {
-                    var ordinal = Entry == null ? index : Entry.CandidateOrdinals[candidates[index]];
+                    var ordinal = Entry == null ? ordinals[candidates[index]] : Entry.CandidateOrdinals[candidates[index]];
                     var weight = Rules.GetCandidateWeight(slot, ordinal, candidates[index]);
                     weights.Add(candidates[index], weight);
                     hasPositive |= weight > 0;

@@ -95,6 +95,8 @@ namespace GameLogic.Tests
                 Assert.AreEqual(SkillCastFailure.NotAllowed, _battle.Skills.TryCast(new SkillCastRequest(_source.OwnerRef, 1507,
                     SkillTriggerSource.Button, SkillTarget.None)).Failure);
                 _battle.AddBuff(_target, _slow, _source.OwnerRef, 3);
+                _battle.Buffs.Submit(new AddBuffInfo(_slow, _source.OwnerRef, _target.OwnerRef, 3, true));
+                _target.Buffs.Add(_slow, _source.OwnerRef, 3);
                 Assert.AreEqual(DamageResult.Ignored,
                     _battle.Combat.ResolvePeriodicDamage(_source.OwnerRef, _target.OwnerRef, 1507, 100).DamageResult);
             };
@@ -131,7 +133,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, _target.Buffs.Count);
             Assert.AreEqual(1000, _target.CurrentHp);
             if (poison) { _target.Buffs.Advance(1); Assert.AreEqual(990, _target.CurrentHp); }
-            else Assert.That(_target.EffectiveSpeed, Is.EqualTo(0.7f).Within(0.00001));
+            else Assert.That(_target.MoveSpeed, Is.EqualTo(0.7f).Within(0.00001));
         }
 
         [Test]

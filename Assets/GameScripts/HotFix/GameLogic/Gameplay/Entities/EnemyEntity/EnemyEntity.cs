@@ -14,24 +14,12 @@ namespace GameLogic
         public int MaxHp { get; private set; }
         public int CurrentHp { get; private set; }
         public float BaseSpeed { get; private set; }
+        public float MoveSpeed { get; private set; }
         public float RouteProgress { get; private set; }
         public Enemy Configuration { get; private set; }
         public int Cycle { get; private set; }
         public bool IsAlive => !IsRemoved && CurrentHp > 0;
         public override bool CanCast => IsAlive;
-        public float EffectiveSpeed
-        {
-            get
-            {
-                var slow = 0f;
-                // 配置语义是“实际承受控制的比例”，1表示完整承受，0表示免疫。
-                var receivedControl = Math.Max(0f, Math.Min(1f, Configuration?.ControlResist ?? 1f));
-                foreach (var buff in Buffs.Items)
-                    if (buff.Model.BehaviorKey == "slow" && buff.Remaining > 0f)
-                        slow = Math.Max(slow, buff.Get("slow") * receivedControl);
-                return BaseSpeed * Math.Max(0.5f, 1f - slow);
-            }
-        }
 
         // MemoryPool.Acquire<T>() requires a public parameterless constructor.
         public EnemyEntity() { }
@@ -44,7 +32,15 @@ namespace GameLogic
             MaxHp = maxHp;
             CurrentHp = maxHp;
             BaseSpeed = baseSpeed;
+            MoveSpeed = baseSpeed;
             RouteProgress = 0f;
+        }
+
+        // 行为负责属性变化规则；实体只校验并保存当前值。
+        internal void SetMoveSpeed(float speed)
+        {
+            EntityValidation.RequireFiniteNonNegative(speed, nameof(speed));
+            MoveSpeed = speed;
         }
 
         internal void InitializeFromConfig(int instanceId, Enemy config, BattleSide side, int cycle)
@@ -72,6 +68,7 @@ namespace GameLogic
             MaxHp = 0;
             CurrentHp = 0;
             BaseSpeed = 0f;
+            MoveSpeed = 0f;
             RouteProgress = 0f;
             Configuration = null;
             Cycle = 0;

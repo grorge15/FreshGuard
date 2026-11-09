@@ -16,7 +16,7 @@ namespace GameLogic.Tests
         [TestCase(2001)]
         [TestCase(2002)]
         [TestCase(2003)]
-        public void ConfirmedKillPresentsOnceAtCapturedPositionAfterConfiguredRewardIsCredited(int configId)
+        public void ConfirmedKillPresentsOnceForPositiveConfiguredRewardAndNeverForZero(int configId)
         {
             var config = LoadTables().TbEnemy.Get(configId);
             var origin = new Vector3(2f, -3f, 0f);
@@ -42,7 +42,9 @@ namespace GameLogic.Tests
                     Resolve(context, id, BattleSide.Player);
                     Resolve(context, id, BattleSide.Player);
                     adapter.Advance();
-                    Assert.AreEqual(1, count);
+                    Assert.AreEqual(config.EnemyKillSP > 0 ? 1 : 0, count);
+                    Assert.AreEqual(20 + config.EnemyKillSP, context.GetState(BattleSide.Player).EnergyCoins);
+                    Assert.AreEqual(20, context.GetState(BattleSide.Opponent).EnergyCoins);
                 }
                 finally { GameEvent.RemoveEventListener(BattleRewardAdapter.CURRENCY_FLIGHT_EVENT, onFlight); }
             }
@@ -51,7 +53,7 @@ namespace GameLogic.Tests
         [Test]
         public void DeferredFlightKeepsDeathPositionAfterEnemyPoolReuseAndWaitsForSuccessfulCredit()
         {
-            var config = LoadTables().TbEnemy.Get(2001);
+            var config = LoadTables().TbEnemy.Get(2002);
             var origin = new Vector3(4f, -2f, 0f);
             var expected = origin;
             var reads = 0;
@@ -73,8 +75,8 @@ namespace GameLogic.Tests
                 {
                     count++;
                     Assert.AreEqual(expected, flight.WorldOrigin);
-                    Assert.AreEqual(1, flight.IconCount);
-                    Assert.AreEqual(16, context.GetState(BattleSide.Player).EnergyCoins);
+                    Assert.AreEqual(5, flight.IconCount);
+                    Assert.AreEqual(20, context.GetState(BattleSide.Player).EnergyCoins);
                 };
                 GameEvent.AddEventListener(BattleShopEvents.Changed, onChanged);
                 GameEvent.AddEventListener(BattleRewardAdapter.CURRENCY_FLIGHT_EVENT, onFlight);
@@ -98,7 +100,7 @@ namespace GameLogic.Tests
         [TestCase(true)]
         public void PendingKillFlightIsDiscardedOnDisposeOrBattleEnd(bool endBattle)
         {
-            var config = LoadTables().TbEnemy.Get(2001);
+            var config = LoadTables().TbEnemy.Get(2002);
             using (var context = ShopTestData.Context())
             using (var adapter = new BattleRewardAdapter(context, (side, id) => Vector3.one))
             {
@@ -124,7 +126,7 @@ namespace GameLogic.Tests
             }
         }
 
-        [TestCase(2001, 1)]
+        [TestCase(2001, 0)]
         [TestCase(2002, 5)]
         [TestCase(2003, 20)]
         public void ConfiguredKillAwardsOnlyTheBattlefieldSideOnce(int configId, int coins)
@@ -148,7 +150,7 @@ namespace GameLogic.Tests
                     Resolve(context, id, BattleSide.Player);
                     adapter.Advance();
                     Assert.AreEqual(before + coins, context.GetState(BattleSide.Player).EnergyCoins);
-                    Assert.AreEqual(1, notified);
+                    Assert.AreEqual(coins > 0 ? 1 : 0, notified);
                 }
                 finally { GameEvent.RemoveEventListener<int>(BattleShopEvents.Changed, onChanged); }
             }
@@ -157,7 +159,7 @@ namespace GameLogic.Tests
         [Test]
         public void OpponentKillAndLeakDoNotCreditPlayer()
         {
-            var config = LoadTables().TbEnemy.Get(2001);
+            var config = LoadTables().TbEnemy.Get(2002);
             using (var context = ShopTestData.Context())
             using (var adapter = new BattleRewardAdapter(context))
             {
@@ -166,7 +168,7 @@ namespace GameLogic.Tests
                 var leaked = context.Registry.CreateEnemyFromConfig(config, BattleSide.Player);
                 context.Registry.Remove(leaked, EntityRemovalReason.Leaked, out _);
                 adapter.Advance();
-                Assert.AreEqual(21, context.GetState(BattleSide.Opponent).EnergyCoins);
+                Assert.AreEqual(25, context.GetState(BattleSide.Opponent).EnergyCoins);
                 Assert.AreEqual(20, context.GetState(BattleSide.Player).EnergyCoins);
             }
         }
@@ -174,7 +176,7 @@ namespace GameLogic.Tests
         [Test]
         public void KillDuringShopNotificationIsRetriedFromSnapshotAfterPoolReuse()
         {
-            var config = LoadTables().TbEnemy.Get(2001);
+            var config = LoadTables().TbEnemy.Get(2002);
             using (var context = ShopTestData.Context())
             using (var adapter = new BattleRewardAdapter(context))
             {
@@ -192,7 +194,7 @@ namespace GameLogic.Tests
                 finally { GameEvent.RemoveEventListener<int>(BattleShopEvents.Changed, onChanged); }
                 Assert.AreEqual(15, context.GetState(BattleSide.Player).EnergyCoins);
                 adapter.Advance(); adapter.Advance();
-                Assert.AreEqual(16, context.GetState(BattleSide.Player).EnergyCoins);
+                Assert.AreEqual(20, context.GetState(BattleSide.Player).EnergyCoins);
                 Assert.AreEqual(20, context.GetState(BattleSide.Opponent).EnergyCoins);
             }
         }
@@ -200,7 +202,7 @@ namespace GameLogic.Tests
         [Test]
         public void DisposedAdapterDoesNotGrantOrRetainPendingKill()
         {
-            var config = LoadTables().TbEnemy.Get(2001);
+            var config = LoadTables().TbEnemy.Get(2002);
             using (var context = ShopTestData.Context())
             {
                 var adapter = new BattleRewardAdapter(context);
@@ -216,7 +218,7 @@ namespace GameLogic.Tests
         [TestCase(true)]
         public void DeferredKillIsDiscardedOnDisposeOrBattleEnd(bool endBattle)
         {
-            var config = LoadTables().TbEnemy.Get(2001);
+            var config = LoadTables().TbEnemy.Get(2002);
             using (var context = ShopTestData.Context())
             using (var adapter = new BattleRewardAdapter(context))
             {
@@ -236,7 +238,7 @@ namespace GameLogic.Tests
         public void ZeroConfiguredRewardDoesNotAddCoinsOrNotifyShop()
         {
             var config = LoadTables().TbEnemy.Get(2001);
-            config.GetType().GetField("EnemyKillSP").SetValue(config, 0);
+            Assert.AreEqual(0, config.EnemyKillSP, "当前普通骷髅源配置为零奖励。");
             using (var context = ShopTestData.Context())
             using (var adapter = new BattleRewardAdapter(context, (side, id) => Vector3.one))
             {

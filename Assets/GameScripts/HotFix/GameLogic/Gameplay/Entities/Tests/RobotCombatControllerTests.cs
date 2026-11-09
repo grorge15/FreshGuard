@@ -294,7 +294,7 @@ namespace GameLogic.Tests
             _combat.SyncRobots();
             _combat.Dispose();
             var late = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Bullets/Prefabs/RobotBullet.prefab"));
+                "Assets/AssetRaw/Actor/Prefabs/bullets/RobotBullet.prefab"));
             pending.TrySetResult(late);
             Assert.IsTrue(late == null);
             Assert.AreEqual(0, _combat.LiveBulletCount);
@@ -371,7 +371,7 @@ namespace GameLogic.Tests
             Assert.IsFalse(Contact(robot));
             Assert.AreEqual(0f, robot.TriggerCooldownRemaining);
             var ready = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Bullets/Prefabs/RobotBullet.prefab"), _f.Root.transform);
+                "Assets/AssetRaw/Actor/Prefabs/bullets/RobotBullet.prefab"), _f.Root.transform);
             delay = false; pending.TrySetResult(ready);
             _combat.AdvanceAttacks(1f);
             Assert.AreEqual(0, _combat.LiveBulletCount);
@@ -449,14 +449,14 @@ namespace GameLogic.Tests
             _combat.AdvanceExistingBullets(0.6f);
             _f.Context.Registry.TryGet(target,out var entity); var enemy=(EnemyEntity)entity;
             Assert.AreEqual(80,enemy.CurrentHp); Assert.AreEqual(1,enemy.Buffs.Count);
-            Assert.That(enemy.EffectiveSpeed,Is.EqualTo(enemy.BaseSpeed*0.7f).Within(0.00001f));
+            Assert.That(enemy.MoveSpeed,Is.EqualTo(enemy.BaseSpeed*0.7f).Within(0.00001f));
             enemy.Buffs.Advance(1f); _f.Context.Registry.AdvanceTime(0.2f);
             Assert.IsTrue(Contact(frost)); _combat.AdvanceExistingBullets(0.6f);
             Assert.AreEqual(1,enemy.Buffs.Count); Assert.AreEqual(3f,enemy.Buffs.Items[0].Remaining);
             Assert.IsTrue(Contact(second)); _combat.AdvanceExistingBullets(0.6f);
             Assert.AreEqual(2,enemy.Buffs.Count); Assert.AreEqual(40,enemy.CurrentHp);
-            Assert.That(enemy.EffectiveSpeed,Is.EqualTo(enemy.BaseSpeed*0.7f).Within(0.00001f));
-            enemy.Buffs.Advance(3f); Assert.AreEqual(0,enemy.Buffs.Count); Assert.AreEqual(enemy.BaseSpeed,enemy.EffectiveSpeed);
+            Assert.That(enemy.MoveSpeed,Is.EqualTo(enemy.BaseSpeed*0.7f).Within(0.00001f));
+            enemy.Buffs.Advance(3f); Assert.AreEqual(0,enemy.Buffs.Count); Assert.AreEqual(enemy.BaseSpeed,enemy.MoveSpeed);
         }
 
         [TestCase(0.6f, 6f)]
@@ -606,7 +606,7 @@ namespace GameLogic.Tests
         {
             token.ThrowIfCancellationRequested();
             return UniTask.FromResult(UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Bullets/Prefabs/" + name + ".prefab"), parent));
+                "Assets/AssetRaw/Actor/Prefabs/bullets/" + name + ".prefab"), parent));
         }
 
         private RobotEntity AddRobot(int level = 1, BattleSide side = BattleSide.Player, int configId = 501)
@@ -615,7 +615,7 @@ namespace GameLogic.Tests
             var robot = _f.Context.Registry.CreateRobotFromConfig(config, side, level);
             robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
             var go = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab"), _f.Root.transform);
+                "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab"), _f.Root.transform);
             go.GetComponent<RobotView>().Bind(_f.Context.Registry, robot.InstanceId);
             _views.Add(robot.InstanceId, go);
             return robot;

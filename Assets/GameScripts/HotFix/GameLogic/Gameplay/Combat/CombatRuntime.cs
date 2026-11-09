@@ -86,6 +86,31 @@ namespace GameLogic
             return ResolveTarget(action, targetId);
         }
 
+        /// <summary>序列先由弹丸锁定；逐跳独立缩放原攻击，不再次触发OnAttack或累计取整。</summary>
+        public IReadOnlyList<CombatTargetResolution> ResolveChainHit(ProjectileAttackSnapshot projectile,
+            IReadOnlyList<int> targetIds, float damageRatio)
+        {
+            ThrowIfDisposed();
+            if (projectile == null) throw new ArgumentNullException(nameof(projectile));
+            if (targetIds == null) throw new ArgumentNullException(nameof(targetIds));
+            EntityValidation.RequireFiniteNonNegative(damageRatio, nameof(damageRatio));
+            if (damageRatio <= 0f || damageRatio > 1f) throw new ArgumentOutOfRangeException(nameof(damageRatio));
+            var action = projectile.Action;
+            if (action.BattleId != BattleId || !ReferenceEquals(action.Owner, _owner))
+                throw new InvalidOperationException("投射物攻击不属于当前对局。");
+            // 防止逐目标回调修改调用方传入的序列。
+            var lockedTargets = new List<int>(targetIds);
+            var results = new List<CombatTargetResolution>(lockedTargets.Count);
+            for (var i = 0; i < lockedTargets.Count; i++)
+            {
+                var id = lockedTargets[i];
+                if (!AllowsGameplayTriggers || !Active || !TryGetTarget(action, id, out _) || !projectile.TryConsume(id))
+                    results.Add(new CombatTargetResolution(id, 0, DamageResult.Ignored));
+                else results.Add(ResolveTarget(action, id, Math.Pow(damageRatio, i)));
+            }
+            return results.AsReadOnly();
+        }
+
         /// <summary>后续伤害只发事实通知，不经过攻击/受伤/击杀玩法钩子。</summary>
         public CombatTargetResolution ResolvePeriodicDamage(SkillOwnerRef source, SkillOwnerRef target, int skillId, int damage)
         {
@@ -118,14 +143,14 @@ namespace GameLogic
             finally { _followUpDepth--; _resolving.Remove(id); }
         }
 
-        private CombatTargetResolution ResolveTarget(CombatActionSnapshot action, int id)
+        private CombatTargetResolution ResolveTarget(CombatActionSnapshot action, int id, double damageMultiplier = 1d)
         {
             var ignored = new CombatTargetResolution(id, 0, DamageResult.Ignored);
             if (!TryGetTarget(action, id, out var enemy) || !_resolving.Add(id)) return ignored;
             try
             {
                 var reference = enemy.OwnerRef;
-                var context = new CombatDamageContext(new CombatOutcomeDraft(action, new[] { id }), reference);
+                var context = new CombatDamageContext(new CombatOutcomeDraft(action, new[] { id }, damageMultiplier), reference);
                 DispatchSource(action, buffs => buffs.OnHit(context, () => Active));
                 if (!TryGetTarget(action, id, out enemy)) return ignored;
                 enemy.Buffs.OnBeHurt(context, () => Active);
@@ -171,7 +196,8 @@ namespace GameLogic
                 if (!TryGetTarget(action, id, out var enemy, true) || !enemy.OwnerRef.Equals(reference)) break;
                 if (!_battle.Catalog.TryGetBuff(effect.BuffId, out var model))
                     throw new InvalidOperationException("命中效果引用了未配置Buff：" + effect.BuffId);
-                _battle.AddBuff(enemy, model, source, effect.Duration, effect.Parameters);
+                _battle.Buffs.Submit(new AddBuffInfo(model, source, reference, effect.Duration,
+                    durationSetTo: true, param: effect.Parameters));
             }
         }
 

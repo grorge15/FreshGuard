@@ -27,21 +27,24 @@ namespace GameLogic
         public SkillOwnerRef Source { get; }
         public int Stacks { get; internal set; } = 1;
         public float Remaining { get => (float)TimeRemaining; internal set => TimeRemaining = value; }
+        public bool IsPermanent => double.IsPositiveInfinity(TimeRemaining);
         internal double TimeRemaining;
-        public double TickInterval { get; }
+        public double TickInterval { get; internal set; }
         public double NextTickRemaining { get; internal set; }
         public double RemainingTickCount => TickInterval <= 0d || NextTickRemaining > TimeRemaining + TimeTolerance
             ? 0d : Math.Max(0d, 1d + Math.Floor((TimeRemaining - NextTickRemaining + TimeTolerance) / TickInterval));
-        public double RemainingPoisonDamage => Get("poisonDamage") * RemainingTickCount;
         public IReadOnlyDictionary<string, float> Parameters { get; internal set; }
         internal long Order;
         internal IBuffBehavior Behavior;
         internal BuffObj(BuffModel model, SkillOwnerRef source, float duration,
-            IReadOnlyDictionary<string, float> parameters, IBuffBehavior behavior)
+            IReadOnlyDictionary<string, float> parameters, IBuffBehavior behavior, int stacks = 1)
         {
-            Model = model; Source = source; Remaining = duration; Behavior = behavior;
+            Model = model; Source = source; Remaining = duration; Behavior = behavior; Stacks = stacks;
             Parameters = Copy(parameters);
-            TickInterval = model.BehaviorKey == "poison" ? Get("poisonInterval") : model.TickInterval;
+            TickInterval = model.TickInterval;
+            Behavior.OnCreate(this);
+            if (double.IsNaN(TickInterval) || double.IsInfinity(TickInterval) || TickInterval < 0d)
+                throw new ArgumentOutOfRangeException(nameof(TickInterval));
             NextTickRemaining = TickInterval;
         }
         internal static IReadOnlyDictionary<string, float> Copy(IReadOnlyDictionary<string, float> values)
@@ -58,10 +61,14 @@ namespace GameLogic
     }
     public interface IBuffBehavior
     {
+        // 候选实例创建时只初始化/校验数据；应用被拒绝时不会触发OnOccur。
+        void OnCreate(BuffObj buff);
+        BuffApplyDecision SelectApplication(BuffContainer container, BuffObj incoming);
         void OnOccur(BuffContainer container, BuffObj buff);
         void OnRemoved(BuffContainer container, BuffObj buff);
         void OnTick(BuffContainer container, BuffObj buff);
         void OnCast(BuffContainer container, BuffObj buff, SkillCastContext context);
+        void OnAttackLaunched(BuffContainer container, BuffObj buff, SkillCastSnapshot cast);
         void OnAttack(BuffContainer container, BuffObj buff, CombatOutcomeDraft attack);
         void OnHit(BuffContainer container, BuffObj buff, CombatDamageContext context);
         void OnBeHurt(BuffContainer container, BuffObj buff, CombatDamageContext context);
@@ -70,10 +77,17 @@ namespace GameLogic
     }
     public class BuffBehavior : IBuffBehavior
     {
+        public virtual void OnCreate(BuffObj buff) { }
+        public virtual BuffApplyDecision SelectApplication(BuffContainer container, BuffObj incoming)
+        {
+            var existing = container.Find(incoming.Model.Id, incoming.Source);
+            return existing == null ? BuffApplyDecision.Add : BuffApplyDecision.Refresh(existing);
+        }
         public virtual void OnOccur(BuffContainer container, BuffObj buff) { }
         public virtual void OnRemoved(BuffContainer container, BuffObj buff) { }
         public virtual void OnTick(BuffContainer container, BuffObj buff) { }
         public virtual void OnCast(BuffContainer container, BuffObj buff, SkillCastContext context) { }
+        public virtual void OnAttackLaunched(BuffContainer container, BuffObj buff, SkillCastSnapshot cast) { }
         public virtual void OnAttack(BuffContainer container, BuffObj buff, CombatOutcomeDraft attack) { }
         public virtual void OnHit(BuffContainer container, BuffObj buff, CombatDamageContext context) { }
         public virtual void OnBeHurt(BuffContainer container, BuffObj buff, CombatDamageContext context) { }

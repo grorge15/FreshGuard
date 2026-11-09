@@ -25,7 +25,7 @@ namespace GameLogic.Tests
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             var config = tables.TbRobot.Get(configId);
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab");
+                "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab");
             using (var registry = new BattleEntityRegistry())
             {
                 var robot = registry.CreateRobotFromConfig(config, BattleSide.Player);
@@ -39,18 +39,18 @@ namespace GameLogic.Tests
                     Assert.IsNotNull(iconNode, "盘面必须实际显示新 Icon，不能只替换商店资源。");
                     var icon = iconNode.GetComponent<SpriteRenderer>();
                     Assert.AreSame(AssetDatabase.LoadAssetAtPath<Sprite>(
-                        "Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png"), icon.sprite);
+                        "Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png"), icon.sprite);
                     var portrait = instance.transform.Find("RobotPortrait").GetComponent<SpriteRenderer>();
                     var frame = instance.transform.Find("RobotLevelFrame").GetComponent<SpriteRenderer>();
                     Assert.AreSame(AssetDatabase.LoadAssetAtPath<Sprite>(
-                        "Assets/AssetRaw/Actor/Robots/LevelFrames/" + RobotLevelStyle.FrameForIcon(config.RobotIcon) + ".png"), frame.sprite);
+                        "Assets/AssetRaw/Actor/Sprites/Robots/LevelFrames/" + RobotLevelStyle.FrameForIcon(config.RobotIcon) + ".png"), frame.sprite);
                     Assert.AreEqual(icon.sprite.pivot, frame.sprite.pivot);
                     Assert.AreEqual(icon.sprite.rect, frame.sprite.rect);
                     Assert.AreEqual(icon.sprite.pixelsPerUnit, frame.sprite.pixelsPerUnit);
                     Assert.Greater(frame.sortingOrder, icon.sortingOrder);
                     Assert.Less(frame.sortingOrder, portrait.sortingOrder);
                     Assert.AreSame(AssetDatabase.LoadAssetAtPath<Sprite>(
-                        "Assets/AssetRaw/Actor/Robots/Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png"), portrait.sprite);
+                        "Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png"), portrait.sprite);
                     Assert.AreEqual(icon.sprite.pivot, portrait.sprite.pivot);
                     Assert.AreEqual(icon.sprite.rect, portrait.sprite.rect);
                     Assert.AreEqual(icon.sprite.pixelsPerUnit, portrait.sprite.pixelsPerUnit);
@@ -170,7 +170,7 @@ namespace GameLogic.Tests
         [TestCase("RobotDragGhost")]
         public void ShopAndGhostHaveAlignedOriginalColorPortraits(string prefabName)
         {
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/" + prefabName + ".prefab");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/Shop/" + prefabName + ".prefab");
             var icons = prefab.GetComponentsInChildren<UnityEngine.UI.Image>(true)
                 .Where(image => image.name == "m_img_RobotIcon").ToArray();
             Assert.IsNotEmpty(icons);
@@ -203,7 +203,7 @@ namespace GameLogic.Tests
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             var instance = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/UI/Shop/" + prefabName + ".prefab"));
+                "Assets/AssetRaw/Actor/Prefabs/UIPrefabs/Shop/" + prefabName + ".prefab"));
             try
             {
                 foreach (var icon in instance.GetComponentsInChildren<UnityEngine.UI.Image>(true).Where(image => image.name == "m_img_RobotIcon"))
@@ -213,12 +213,12 @@ namespace GameLogic.Tests
                     Assert.IsNull(icon.transform.Find("m_rect_LevelStars"));
                     using (var visual = new RobotIconPresentation(icon))
                     {
-                        foreach (var config in tables.TbRobot.DataList)
+                        foreach (var config in tables.TbRobot.DataList.Where(row => tables.TbSkill.Get(row.SkillId).Enabled))
                         {
                             // 验证已完成加载后的真实刷新路径；本测试不启动游戏资源下载器。
-                            icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/Icons/" + config.RobotIcon + ".png");
-                            portrait.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png");
-                            frame.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Robots/LevelFrames/" + RobotLevelStyle.FrameForIcon(config.RobotIcon) + ".png");
+                            icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png");
+                            portrait.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png");
+                            frame.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/LevelFrames/" + RobotLevelStyle.FrameForIcon(config.RobotIcon) + ".png");
                             typeof(RobotIconPresentation).GetField("_location", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(visual, config.RobotIcon);
                             for (var level = 1; level <= 5; level++)
                             {
@@ -254,12 +254,12 @@ namespace GameLogic.Tests
             {
                 var config = tables.TbRobot.Get(configId);
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                    "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab");
+                    "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab");
                 Assert.IsNull(prefab.transform.Find("LevelLabel"));
                 Assert.IsNull(prefab.transform.Find("LevelStars"));
                 Assert.IsEmpty(prefab.GetComponentsInChildren<TextMesh>(true));
             }
-            var item = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/Shop/ShopRobotItem.prefab");
+            var item = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/Shop/ShopRobotItem.prefab");
             Assert.IsNotNull(item);
             Assert.IsNull(item.transform.Find("m_text_Level"));
         }
@@ -273,7 +273,7 @@ namespace GameLogic.Tests
             {
                 var robot = registry.CreateRobotFromConfig(tables.TbRobot.Get(501), BattleSide.Player);
                 robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(4, 3));
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotCannon.prefab");
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/Robots/RobotCannon.prefab");
                 var instance = Object.Instantiate(prefab);
                 try
                 {
@@ -315,7 +315,7 @@ namespace GameLogic.Tests
             {
                 var robot = registry.CreateRobotFromConfig(tables.TbRobot.Get(502), BattleSide.Player);
                 robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(4, 3));
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotScatter.prefab");
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/Robots/RobotScatter.prefab");
                 var instance = Object.Instantiate(prefab, new Vector3(12, 7, 0), Quaternion.Euler(0, 0, 30));
                 instance.transform.localScale *= 1.5f;
                 try

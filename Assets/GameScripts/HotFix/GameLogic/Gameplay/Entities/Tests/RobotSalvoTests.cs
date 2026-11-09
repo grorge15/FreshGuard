@@ -159,7 +159,7 @@ namespace GameLogic.Tests
             _views = new Dictionary<int, GameObject>();
             _combat = new RobotCombatController(_f.Host, _f.Context, (EnemyBattleController)_f.Controller, _views,
                 (name, parent, token) => UniTask.FromResult(UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                    "Assets/AssetRaw/Actor/Bullets/Prefabs/" + name + ".prefab"), parent)));
+                    "Assets/AssetRaw/Actor/Prefabs/bullets/" + name + ".prefab"), parent)));
             _combat.PrepareAsync(_f.Tables, CancellationToken.None).GetAwaiter().GetResult();
             Set(_f.Host, "_combat", _combat);
             var layout = _f.Root.AddComponent<BattleScreenLayoutController>();
@@ -170,7 +170,7 @@ namespace GameLogic.Tests
             var robot = _f.Context.Registry.CreateRobotFromConfig(config, BattleSide.Player, 1);
             robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
             var instance = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab"), _f.Root.transform);
+                "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab"), _f.Root.transform);
             instance.GetComponent<RobotView>().Bind(_f.Context.Registry, robot.InstanceId);
             _views.Add(robot.InstanceId, instance);
             return robot;

@@ -23,10 +23,10 @@ namespace GameLogic
             var parameters = new Dictionary<string, float>();
             foreach (var pair in cast.Parameters) parameters[pair.Key] = pair.Value;
             foreach (var pair in node.Parameters) if (pair.Key != "buffId" && pair.Key != "duration") parameters[pair.Key] = pair.Value;
+            var info = new AddBuffInfo(model, cast.Owner, reference, duration, durationSetTo: true, param: parameters);
             execute = () =>
             {
-                if (reference.Side == cast.Owner.Side && _battle.TryResolveOwner(reference, out var target))
-                    _battle.AddBuff(target, model, cast.Owner, duration, parameters);
+                if (reference.Side == cast.Owner.Side) _battle.Buffs.Submit(info);
             };
             return true;
         }

@@ -544,6 +544,18 @@ namespace GameLogic
         private void OnDisable() { ResetCollisionFeedback(); ResetMergeFeedback(); }
 
         /// <summary>部署已购机器人时绑定原实体，不再次创建或注册。</summary>
+        public bool TryUseConfiguration(GameConfig.robot.Robot config, Tables tables)
+        {
+            if (config == null) return false;
+            if (config.Id == _configId) return true;
+            // 显式允许表中共享同一资源、同一占格的型号；只修改加载实例，不改Prefab。
+            var authored = tables?.TbRobot.GetOrDefault(_configId);
+            if (InstanceId != 0 || authored == null || authored.ShapeId != config.ShapeId ||
+                !string.Equals(authored.RobotPrefab, config.RobotPrefab, StringComparison.Ordinal)) return false;
+            _configId = config.Id;
+            return true;
+        }
+
         public void Bind(BattleEntityRegistry registry, int instanceId)
         {
             Entity entity;

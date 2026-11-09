@@ -339,7 +339,8 @@ namespace GameLogic.Tests
             Assert.IsTrue(catalog.TryGetLevel(1505,1,out var level)); Assert.AreEqual(20,level.Parameters["damage"]);
             Assert.AreEqual(0.3f,level.Parameters["slow"]); Assert.AreEqual(3f,level.Parameters["duration"]);
             Assert.IsTrue(catalog.TryGetBuff(2505,out var buff)); Assert.AreEqual("slow",buff.BehaviorKey);
-            Assert.AreEqual(8,tables.TbSkill.DataList.Count);
+            Assert.AreEqual(16,tables.TbSkill.DataList.Count, "源表保留暂未启用的技能。");
+            Assert.AreEqual(9,tables.TbSkill.DataList.Count(row => row.Enabled));
         }
 
         private SkillModel AddSkill(int id,string timeline,SkillTargetRule rule=SkillTargetRule.None,float cooldown=0f)

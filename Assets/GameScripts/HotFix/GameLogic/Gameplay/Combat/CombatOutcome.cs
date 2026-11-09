@@ -54,12 +54,17 @@ namespace GameLogic
         public IReadOnlyList<int> TargetInstanceIds { get; }
         public int HitCount => TargetInstanceIds.Count;
         public int BaseDamage => Action.BaseDamage;
+        public double DamageMultiplier { get; }
         public bool IsCancelled { get; private set; }
         public void Cancel() => IsCancelled = true;
 
-        public CombatOutcomeDraft(CombatActionSnapshot action, IReadOnlyList<int> targets = null)
+        public CombatOutcomeDraft(CombatActionSnapshot action, IReadOnlyList<int> targets = null,
+            double damageMultiplier = 1d)
         {
             Action = action ?? throw new ArgumentNullException(nameof(action));
+            if (double.IsNaN(damageMultiplier) || double.IsInfinity(damageMultiplier) || damageMultiplier < 0d)
+                throw new ArgumentOutOfRangeException(nameof(damageMultiplier));
+            DamageMultiplier = damageMultiplier;
             TargetInstanceIds = targets == null ? action.TargetInstanceIds : new List<int>(targets).AsReadOnly();
             if (action.Percents != null)
                 foreach (var pair in action.Percents) _percents.Add(pair.Key, pair.Value);
@@ -75,7 +80,7 @@ namespace GameLogic
         public int GetFinalDamage()
         {
             if (IsCancelled) return 0;
-            double value = BaseDamage;
+            double value = BaseDamage * DamageMultiplier;
             // 固定分组顺序，避免注册顺序引起浮点计算差异。
             var groups = new List<CombatModifierGroup>(_percents.Keys);
             groups.Sort();

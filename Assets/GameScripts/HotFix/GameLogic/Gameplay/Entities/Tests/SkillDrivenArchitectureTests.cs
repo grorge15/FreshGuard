@@ -45,17 +45,17 @@ namespace GameLogic.Tests
                 var enemy = CreateEnemy(battle);
                 AddSlow(battle, enemy, battle.Player.OwnerRef, 0.2f, 3f);
                 AddSlow(battle, enemy, battle.Opponent.OwnerRef, 0.35f, 1f);
-                Assert.That(enemy.EffectiveSpeed, Is.EqualTo(6.5f).Within(0.0001f));
+                Assert.That(enemy.MoveSpeed, Is.EqualTo(6.5f).Within(0.0001f));
 
                 enemy.Buffs.Advance(1.1f);
-                Assert.That(enemy.EffectiveSpeed, Is.EqualTo(8f).Within(0.0001f));
+                Assert.That(enemy.MoveSpeed, Is.EqualTo(8f).Within(0.0001f));
                 AddSlow(battle, enemy, battle.Player.OwnerRef, 0.4f, 2f);
                 Assert.AreEqual(1, enemy.Buffs.Count);
-                Assert.That(enemy.EffectiveSpeed, Is.EqualTo(6f).Within(0.0001f));
+                Assert.That(enemy.MoveSpeed, Is.EqualTo(6f).Within(0.0001f));
 
                 enemy.Buffs.Advance(2f);
                 Assert.AreEqual(0, enemy.Buffs.Count);
-                Assert.AreEqual(10f, enemy.EffectiveSpeed);
+                Assert.AreEqual(10f, enemy.MoveSpeed);
             }
         }
 
@@ -66,7 +66,7 @@ namespace GameLogic.Tests
             {
                 var enemy = CreateEnemy(battle);
                 AddSlow(battle, enemy, battle.Player.OwnerRef, 1f, 5f);
-                Assert.AreEqual(5f, enemy.EffectiveSpeed);
+                Assert.AreEqual(5f, enemy.MoveSpeed);
             }
         }
 
@@ -135,7 +135,7 @@ namespace GameLogic.Tests
                 {
                     Assert.AreEqual(63, observedHp);
                     Assert.AreEqual(1, enemy.Buffs.Count);
-                    Assert.That(enemy.EffectiveSpeed, Is.EqualTo(6f).Within(0.0001f));
+                    Assert.That(enemy.MoveSpeed, Is.EqualTo(6f).Within(0.0001f));
                 }
             }
         }
@@ -148,14 +148,14 @@ namespace GameLogic.Tests
                 var enemy = CreateEnemy(battle);
                 var id = enemy.InstanceId;
                 AddSlow(battle, enemy, battle.Player.OwnerRef, 0.8f, 2f);
-                Assert.AreEqual(5f, enemy.EffectiveSpeed);
+                Assert.AreEqual(5f, enemy.MoveSpeed);
 
                 Assert.IsTrue(battle.Registry.Remove(id, EntityRemovalReason.Manual, out _));
                 var next = CreateEnemy(battle);
 
                 Assert.AreNotEqual(id, next.InstanceId);
                 Assert.AreEqual(0, next.Buffs.Count);
-                Assert.AreEqual(10f, next.EffectiveSpeed);
+                Assert.AreEqual(10f, next.MoveSpeed);
             }
         }
 

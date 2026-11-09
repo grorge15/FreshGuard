@@ -7,12 +7,52 @@ namespace GameLogic.Tests
 {
     public sealed class PoisonBuffTests
     {
+        private BattleRuntime _battle;
+        [SetUp] public void Prepare() { _battle = new BattleRuntime(501); }
+        [TearDown] public void Clear() { _battle.Dispose(); }
         private static readonly BuffModel Poison = new BuffModel(2507, "poison");
         private static SkillOwnerRef Source(int id) => SkillOwnerRef.Entity(501, BattleSide.Player, id);
-        private static void Add(BuffContainer container, int source, int damage, float duration = 5f,
+        private void Add(BuffContainer container, int source, int damage, float duration = 5f,
             float interval = 1f, IBuffBehavior behavior = null) => container.Add(Poison, Source(source), duration,
                 new Dictionary<string, float> { { "poisonDamage", damage }, { "poisonInterval", interval },
-                    { "poisonMaxLayers", 3 } }, behavior);
+                    { "poisonMaxLayers", 3 } }, behavior ?? _battle.BuffBehaviors.Create("poison"));
+
+        [Test]
+        public void PoisonKeyWithNoopBehaviorUsesOrdinaryRefreshAndModelInterval()
+        {
+            using (var container = new BuffContainer())
+            {
+                var values = new Dictionary<string, float>
+                    { { "poisonDamage", 10 }, { "poisonInterval", 1 }, { "poisonMaxLayers", 3 } };
+                container.Add(Poison, Source(1), 5, values, new BuffBehavior());
+                container.Add(Poison, Source(1), 5, values, new BuffBehavior());
+                Assert.AreEqual(1, container.Count, "配置名称不能自动启用中毒叠层规则。");
+                Assert.AreEqual(0, container.Items[0].TickInterval);
+            }
+        }
+
+        [Test]
+        public void PoisonBehaviorUnderAnotherKeyControlsLayersIntervalAndReplacement()
+        {
+            using (var battle = new BattleRuntime(501))
+            using (var container = new BuffContainer())
+            {
+                var model = new BuffModel(2507, "custom-poison");
+                Action<int, int> apply = (source, damage) => container.Add(model, Source(source), 5,
+                    new Dictionary<string, float>
+                        { { "poisonDamage", damage }, { "poisonInterval", 1 }, { "poisonMaxLayers", 3 } },
+                    battle.BuffBehaviors.Create("poison"));
+                apply(1, 5); apply(1, 7); apply(1, 10);
+                Assert.AreEqual(3, container.Count);
+                Assert.AreEqual(1, container.Items[0].TickInterval);
+                container.Advance(0.5f);
+                var weakest = container.Items[0];
+                apply(2, 5); Assert.IsTrue(container.Items.Contains(weakest), "剩余5跳与新5跳相等时拒绝。");
+                apply(2, 6); Assert.IsFalse(container.Items.Contains(weakest));
+                Assert.AreEqual(3, container.Count);
+                Assert.AreEqual(1, container.Items.Last().NextTickRemaining);
+            }
+        }
 
         [Test]
         public void SameCasterKeepsThreeIndependentLayersAndDoesNotRefreshThem()
@@ -47,7 +87,7 @@ namespace GameLogic.Tests
             using (var container = new BuffContainer())
             {
                 var ticks = new List<int>();
-                Add(container, 1, 5, duration, behavior: new TickHook((c, b) => ticks.Add(1)));
+                Add(container, 1, 5, duration, behavior: new TickHook(_battle, (c, b) => ticks.Add(1)));
                 Assert.IsEmpty(ticks);
                 container.Advance(duration + 2);
                 Assert.AreEqual(expected, ticks.Count);
@@ -78,7 +118,7 @@ namespace GameLogic.Tests
             using (var container = new BuffContainer())
             {
                 var ticks = new List<int>();
-                var hook = new TickHook((c, b) => ticks.Add((int)b.Get("poisonDamage")));
+                var hook = new TickHook(_battle, (c, b) => ticks.Add((int)b.Get("poisonDamage")));
                 Add(container, 1, 5, 1, behavior: hook); Add(container, 2, 7, behavior: hook);
                 Add(container, 3, 7, behavior: hook); container.Advance(0.9f);
                 var first = container.Items[0];
@@ -99,7 +139,7 @@ namespace GameLogic.Tests
             using (var container = new BuffContainer())
             {
                 var ticks = new List<int>();
-                var hook = new TickHook((c, b) => ticks.Add((int)b.Get("poisonDamage")));
+                var hook = new TickHook(_battle, (c, b) => ticks.Add((int)b.Get("poisonDamage")));
                 Add(container, 1, 1, 2, 1, hook); Add(container, 1, 2, 2, 0.5f, hook);
                 container.Advance(2);
                 CollectionAssert.AreEqual(new[] { 2, 1, 2, 2, 1, 2 }, ticks);
@@ -112,17 +152,26 @@ namespace GameLogic.Tests
             using (var container = new BuffContainer())
             {
                 var calls = 0;
-                var hook = new TickHook((c, b) => { calls++; c.Clear(); });
+                var hook = new TickHook(_battle, (c, b) => { calls++; c.Clear(); });
                 Add(container, 1, 10, behavior: hook); Add(container, 2, 10, behavior: hook);
                 container.Advance(5);
                 Assert.AreEqual(1, calls); Assert.AreEqual(0, container.Count);
             }
         }
 
-        private sealed class TickHook : BuffBehavior
+        private abstract class PoisonHook : BuffBehavior
+        {
+            private readonly IBuffBehavior _behavior;
+            protected PoisonHook(BattleRuntime battle) { _behavior = battle.BuffBehaviors.Create("poison"); }
+            public override void OnCreate(BuffObj buff) => _behavior.OnCreate(buff);
+            public override BuffApplyDecision SelectApplication(BuffContainer container, BuffObj incoming) =>
+                _behavior.SelectApplication(container, incoming);
+        }
+
+        private sealed class TickHook : PoisonHook
         {
             private readonly Action<BuffContainer, BuffObj> _tick;
-            internal TickHook(Action<BuffContainer, BuffObj> tick) { _tick = tick; }
+            internal TickHook(BattleRuntime battle, Action<BuffContainer, BuffObj> tick) : base(battle) { _tick = tick; }
             public override void OnTick(BuffContainer container, BuffObj buff) => _tick(container, buff);
         }
 
@@ -131,7 +180,7 @@ namespace GameLogic.Tests
         {
             using (var container = new BuffContainer())
             {
-                Add(container, 1, 1, behavior: new RemoveHook(c => Add(c, 5, 2)));
+                Add(container, 1, 1, behavior: new RemoveHook(_battle, c => Add(c, 5, 2)));
                 Add(container, 2, 2); Add(container, 3, 3);
                 Add(container, 4, 4);
                 Assert.AreEqual(3, container.Count);
@@ -139,10 +188,10 @@ namespace GameLogic.Tests
                 Assert.AreEqual(3, container.Items.Select(b => b.InstanceId).Distinct().Count());
             }
         }
-        private sealed class RemoveHook : BuffBehavior
+        private sealed class RemoveHook : PoisonHook
         {
             private readonly Action<BuffContainer> _remove;
-            internal RemoveHook(Action<BuffContainer> remove) { _remove = remove; }
+            internal RemoveHook(BattleRuntime battle, Action<BuffContainer> remove) : base(battle) { _remove = remove; }
             public override void OnRemoved(BuffContainer container, BuffObj buff) => _remove(container);
         }
     }

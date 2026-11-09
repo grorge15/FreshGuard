@@ -67,17 +67,17 @@ namespace GameLogic.Tests
             _f.Context.Registry.TryGet(id, out var entity); var enemy = (EnemyEntity)entity;
             var slow = new BuffModel(2505, "slow"); var source = _f.Context.Battle.Player.OwnerRef;
             _f.Context.Battle.AddBuff(enemy, slow, source, 3, new Dictionary<string, float> { { "slow", 0.8f } });
-            Assert.That(enemy.EffectiveSpeed / enemy.BaseSpeed, Is.EqualTo(0.6f).Within(0.00001));
+            Assert.That(enemy.MoveSpeed / enemy.BaseSpeed, Is.EqualTo(0.6f).Within(0.00001));
             enemy.Buffs.Advance(1);
             _f.Context.Battle.AddBuff(enemy, slow, source, 4, new Dictionary<string, float> { { "slow", 0.2f } });
             Assert.AreEqual(1, enemy.Buffs.Count); Assert.AreEqual(4, enemy.Buffs.Items[0].Remaining);
             _f.Context.Battle.AddBuff(enemy, slow, _f.Context.Battle.Opponent.OwnerRef, 2,
                 new Dictionary<string, float> { { "slow", 1f } });
-            Assert.That(enemy.EffectiveSpeed / enemy.BaseSpeed, Is.EqualTo(0.5f).Within(0.00001));
+            Assert.That(enemy.MoveSpeed / enemy.BaseSpeed, Is.EqualTo(0.5f).Within(0.00001));
             enemy.Buffs.Advance(2);
-            Assert.That(enemy.EffectiveSpeed / enemy.BaseSpeed, Is.EqualTo(0.9f).Within(0.00001));
+            Assert.That(enemy.MoveSpeed / enemy.BaseSpeed, Is.EqualTo(0.9f).Within(0.00001));
             Assert.AreEqual(2, enemy.Buffs.Items[0].Remaining);
-            enemy.Buffs.Advance(2); Assert.AreEqual(enemy.BaseSpeed, enemy.EffectiveSpeed);
+            enemy.Buffs.Advance(2); Assert.AreEqual(enemy.BaseSpeed, enemy.MoveSpeed);
         }
 
         [Test]
@@ -141,12 +141,12 @@ namespace GameLogic.Tests
             var views = new Dictionary<int, GameObject>();
             _combat = new RobotCombatController(_f.Host, _f.Context, (EnemyBattleController)_f.Controller, views,
                 (name, parent, token) => UniTask.FromResult(UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                    "Assets/AssetRaw/Actor/Bullets/Prefabs/" + name + ".prefab"), parent)));
+                    "Assets/AssetRaw/Actor/Prefabs/bullets/" + name + ".prefab"), parent)));
             _combat.PrepareAsync(_f.Tables, CancellationToken.None).GetAwaiter().GetResult();
             _robot = _f.Context.Registry.CreateRobotFromConfig(_f.Tables.TbRobot.Get(configId), BattleSide.Player, level);
             _robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
             var instance = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Robots/Prefabs/" + _robot.Configuration.RobotPrefab + ".prefab"), _f.Root.transform);
+                "Assets/AssetRaw/Actor/Prefabs/Robots/" + _robot.Configuration.RobotPrefab + ".prefab"), _f.Root.transform);
             instance.GetComponent<RobotView>().Bind(_f.Context.Registry, _robot.InstanceId); views.Add(_robot.InstanceId, instance);
             _combat.SyncRobots();
         }

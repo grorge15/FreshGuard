@@ -12,8 +12,10 @@ namespace GameLogic
         public SkillCatalog Catalog { get; private set; } = new SkillCatalog();
         public SkillManager Skills { get; }
         public BuffBehaviorRegistry BuffBehaviors { get; } = new BuffBehaviorRegistry();
+        public BuffManager Buffs { get; }
         public TimelineManager Timelines { get; }
         public BulletManager Bullets { get; } = new BulletManager();
+        public BulletBehaviorRegistry BulletBehaviors { get; } = new BulletBehaviorRegistry();
         public BattlefieldRuntime Player { get; }
         public BattlefieldRuntime Opponent { get; }
         public bool IsDisposed { get; private set; }
@@ -29,7 +31,10 @@ namespace GameLogic
             Combat = combat ?? throw new ArgumentNullException(nameof(combat));
             if (combat.BattleId != battleId) throw new ArgumentException("结算运行时归属错误。");
             Combat.Bind(this);
+            Buffs = new BuffManager(this);
+            BuffBehaviors.Register("slow", () => new SlowBuffBehavior(this));
             BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
+            BuffBehaviors.Register("chain_cycle", () => new ChainCycleBuffBehavior());
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
             Player = new BattlefieldRuntime(this, BattleSide.Player); Opponent = new BattlefieldRuntime(this, BattleSide.Opponent);
@@ -45,6 +50,7 @@ namespace GameLogic
         {
             if (IsDisposed) return;
             entity.BindSkillOwner(BattleId);
+            Buffs.Bind(entity.Buffs);
             if (entity is RobotEntity robot && robot.SkillId > 0 && Catalog.TryGet(robot.SkillId, out var model))
                 Grant(entity, model).SetLevel(Math.Min(robot.Level, model.MaxLevel));
         }
@@ -56,16 +62,20 @@ namespace GameLogic
             if (existed) return existing;
             var obj = owner.Skills.Add(model);
             foreach (var buffId in model.PassiveBuffIds)
-                if (Catalog.TryGetBuff(buffId, out var buff)) AddBuff(owner, buff, owner.OwnerRef, float.MaxValue);
+                if (Catalog.TryGetBuff(buffId, out var buff))
+                    Buffs.Submit(new AddBuffInfo(buff, owner.OwnerRef, owner.OwnerRef, permanent: true));
                 else throw new InvalidOperationException("缺少被动Buff配置：" + buffId);
             return obj;
         }
         public void AddBuff(ISkillOwner target, BuffModel model, SkillOwnerRef source, float duration,
             System.Collections.Generic.IReadOnlyDictionary<string, float> parameters = null)
         {
-            if (IsDisposed || !Combat.AllowsGameplayTriggers || !TryResolveOwner(target.OwnerRef, out var resolved) || !ReferenceEquals(target, resolved) ||
-                source.BattleId != BattleId) return;
-            target.Buffs.Add(model, source, duration, parameters, BuffBehaviors.Create(model.BehaviorKey));
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            if (IsDisposed || !Combat.AllowsGameplayTriggers) return;
+            EntityValidation.RequireFiniteNonNegative(duration, nameof(duration));
+            if (duration <= 0f) throw new ArgumentOutOfRangeException(nameof(duration));
+            Buffs.Submit(new AddBuffInfo(model, source, target.OwnerRef, duration,
+                durationSetTo: true, param: BuffObj.Copy(parameters)));
         }
         public bool TryResolveOwner(SkillOwnerRef reference, out ISkillOwner owner)
         {
@@ -128,7 +138,10 @@ namespace GameLogic
         public BuffContainer Buffs { get; } = new BuffContainer();
         public bool CanCast => !_battle.IsDisposed;
         internal BattlefieldRuntime(BattleRuntime battle, BattleSide side)
-        { _battle = battle; OwnerRef = SkillOwnerRef.Battlefield(battle.BattleId, side); Buffs.Owner = OwnerRef; }
+        {
+            _battle = battle; OwnerRef = SkillOwnerRef.Battlefield(battle.BattleId, side); Buffs.Owner = OwnerRef;
+            battle.Buffs.Bind(Buffs);
+        }
         internal void Clear() { Skills.Clear(); Buffs.Dispose(); }
     }
 }

@@ -24,6 +24,7 @@ public sealed partial class Skill : Luban.BeanBase
         TargetRule = _buf.ReadInt();
         {int n0 = _buf.ReadSize(); PassiveBuffIds = new System.Collections.Generic.List<int>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { int _e0;  _e0 = _buf.ReadInt(); PassiveBuffIds.Add(_e0);}}
         BulletId = _buf.ReadInt();
+        Enabled = _buf.ReadBool();
     }
 
     public static Skill DeserializeSkill(ByteBuf _buf)
@@ -63,6 +64,10 @@ public sealed partial class Skill : Luban.BeanBase
     /// 弹丸配置ID，0表示不使用弹丸
     /// </summary>
     public readonly int BulletId;
+    /// <summary>
+    /// 是否启用；未完成技能保留源数据但不构建运行时依赖
+    /// </summary>
+    public readonly bool Enabled;
    
     public const int __ID__ = 1155715156;
     public override int GetTypeId() => __ID__;
@@ -82,6 +87,7 @@ public sealed partial class Skill : Luban.BeanBase
         + "targetRule:" + TargetRule + ","
         + "passiveBuffIds:" + Luban.StringUtil.CollectionToString(PassiveBuffIds) + ","
         + "bulletId:" + BulletId + ","
+        + "enabled:" + Enabled + ","
         + "}";
     }
 }

@@ -15,22 +15,22 @@ namespace GameLogic
     public sealed class EnemyBattleController : MonoBehaviour
     {
         [Header("我方战场路线：按数组顺序移动")]
-        [Tooltip("按顺序拖入节点 Transform：Element 0 为出生圆心，Element 1、2 为 P1、P2 圆心。每只怪物在各圆内独立选点并依次经过；同侧 Tower 自动作为终点。修改在下一次初始化对局时生效。")]
+        [Tooltip("按顺序拖入节点 Transform：Element 0 为出生圆心，Element 1、2 为 P1、P2 圆心。普通怪在各圆内独立选点；精英怪与 Boss 始终经过圆心。同侧 Tower 自动作为终点；下次初始化对局生效。")]
         [SerializeField] private Transform[] _playerRoutePoints;
-        [Tooltip("我方战场出生圆半径（XY 平面，世界单位）。0 为固定点出生；修改在下一次初始化对局时生效。")]
+        [Tooltip("我方普通怪出生圆半径（XY 平面，世界单位）。0 为固定点出生；精英怪与 Boss 固定从圆心出生。下次初始化对局生效。")]
         [SerializeField, Min(0f)] private float _playerSpawnRadius = 0.5f;
-        [Tooltip("我方 P1（路线 Element 1）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [Tooltip("我方普通怪 P1（路线 Element 1）圆半径，XY 平面、世界单位。0 为固定节点；精英怪与 Boss 固定经过圆心。下次初始化对局生效。")]
         [SerializeField, Min(0f)] private float _playerP1Radius = 0.5f;
-        [Tooltip("我方 P2（路线 Element 2）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [Tooltip("我方普通怪 P2（路线 Element 2）圆半径，XY 平面、世界单位。0 为固定节点；精英怪与 Boss 固定经过圆心。下次初始化对局生效。")]
         [SerializeField, Min(0f)] private float _playerP2Radius = 0.5f;
         [Header("敌方战场路线：按数组顺序移动")]
-        [Tooltip("按顺序拖入节点 Transform：Element 0 为出生圆心，Element 1、2 为 P1、P2 圆心。每只怪物在各圆内独立选点并依次经过；同侧 Tower 自动作为终点。修改在下一次初始化对局时生效。")]
+        [Tooltip("按顺序拖入节点 Transform：Element 0 为出生圆心，Element 1、2 为 P1、P2 圆心。普通怪在各圆内独立选点；精英怪与 Boss 始终经过圆心。同侧 Tower 自动作为终点；下次初始化对局生效。")]
         [SerializeField] private Transform[] _opponentRoutePoints;
-        [Tooltip("敌方战场出生圆半径（XY 平面，世界单位）。0 为固定点出生；修改在下一次初始化对局时生效。")]
+        [Tooltip("敌方普通怪出生圆半径（XY 平面，世界单位）。0 为固定点出生；精英怪与 Boss 固定从圆心出生。下次初始化对局生效。")]
         [SerializeField, Min(0f)] private float _opponentSpawnRadius = 0.5f;
-        [Tooltip("敌方 P1（路线 Element 1）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [Tooltip("敌方普通怪 P1（路线 Element 1）圆半径，XY 平面、世界单位。0 为固定节点；精英怪与 Boss 固定经过圆心。下次初始化对局生效。")]
         [SerializeField, Min(0f)] private float _opponentP1Radius = 0.5f;
-        [Tooltip("敌方 P2（路线 Element 2）圆半径，XY 平面、世界单位。0 为固定节点；下次初始化对局生效。")]
+        [Tooltip("敌方普通怪 P2（路线 Element 2）圆半径，XY 平面、世界单位。0 为固定节点；精英怪与 Boss 固定经过圆心。下次初始化对局生效。")]
         [SerializeField, Min(0f)] private float _opponentP2Radius = 0.5f;
         [Header("敌人生成父节点")]
         [Tooltip("我方战场的 Battle_playerBelt；敌人保留预制体局部缩放并继承该节点比例。留空沿用控制器节点。")]
@@ -155,9 +155,10 @@ namespace GameLogic
                     foreach (var schedule in _timeline.Groups)
                     {
                         var lengths = CalculateRouteLengths(points);
+                        // EnemyType：1 普通、2 精英、3 Boss；只有普通怪参与圆内随机采样。
                         _groups.Add(new SpawnGroup { Side = side, Schedule = schedule, Points = points,
                             CumulativeLengths = lengths, TowerId = towerId,
-                            PointRadii = radii });
+                            PointRadii = schedule.Config.EnemyType == 1 ? radii : Array.Empty<float>() });
                     }
                 }
                 var root = new GameObject("PreparedEnemyViews");
@@ -319,7 +320,7 @@ namespace GameLogic
                     position = entry.Points[i];
                 }
                 if (remaining <= 0.00001d) return 0d;
-                if (enemy.EffectiveSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.EffectiveSpeed);
+                if (enemy.MoveSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.MoveSpeed);
             }
             return earliest;
         }
@@ -445,7 +446,7 @@ namespace GameLogic
                     _context.Registry.Remove(id, EntityRemovalReason.Manual, out _);
                     continue;
                 }
-                var distance = enemy.EffectiveSpeed * deltaTime;
+                var distance = enemy.MoveSpeed * deltaTime;
                 var position = entry.View.transform.position;
                 var points = entry.Points;
                 while (entry.NextPoint < points.Length)

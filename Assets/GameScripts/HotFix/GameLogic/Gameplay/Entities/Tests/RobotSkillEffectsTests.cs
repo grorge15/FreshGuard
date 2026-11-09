@@ -75,7 +75,7 @@ namespace GameLogic.Tests
                 Assert.That(enemy.RouteProgress, Is.EqualTo(Math.Max(0, before - factor)).Within(0.00001));
                 var movedBack = enemy.RouteProgress;
                 f.Advance(0.2f);
-                Assert.That(enemy.RouteProgress, Is.EqualTo(movedBack + enemy.EffectiveSpeed * 0.2f).Within(0.00001));
+                Assert.That(enemy.RouteProgress, Is.EqualTo(movedBack + enemy.MoveSpeed * 0.2f).Within(0.00001));
                 Assert.IsTrue(((EnemyBattleController)f.Controller).TryKnockback(BattleSide.Player, view.InstanceId, 100));
                 Assert.AreEqual(0, enemy.RouteProgress);
                 Assert.That(Vector3.Distance(view.transform.position, new Vector3(-3, 1)), Is.LessThan(0.00001));

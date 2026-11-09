@@ -50,7 +50,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(5, rules.RefreshPrice);
             Assert.AreEqual(10, rules.AdditionalRerollLimit);
             Assert.AreEqual(0.05, rules.SecondStarProbability, 0.00000001);
-            CollectionAssert.AreEqual(new[] { 6, 8, 12, 16, 20 },
+            CollectionAssert.AreEqual(new[] { 8, 10, 14, 18, 22 },
                 Enumerable.Range(2, 5).Select(id => rules.GetPrice(id, 1)));
             foreach (var slot in rules.SlotCandidateWeights)
                 CollectionAssert.AreEqual(Enumerable.Repeat(2000d, 8), Enumerable.Range(1, 8).Select(id => slot[id]));
@@ -59,9 +59,9 @@ namespace GameLogic.Tests
             using (var context = new BattleShopContext(rules, new[] { 501, 601, 602 }, new[] { 501, 601, 602 },
                 id => tables.TbRobot.Get(id), random))
             {
-                CollectionAssert.AreEqual(new[] { 6, 8, 8 }, context.GetState(BattleSide.Player).Slots.Select(s => s.Offer.Price));
+                CollectionAssert.AreEqual(new[] { 8, 10, 10 }, context.GetState(BattleSide.Player).Slots.Select(s => s.Offer.Price));
                 ShopTestData.Purchase(context, 1);
-                Assert.AreEqual(12, context.GetState(BattleSide.Player).EnergyCoins);
+                Assert.AreEqual(10, context.GetState(BattleSide.Player).EnergyCoins);
                 Assert.AreEqual(20, context.GetState(BattleSide.Opponent).EnergyCoins);
             }
         }
@@ -181,12 +181,37 @@ namespace GameLogic.Tests
             Assert.Throws<ArgumentException>(() => ShopRules.FromTables(ShopTestData.Tables(packages: new[] { new[] { 1, 1 } })));
         }
 
-        [TestCase(ShopRewardSource.NormalEnemy, 4)]
-        [TestCase(ShopRewardSource.EliteEnemy, 20)]
-        [TestCase(ShopRewardSource.Boss, 50)]
+        [TestCase(ShopRewardSource.NormalEnemy, ShopEnemyKind.Normal)]
+        [TestCase(ShopRewardSource.EliteEnemy, ShopEnemyKind.Elite)]
+        [TestCase(ShopRewardSource.Boss, ShopEnemyKind.Boss)]
+        public void LegacyGlobalEnemyRewardWithZeroAmountIsRejectedWithoutChangingBalances(
+            ShopRewardSource source, ShopEnemyKind kind)
+        {
+            var rules = ShopRules.FromTables(RealTables());
+            Assert.AreEqual(0, rules.EnemyRewards[kind], "真实全局表不再提供按类型划分的敌人奖励。");
+            using (var context = ShopTestData.Context(rules))
+            {
+                Assert.AreEqual(ShopOperationResult.InvalidArgument,
+                    context.Rewards.TryGrant(context.BattleId, BattleSide.Opponent, source, 991));
+                Assert.AreEqual(20, context.GetState(BattleSide.Opponent).EnergyCoins);
+                Assert.AreEqual(20, context.GetState(BattleSide.Player).EnergyCoins);
+                Assert.AreEqual(ShopOperationResult.InvalidArgument,
+                    context.Rewards.TryGrant(context.BattleId, BattleSide.Player, source, 991));
+                Assert.AreEqual(20, context.GetState(BattleSide.Player).EnergyCoins);
+                Assert.AreEqual(20, context.GetState(BattleSide.Opponent).EnergyCoins);
+                // 拒绝的零奖励不能占用去重键；真实击杀奖励走显式数额接口。
+                Assert.AreEqual(ShopOperationResult.Success,
+                    context.Rewards.TryGrantEnemyKill(context.BattleId, 991, BattleSide.Opponent, 5));
+                Assert.AreEqual(25, context.GetState(BattleSide.Opponent).EnergyCoins);
+                Assert.AreEqual(20, context.GetState(BattleSide.Player).EnergyCoins);
+                Assert.AreEqual(ShopOperationResult.DuplicateReward,
+                    context.Rewards.TryGrantEnemyKill(context.BattleId, 991, BattleSide.Player, 5));
+            }
+        }
+
         [TestCase(ShopRewardSource.NormalGlass, 2)]
         [TestCase(ShopRewardSource.ColoredGlass, 2)]
-        public void FormalRewardApiReadsFiveRealConfigAmounts(ShopRewardSource source, int amount)
+        public void FormalGlassRewardApiReadsRealConfigAmountsAndDeduplicates(ShopRewardSource source, int amount)
         {
             var rules = ShopRules.FromTables(RealTables());
             using (var context = ShopTestData.Context(rules))

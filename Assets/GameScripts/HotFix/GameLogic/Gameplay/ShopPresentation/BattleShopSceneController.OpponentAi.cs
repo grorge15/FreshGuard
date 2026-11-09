@@ -87,7 +87,8 @@ namespace GameLogic
                     if (prepared == null) return ShopOperationResult.ResourceFailed;
                     prepared.SetActive(false);
                     var checkedView = prepared.GetComponent<RobotView>();
-                    if (checkedView == null || checkedView.ConfigId != config.Id) return ShopOperationResult.ResourceFailed;
+                    if (checkedView == null || !checkedView.TryUseConfiguration(config, _robotPresentationTables))
+                        return ShopOperationResult.ResourceFailed;
                 }
                 gate = CheckOpponentAiBattle(context, action, cancellationToken);
                 if (gate != ShopOperationResult.Success) return gate;
