@@ -60,7 +60,8 @@ namespace GameLogic.Tests
             var view = instance.GetComponent<RobotView>();
             var original = view.ConfigId;
             var data = new ByteBuf();
-            data.WriteInt(config.Id); data.WriteString(config.RobotName); data.WriteInt(config.QualityId);
+            // 使用不同型号检验共享资源路径；701已有专属Prefab，同ID会走原配置快速路径。
+            data.WriteInt(config.Id + 10000); data.WriteString(config.RobotName); data.WriteInt(config.QualityId);
             data.WriteString(differentResource ? config.RobotPrefab + "_other" : config.RobotPrefab);
             data.WriteString(config.RobotIcon); data.WriteInt(differentResource ? config.ShapeId : config.ShapeId + 1);
             data.WriteInt(config.SkillId); data.WriteFloat(config.MinTriggerInterval);
