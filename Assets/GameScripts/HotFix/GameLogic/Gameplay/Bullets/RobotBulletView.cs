@@ -7,6 +7,7 @@ namespace GameLogic
     [DisallowMultipleComponent]
     public sealed class RobotBulletView : MonoBehaviour
     {
+        private BattleSpriteAnimation _animation;
         public BulletState State { get; private set; }
         public long BattleId => Action?.BattleId ?? 0;
         public BattleSide Side => Action?.SourceSide ?? default(BattleSide);
@@ -21,6 +22,8 @@ namespace GameLogic
         public void Present(BulletState state)
         {
             if (this == null || state == null) return;
+            if (_animation == null) _animation = GetComponent<BattleSpriteAnimation>();
+            if (_animation != null) _animation.Sample(state.Elapsed);
             transform.position = state.Position;
             if (state.Direction.sqrMagnitude > 0f)
                 transform.rotation = Quaternion.Euler(0f, 0f,
