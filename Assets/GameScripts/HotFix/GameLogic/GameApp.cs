@@ -95,7 +95,8 @@ public partial class GameApp
         {
             if (_demoProfile == null || _playerRecord == null) throw new InvalidOperationException("Demo入场数据尚未就绪。");
             var tables = ConfigSystem.Instance.Tables;
-            entry = new MatchEntrySnapshot(_demoProfile,PlayerState,ShopRules.FromTables(tables));
+            entry = new MatchEntrySnapshot(_demoProfile,PlayerState,ShopRules.FromTables(tables),
+                isRobotEnabled: id => SkillAvailability.IsRobotEnabled(tables,id));
             foreach (var id in entry.Candidates)
             {
                 var robot = tables.TbRobot.Get(id);

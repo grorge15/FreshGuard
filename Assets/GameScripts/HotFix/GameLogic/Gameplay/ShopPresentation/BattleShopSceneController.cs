@@ -22,6 +22,7 @@ namespace GameLogic
         [SerializeField] private int _layoutConfigId = 1;
         [SerializeField] private int[] _playerCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
         [SerializeField] private int[] _opponentCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
+        private Tables _robotPresentationTables;
         private readonly Dictionary<int, GameObject> _views = new Dictionary<int, GameObject>();
         private Transform _preparedRoot;
         private Transform _comboPopupRoot;
@@ -122,6 +123,7 @@ namespace GameLogic
                 // 先持有初始化代次和令牌，等待期间的再次终局仍可取消本次初始化。
                 await UniTask.Yield(cancellationToken);
                 var tables = ConfigSystem.Instance.Tables;
+                _robotPresentationTables = tables;
                 if (_placement == null || _playerBoard == null || _opponentBoard == null || _bootstrap == null)
                     throw new InvalidOperationException("商店缺少双方盘面或统一启动器引用。");
                 _bootstrap.StopBalls();
@@ -141,7 +143,9 @@ namespace GameLogic
                         if (!GameModule.Resource.CheckLocationValid(sprite))
                             throw new InvalidOperationException("玻璃图片资源未收集：" + sprite);
                 }
-                foreach (var candidates in new IReadOnlyList<int>[] { _matchEntry?.Candidates ?? _playerCandidates, _matchEntry?.Candidates ?? _opponentCandidates })
+                foreach (var candidates in new IReadOnlyList<int>[] {
+                    SkillAvailability.Filter(tables, _matchEntry?.Candidates ?? _playerCandidates),
+                    SkillAvailability.Filter(tables, _matchEntry?.Candidates ?? _opponentCandidates) })
                     foreach (var id in candidates)
                     {
                         var config = tables.TbRobot.Get(id);
@@ -157,7 +161,7 @@ namespace GameLogic
                 preparation.SetActive(false);
                 _preparedRoot = preparation.transform;
                 Context = new BattleShopContext(_rules, _playerCandidates, _opponentCandidates, tables.TbRobot.Get,
-                    entry: _matchEntry);
+                    entry: _matchEntry, isRobotEnabled: id => SkillAvailability.IsRobotEnabled(tables,id));
                 if (_matchReleased) BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
                 _rewards = new BattleRewardAdapter(Context,
                     (side, id) => _enemies != null ? _enemies.GetRewardOrigin(side, id) : null);
@@ -403,7 +407,8 @@ namespace GameLogic
                     if (prepared == null) return ShopOperationResult.ResourceFailed;
                     prepared.SetActive(false);
                     var checkedView = prepared.GetComponent<RobotView>();
-                    if (checkedView == null || checkedView.ConfigId != config.Id) return ShopOperationResult.ResourceFailed;
+                    if (checkedView == null || !checkedView.TryUseConfiguration(config, _robotPresentationTables))
+                        return ShopOperationResult.ResourceFailed;
                 }
                 cancellationToken.ThrowIfCancellationRequested();
                 if (this == null || Context != context || !CanInteractWithRobots || !context.IsCurrentInteraction(session.InteractionId))
@@ -465,7 +470,8 @@ namespace GameLogic
                 if (this == null || Context != context || context.BattleId != battleId || context.IsEnded || !robot.IsDragging)
                     return ShopOperationResult.InvalidLocation;
                 var view = prepared.GetComponent<RobotView>();
-                if (view == null) return ShopOperationResult.ResourceFailed;
+                if (view == null || !view.TryUseConfiguration(robot.Configuration, _robotPresentationTables))
+                    return ShopOperationResult.ResourceFailed;
                 view.Bind(context.Registry, instanceId);
                 SyncRobotCollisionMode(view, robot.Side);
                 view.BindInput(this);

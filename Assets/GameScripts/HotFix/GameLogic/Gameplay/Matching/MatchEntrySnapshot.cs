@@ -57,7 +57,8 @@ namespace GameLogic
         public IReadOnlyList<MatchBuff> PlayerBuffs { get; }
         public IReadOnlyList<MatchBuff> OpponentBuffs { get; }
 
-        public MatchEntrySnapshot(DemoBattleProfile profile, MainMenuPlayerState player, ShopRules rules, IShopRandom random = null)
+        public MatchEntrySnapshot(DemoBattleProfile profile, MainMenuPlayerState player, ShopRules rules, IShopRandom random = null,
+            Func<int, bool> isRobotEnabled = null)
         {
             if (profile == null || player == null || rules == null) throw new ArgumentNullException();
             if (string.IsNullOrWhiteSpace(profile.PlayerName) || string.IsNullOrWhiteSpace(profile.OpponentName) ||
@@ -70,7 +71,7 @@ namespace GameLogic
                 var robot = profile.Robots[i];
                 if (robot == null || robot.RobotId <= 0 || !seen.Add(robot.RobotId) || robot.ReferenceLevel < 1 || robot.ReferenceLevel > 5)
                     throw new ArgumentException("Demo机器人ID须唯一且等级为1～5。");
-                if (!robot.Unlocked) continue;
+                if (!robot.Unlocked || (isRobotEnabled != null && !isRobotEnabled(robot.RobotId))) continue;
                 ids.Add(robot.RobotId); ordinals.Add(robot.RobotId, i); caps.Add(robot.RobotId, robot.ReferenceLevel);
             }
             if (ids.Count < rules.SlotCount) throw new ArgumentException("Demo至少需要三个已解锁机器人。");
