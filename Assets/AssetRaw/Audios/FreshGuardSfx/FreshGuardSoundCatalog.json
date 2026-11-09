@@ -193,9 +193,12 @@
       "cooldown": 0.07,
       "ui": false,
       "loop": false,
-      "duration": 0.204,
-      "source": "原创程序合成，无第三方采样",
-      "note": "仅己方棋盘；恢复原版音色，音量由44%微调至40%"
+      "duration": 0.287,
+      "source": "用户提供：玻璃碰撞_轻.MP3",
+      "note": "用户素材：玻璃碰撞_轻.MP3；仅己方；玻璃扣耐久但未破碎时播放",
+      "sourceFile": "Tools/Audio/Sources/GlassHit_User/玻璃碰撞_轻.MP3",
+      "sourceOriginalPath": "F:/视频剪辑/玻璃碰撞_轻.MP3",
+      "sourceProcessing": "仅44.1 kHz单声道PCM格式转换；保留音高、完整时长与素材音量"
     },
     {
       "id": "GlassBreak",
