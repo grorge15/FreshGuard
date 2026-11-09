@@ -27,12 +27,22 @@ namespace GameLogic
                 config.Id != ImpactRobotEntity.CONFIG_ID && config.Id != PiercingRobotEntity.CONFIG_ID &&
                 config.Id != RapidFireRobotEntity.CONFIG_ID && config.Id != TractorRobotEntity.CONFIG_ID &&
                 config.Id != FrostRobotEntity.CONFIG_ID && config.Id != PoisonRobotEntity.CONFIG_ID &&
-                config.Id != InductionRobotEntity.CONFIG_ID)
+                config.Id != InductionRobotEntity.CONFIG_ID && config.Id != RollingPinRobotEntity.CONFIG_ID &&
+                config.Id != FoodContainerRobotEntity.CONFIG_ID && config.Id != JuicerRobotEntity.CONFIG_ID)
                 throw new ArgumentException("未注册对应机器人实体类型：" + config.Id, nameof(config));
             var instanceId = ReserveInstanceId();
             RobotEntity robot;
             switch (config.Id)
             {
+                case RollingPinRobotEntity.CONFIG_ID:
+                    robot = new RollingPinRobotEntity(instanceId, config, side, level, maxLevel);
+                    break;
+                case FoodContainerRobotEntity.CONFIG_ID:
+                    robot = new FoodContainerRobotEntity(instanceId, config, side, level, maxLevel);
+                    break;
+                case JuicerRobotEntity.CONFIG_ID:
+                    robot = new JuicerRobotEntity(instanceId, config, side, level, maxLevel);
+                    break;
                 case InductionRobotEntity.CONFIG_ID:
                     robot = new InductionRobotEntity(instanceId, config, side, level, maxLevel);
                     break;
