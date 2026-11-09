@@ -19,6 +19,8 @@ namespace GameLogic
             if (_clip == null || _clip.length <= 0f)
                 throw new InvalidOperationException("序列帧表现需要有效的 AnimationClip。");
             if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
+            var animator = GetComponent<Animator>();
+            if (animator != null) animator.enabled = false;
             var time = _loop ? Mathf.Repeat(elapsed, _clip.length) : Mathf.Min(elapsed, _clip.length);
             _clip.SampleAnimation(gameObject, time);
             _renderer.enabled = true;
