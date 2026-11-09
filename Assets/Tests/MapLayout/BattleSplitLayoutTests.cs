@@ -73,6 +73,25 @@ namespace GameLogic.Tests
             Assert.That(p.width, Is.LessThan(5.5f * 190));
         }
 
+        [TestCase(1080, 1920)]
+        [TestCase(1080, 2160)]
+        [TestCase(540, 1190)]
+        public void PlayerViewportIncludesFullInformationBarWithoutMovingTheBoard(int width, int height)
+        {
+            var result = Calculate(width, height);
+            var viewport = Read<Rect>(result, "PlayerViewport");
+            var info = Read<Rect>(result, "InfoTarget");
+            var target = Read<Rect>(result, "PlayerTarget");
+            var ppu = Read<float>(result, "PlayerPixelsPerUnit");
+            Assert.That(viewport.yMax, Is.GreaterThanOrEqualTo(info.yMax));
+            Vector2 center;
+            float size;
+            Assert.IsTrue(BattleScreenLayout.TryCalculateCamera(viewport, target, Player, ppu, out center, out size));
+            var projected = ((Vector2)Player.center - center) * ppu + viewport.center;
+            Assert.That(Vector2.Distance(projected, target.center), Is.LessThan(0.001f));
+            Assert.That(viewport.height / (2 * size), Is.EqualTo(ppu).Within(0.001f));
+        }
+
         private static object Calculate(int width, int height, Rect? safe = null)
         {
             var method = typeof(BattleScreenLayout).GetMethod("TryCalculateSplit", BindingFlags.Public | BindingFlags.Static);

@@ -19,6 +19,7 @@ namespace GameLogic
         private Camera _opponentCamera;
         private Camera _backgroundCamera;
         private SpriteRenderer _backgroundRenderer;
+        private BattleInfoRenderLayer _infoRenderLayer;
         private CameraState _cameraState;
         private BattleScreenLayoutResult _layout;
         private Rect _lastInfoRect;
@@ -35,6 +36,7 @@ namespace GameLogic
             if (_window == null) return false;
             var window = _window;
             var generation = _bindingGeneration;
+            _infoRenderLayer?.Refresh(window.Visible);
             var screen = new Vector2(Screen.width, Screen.height);
             var safe = BattleScreenLayout.Intersect(new Rect(Vector2.zero, screen), Screen.safeArea);
             Rect shop;
@@ -106,11 +108,10 @@ namespace GameLogic
             }
             _sceneCamera.depth = depth;
             _opponentCamera.depth = depth + 0.1f;
-            _sceneCamera.cullingMask &= ~((1 << LayerMask.NameToLayer("UI")) | backgroundMask);
+            _sceneCamera.cullingMask &= ~((1 << LayerMask.NameToLayer("UI")) | backgroundMask | LayerMask.GetMask("BattleInfo"));
             _opponentCamera.cullingMask = _sceneCamera.cullingMask;
-            // 两侧战场只清深度，让同一张全屏背景连续显示。
-            _sceneCamera.clearFlags = _opponentCamera.clearFlags = _backgroundRenderer != null
-                ? CameraClearFlags.Depth : CameraClearFlags.SolidColor;
+            // 背景相机先清屏，战场仅清深度，保留环境和先绘制的信息栏。
+            _sceneCamera.clearFlags = _opponentCamera.clearFlags = CameraClearFlags.Depth;
             if (_renderRegistry == null) _renderRegistry = GetComponent<BattleSideRenderRegistry>();
             if (_renderRegistry == null) _renderRegistry = gameObject.AddComponent<BattleSideRenderRegistry>();
             _renderRegistry.BindCameras(_sceneCamera, _opponentCamera);
@@ -118,7 +119,11 @@ namespace GameLogic
             RegisterStatic(_opponentWorldRoot, _opponentBoard, _opponentFixedRenderers, BattleSide.Opponent);
             _backgroundCamera.enabled = true;
             _opponentCamera.enabled = true;
+            _infoRenderLayer = new BattleInfoRenderLayer(_window.Info.rectTransform, _window.Canvas, ui, transform, depth - 0.5f);
+            _infoRenderLayer.Refresh(_window.Visible);
         }
+
+        internal void SetInformationVisible(bool visible) => _infoRenderLayer?.Refresh(visible);
 
         private void RefreshBackground(Vector2 screen)
         {

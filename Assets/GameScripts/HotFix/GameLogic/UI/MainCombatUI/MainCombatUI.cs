@@ -113,6 +113,7 @@ namespace GameLogic
 
         protected override void OnSetVisible(bool visible)
         {
+            _screenLayout?.SetInformationVisible(visible);
             if (!visible)
             {
                 Shop?.CancelSlotRefresh();

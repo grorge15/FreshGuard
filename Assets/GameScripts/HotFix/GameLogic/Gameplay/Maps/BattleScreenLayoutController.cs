@@ -86,6 +86,7 @@ namespace GameLogic
         {
             if (_window == null) return;
             if (_window.IsDestroyed || _window.gameObject == null) { Unbind(); return; }
+            _infoRenderLayer?.Refresh(_window.Visible);
             if (!_hasLayout) return;
             if (_lastScreenSize == new Vector2Int(Screen.width, Screen.height) && _lastSafeArea == Screen.safeArea &&
                 Mathf.Approximately(_lastCanvasScale, _window.ScreenLayoutScale) && _lastShopRect == _window.GetShopScreenRect() &&
@@ -105,6 +106,8 @@ namespace GameLogic
             ++_bindingGeneration;
             var window = _window;
             _window = null;
+            _infoRenderLayer?.Dispose();
+            _infoRenderLayer = null;
             if (_renderRegistry != null)
             {
                 if (clearRenderGroups) _renderRegistry.Clear();
