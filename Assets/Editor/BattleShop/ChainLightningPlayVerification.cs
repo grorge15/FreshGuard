@@ -244,20 +244,19 @@ namespace FreshGuard.Editor
                 report.sharedSnapshot = report.chainHits.All(h => h.sameSnapshot && h.sequence == fifthAction.Sequence);
                 Require(report.sharedSnapshot, "各跳未使用同一个真实发射快照。");
                 var effect = Object.FindObjectsOfType<LightningChainEffectView>().SingleOrDefault(v => v.gameObject.activeInHierarchy);
-                var chain = effect != null ? effect.transform.Find("ChainLine").GetComponent<LineRenderer>() : null;
-                report.chainVisible = chain != null && chain.enabled && chain.positionCount >= 5;
+                var chain = effect != null ? effect.transform.Find("ChainSegments")
+                    .GetComponentsInChildren<SpriteRenderer>().FirstOrDefault(r => r.enabled) : null;
+                report.chainVisible = chain != null && chain.enabled && chain.sprite != null;
                 Require(report.chainVisible, "链伤后未显示真实 LightningChainEffect 连线。");
-                var geometry = new Vector3[chain.positionCount];
-                chain.GetPositions(geometry);
-                var alpha = chain.startColor.a;
+                var geometry = new[] { chain.transform.position, chain.transform.localScale, chain.transform.eulerAngles };
+                var sprite = chain.sprite;
                 var clock = combatRuntime.BattleTime;
                 host.SetFrozen(true);
                 Advance(host, 1f);
                 await UniTask.Yield();
-                var pausedGeometry = new Vector3[chain.positionCount];
-                chain.GetPositions(pausedGeometry);
+                var pausedGeometry = new[] { chain.transform.position, chain.transform.localScale, chain.transform.eulerAngles };
                 report.pauseHeldEffect = chain.enabled && geometry.SequenceEqual(pausedGeometry) &&
-                    Mathf.Approximately(alpha, chain.startColor.a) && Mathf.Approximately(clock, combatRuntime.BattleTime);
+                    sprite == chain.sprite && Mathf.Approximately(clock, combatRuntime.BattleTime);
                 Require(report.pauseHeldEffect, "业务暂停期间链线或战斗时钟仍推进。");
                 var screenshotPath = Path.GetFullPath(Path.Combine(Application.dataPath, "../../plans/artifacts/chain-lightning-play.png"));
                 Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath));
@@ -267,7 +266,7 @@ namespace FreshGuard.Editor
                 report.screenshot = File.Exists(screenshotPath) ? screenshotPath : "截图尚未写出，以JSON和实际场景检查为准";
                 host.SetFrozen(false);
                 Advance(host, effect.Lifetime + 0.01f);
-                report.resumedEffectExpired = !effect.gameObject.activeSelf && chain.positionCount == 0;
+                report.resumedEffectExpired = !effect.gameObject.activeSelf && !chain.enabled;
                 Require(report.resumedEffectExpired, "恢复后表现没有按战斗时间到期回池。");
                 host.EndBattle();
                 await UniTask.NextFrame();
