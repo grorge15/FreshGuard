@@ -72,6 +72,7 @@ namespace GameLogic
             _availableScreenRect = Rect.MinMaxRect(candidate.PlayerArea.xMin, candidate.PlayerArea.yMin,
                 candidate.OpponentArea.xMax, candidate.OpponentArea.yMax);
             _placement.SetScreenViews(_sceneCamera, candidate.PlayerArea, _opponentCamera, candidate.OpponentArea);
+            window.SetNoticeOrigin(_sceneCamera, _playerBoard);
             _lastScreenSize = new Vector2Int(Screen.width, Screen.height);
             _lastSafeArea = Screen.safeArea;
             _lastCanvasScale = window.ScreenLayoutScale;

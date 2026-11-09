@@ -51,6 +51,27 @@ namespace GameLogic
         public Rect GetShopScreenRect() => GetScreenRect(Shop.rectTransform);
         public Rect GetInfoScreenRect() => GetScreenRect(Info.rectTransform);
 
+        public void SetNoticeOrigin(Camera sceneCamera, PlacementBoardView playerBoard)
+        {
+            if (Notices == null || sceneCamera == null || playerBoard == null) return;
+            // 以己方棋盘中心上方半格为起点，跟随实际棋盘缩放与屏幕适配。
+            var world = playerBoard.transform.TransformPoint(Vector3.up * (playerBoard.CellSize * 0.5f));
+            var screen = sceneCamera.WorldToScreenPoint(world);
+            var rect = Notices.rectTransform;
+            var parent = rect.parent as RectTransform;
+            Vector2 local;
+            if (parent == null || screen.z <= 0f || !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                parent, screen, LayoutEventCamera, out local)) return;
+            Rect safe;
+            if (TryScreenRectToLocal(Screen.safeArea, parent, out safe))
+            {
+                // 棋盘中心与屏幕中心可能不同，长提示仍须留在安全区域内。
+                var width = 2f * Mathf.Min(local.x - safe.xMin, safe.xMax - local.x);
+                if (width > 0f) rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+            }
+            rect.localPosition = new Vector3(local.x, local.y, rect.localPosition.z);
+        }
+
         public Vector2 ShopDesignSize
         {
             get
