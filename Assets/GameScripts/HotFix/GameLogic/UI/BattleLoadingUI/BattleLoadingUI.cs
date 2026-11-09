@@ -27,6 +27,7 @@ namespace GameLogic
         private float _dotTime;
         private int _dotFrame;
         private BattleLoadingProgress _last;
+        private BattleMatchPhase _soundPhase;
         public BattleLoadingProgress LastProgress => _last;
         public BattleMatchSession Session => _session;
         protected override void ScriptGenerator()
@@ -42,11 +43,13 @@ namespace GameLogic
             _player=CreateWidget<MatchInfoWidget>("m_rect_Success/m_item_Player");
             _opponent=CreateWidget<MatchInfoWidget>("m_rect_Success/m_item_Opponent");
             _cancel.onClick.AddListener(OnCancel);
+            GameSoundService.BindButtons(gameObject);
             if(gameObject.GetComponent<MatchApplicationState>()==null) gameObject.AddComponent<MatchApplicationState>();
         }
         public void Bind(MatchEntrySnapshot entry,BattleMatchSession session,Action onCancel)
         {
             _session=session; _onCancel=onCancel; _last=default; _dotTime=0; _dotFrame=0;
+            _soundPhase = BattleMatchPhase.Matching;
             _entering.text=ENTERING_FRAMES[0];
             _player.Render(entry.PlayerName,entry.PlayerAvatar,entry.Trophies,entry.PlayerBuffs);
             _opponent.Render(entry.OpponentName,entry.OpponentAvatar,entry.Trophies,entry.OpponentBuffs);
@@ -59,6 +62,11 @@ namespace GameLogic
         public void Render()
         {
             if (_session==null || IsDestroyed) return;
+            if (_soundPhase != _session.Phase)
+            {
+                _soundPhase = _session.Phase;
+                if (_soundPhase == BattleMatchPhase.Success) GameSoundService.Play(GameSound.MatchFound);
+            }
             var matching=_session.Phase==BattleMatchPhase.Matching;
             _matching.SetActive(matching); _success.SetActive(!matching);
             _cancel.interactable=matching;

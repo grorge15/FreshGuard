@@ -50,6 +50,7 @@ namespace GameLogic
             if (_startButton != null) _startButton.onClick.AddListener(OnStartClicked);
             if (_energyPlusButton != null) _energyPlusButton.onClick.AddListener(OnEnergyPlusClicked);
             if (_coinsPlusButton != null) _coinsPlusButton.onClick.AddListener(OnCoinsPlusClicked);
+            GameSoundService.BindButtons(gameObject);
         }
 
         protected override void OnRefresh() { RefreshView(); }
@@ -147,6 +148,7 @@ namespace GameLogic
 
         private void CloseMysteriousStore()
         {
+            GameSoundService.Play(GameSound.UiClose);
             var widget = _mysteriousStore;
             _mysteriousStore = null;
             // Destroy 延迟到帧末，先隐藏以立即解除射线遮挡。
@@ -191,7 +193,11 @@ namespace GameLogic
             _status.text = visible ? _statusMessage : string.Empty;
         }
 
-        public void ShowStatus(string message) { SetStatus(message); }
+        public void ShowStatus(string message)
+        {
+            SetStatus(message);
+            GameSoundService.Play(GameSound.Error);
+        }
 
         private Text FindText(params string[] names)
         {

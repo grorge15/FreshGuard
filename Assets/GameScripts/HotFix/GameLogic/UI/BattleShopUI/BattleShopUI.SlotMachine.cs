@@ -18,6 +18,8 @@ namespace GameLogic
         private Quaternion _leverRotation;
         private BattleShopContext _refreshContext;
         private float _refreshStartedAt;
+        private GameSoundPlayback _spinSound;
+        private bool _leverReturned;
         public bool IsRefreshing { get; private set; }
 
         private void InitializeSlotMachine()
@@ -74,6 +76,7 @@ namespace GameLogic
             IsRefreshing = true;
             _refreshContext = Context;
             _refreshStartedAt = Time.unscaledTime;
+            _leverReturned = false;
             for (var i = 0; i < _reelWindows.Length; i++)
             {
                 _reelStopped[i] = false;
@@ -86,6 +89,7 @@ namespace GameLogic
         private void SetSlotRefreshTargets()
         {
             if (!IsRefreshing) return;
+            GameSoundService.Play(GameSound.LeverDown);
             var slots = Context.GetState(BattleSide.Player).Slots;
             for (var i = 0; i < _reelWindows.Length; i++)
             {
@@ -128,6 +132,13 @@ namespace GameLogic
                 return;
             }
             var elapsed = Time.unscaledTime - _refreshStartedAt;
+            if (elapsed >= REEL_DELAY && _spinSound == null && !_reelStopped[_reelStopped.Length - 1])
+                _spinSound = GameSoundService.Play(GameSound.ReelSpin);
+            if (elapsed >= 0.43f && !_leverReturned)
+            {
+                _leverReturned = true;
+                GameSoundService.Play(GameSound.LeverReturn);
+            }
             var pull = elapsed < 0.18f ? Mathf.SmoothStep(0, 46, elapsed / 0.18f) :
                 elapsed < 0.245f ? 46 : elapsed < 0.43f ? Mathf.SmoothStep(46, -4, (elapsed - 0.245f) / 0.185f) :
                 elapsed < 0.5f ? Mathf.SmoothStep(-4, 0, (elapsed - 0.43f) / 0.07f) : 0;
@@ -144,6 +155,8 @@ namespace GameLogic
                 if (progress >= 1f && !_reelStopped[i])
                 {
                     _reelStopped[i] = true;
+                    GameSoundService.Play(GameSound.ReelStop, pitch: 1f + i * 0.08f);
+                    if (i == _reelWindows.Length - 1) { _spinSound?.Stop(); _spinSound = null; }
                     _reelWindows[i].gameObject.SetActive(false);
                 }
                 if (i < _items.Count) PresentSlotItem(i, elapsed);
@@ -164,6 +177,8 @@ namespace GameLogic
 
         internal void CancelSlotRefresh()
         {
+            _spinSound?.Stop();
+            _spinSound = null;
             IsRefreshing = false;
             _refreshContext = null;
             if (_leverPivot != null) _leverPivot.localRotation = _leverRotation;

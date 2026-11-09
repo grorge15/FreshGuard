@@ -79,11 +79,14 @@ namespace GameLogic
             var result = _context.Registry.ApplyGlassCollision(view.InstanceId, ball.IsBerserk, out var snapshot);
             if (result == GlassCollisionResult.Damaged)
             {
+                GameSoundService.PlayForSide(GameSound.GlassHit, _side);
                 if (_context.Registry.TryGet(view.InstanceId, out var entity))
                     view.ShowDurability(((GlassEntity)entity).CurrentDurability);
             }
             else if (result == GlassCollisionResult.Broken)
             {
+                GameSoundService.PlayForSide(snapshot.GlassKind == GlassKind.Normal ? GameSound.GlassBreak : GameSound.GlassRainbow,
+                    _side);
                 // 先提交通行和部署事实，奖励通知可能同步结束整局。
                 var rewardOrigin = view.transform.position;
                 view.BeginBreak(ball.CurrentDirection);

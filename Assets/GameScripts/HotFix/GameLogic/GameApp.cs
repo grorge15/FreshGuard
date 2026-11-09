@@ -43,6 +43,7 @@ public partial class GameApp
         try
         {
             if (!GameModule.UI.EnsureUIRoot()) throw new InvalidOperationException("启动场景缺少 UIRoot。");
+            await GameSoundService.InitializeAsync(lifetime);
             _demoProfile = await GameModule.Resource.LoadAssetAsync<DemoBattleProfile>("DemoBattleProfile", cancellationToken:lifetime);
             lifetime.ThrowIfCancellationRequested();
             if (_demoProfile == null) throw new InvalidOperationException("缺少DemoBattleProfile资源。");
@@ -229,6 +230,7 @@ public partial class GameApp
     }
     private static void Release()
     {
+        GameSoundService.Release();
         _appLifetime?.Cancel();
         _appLifetime?.Dispose();
         _appLifetime=null;

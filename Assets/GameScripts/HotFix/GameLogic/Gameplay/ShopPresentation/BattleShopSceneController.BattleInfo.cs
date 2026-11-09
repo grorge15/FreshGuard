@@ -19,6 +19,9 @@ namespace GameLogic
             if (Context == null || _enemies == null) return;
             var progress = Progress;
             var second = Math.Floor(progress.ElapsedSeconds);
+            if (_lastProgressBattleId == progress.BattleId && _lastProgressWave > 0 &&
+                progress.CurrentWave > _lastProgressWave && IsCombatRunning)
+                GameSoundService.Play(GameSound.WaveAdvance);
             if (!force && _lastProgressBattleId == progress.BattleId && _lastProgressWave == progress.CurrentWave &&
                 _lastProgressSecond == second) return;
             _lastProgressBattleId = progress.BattleId;

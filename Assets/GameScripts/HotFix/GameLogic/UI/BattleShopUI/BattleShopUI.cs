@@ -53,6 +53,7 @@ namespace GameLogic
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
             _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: false);
             InitializeSlotMachine();
+            GameSoundService.BindButtons(gameObject);
         }
         protected override void OnRefresh()
         {
@@ -194,6 +195,7 @@ namespace GameLogic
                 default: message = "无法放置，已返回来源位置"; break;
             }
             BattleNoticeEvents.Show(Context.BattleId, message);
+            GameSoundService.Play(GameSound.Error);
         }
         protected override void OnUpdate()
         {

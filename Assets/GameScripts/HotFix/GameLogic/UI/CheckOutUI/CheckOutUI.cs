@@ -26,6 +26,7 @@ namespace GameLogic
         private BattleSettlementReward _reward;
         private Func<UniTask> _returnToMain;
         private bool _busy;
+        private int _rewardSoundStage;
 
         protected override void ScriptGenerator()
         {
@@ -55,6 +56,7 @@ namespace GameLogic
             }
             _doubleReward.onClick.AddListener(OnDoubleReward);
             _returnMain.onClick.AddListener(OnReturnMain);
+            GameSoundService.BindButtons(gameObject);
         }
 
         protected override void OnRefresh()
@@ -62,8 +64,11 @@ namespace GameLogic
             _reward = null;
             _returnToMain = null;
             _busy = false;
+            _rewardSoundStage = 0;
             _doubleReward.interactable = _returnMain.interactable = false;
             Render(UserData is BattleSettlementSnapshot snapshot && snapshot.Result == BattleSettlementResult.Victory);
+            if (UserData is BattleSettlementSnapshot result)
+                GameSoundService.Play(result.Result == BattleSettlementResult.Victory ? GameSound.Victory : GameSound.Defeat);
         }
 
         public void BindReward(BattleSettlementReward reward, Func<UniTask> returnToMain)
@@ -94,11 +99,18 @@ namespace GameLogic
             {
                 await reward.ClaimAsync(doubleReward);
                 if (IsDestroyed || reward != _reward) return;
+                var soundStage = reward.IsDoubled ? 2 : 1;
+                if (_rewardSoundStage < soundStage)
+                {
+                    _rewardSoundStage = soundStage;
+                    GameSoundService.Play(GameSound.RewardClaim, pitch: soundStage == 2 ? 1.12f : 1f);
+                }
                 _rewardTitle.text = "获得奖励";
                 if (!doubleReward) await returnToMain();
             }
             catch (Exception exception)
             {
+                GameSoundService.Play(GameSound.Error);
                 Debug.LogError("结算奖励保存或返回失败：" + exception.Message);
                 if (!IsDestroyed && reward == _reward) _rewardTitle.text = "操作失败，请点击重试";
             }

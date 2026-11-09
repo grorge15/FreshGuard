@@ -21,6 +21,7 @@ namespace GameLogic
             _items = new BuffSelectItemWidget[3];
             for (var i = 0; i < _items.Length; i++)
                 _items[i] = CreateWidget<BuffSelectItemWidget>("m_rect_Content/m_rect_Cards/m_item_Card" + i);
+            GameSoundService.BindButtons(gameObject);
         }
         protected override void OnRefresh()
         {
@@ -33,6 +34,7 @@ namespace GameLogic
                 return;
             }
             _session = new BuffSelectSession(_request);
+            GameSoundService.Play(GameSound.UiOpen);
             for (var i = 0; i < _items.Length; i++) _items[i].Render(_request.Options[i], i, Select);
             RefreshCountdown();
         }
@@ -49,6 +51,7 @@ namespace GameLogic
         }
         private void Complete(BuffSelectResult result)
         {
+            GameSoundService.Play(GameSound.BuffChoose);
             var callback = _request?.OnSelected;
             StopSession();
             // 先关闭旧窗口，回调可以安全打开下一次选择。

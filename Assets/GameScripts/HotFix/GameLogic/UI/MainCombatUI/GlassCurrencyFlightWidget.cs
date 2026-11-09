@@ -111,6 +111,7 @@ namespace GameLogic
                 coin.Age += deltaTime;
                 if (coin.Age >= coin.Launch + FlightDuration)
                 {
+                    GameSoundService.Play(GameSound.CoinCollect);
                     Release(coin);
                     _active.RemoveAt(i);
                     _pulseAge = 0f;

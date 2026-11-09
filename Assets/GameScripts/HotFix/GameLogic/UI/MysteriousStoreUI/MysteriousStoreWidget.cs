@@ -151,6 +151,8 @@ namespace GameLogic
         {
             if (_disposed) return;
             _session = session ?? throw new ArgumentNullException(nameof(session));
+            GameSoundService.BindButtons(gameObject);
+            GameSoundService.Play(GameSound.UiOpen);
             _close = close;
             _purchased = purchased;
             _feedback.text = string.Empty;
@@ -206,14 +208,17 @@ namespace GameLogic
             switch (_session.TryBuy(index))
             {
                 case MysteriousStorePurchaseResult.Success:
+                    GameSoundService.Play(wasHeld ? GameSound.BuffStack : GameSound.BuffAcquired);
                     _purchased?.Invoke();
                     _feedback.text = (wasHeld ? "升层成功：" : "获得助力：") + _session.Offers[index].Name +
                         " " + _session.GetHeldLevel(_session.Offers[index].BuffId) + "层";
                     break;
                 case MysteriousStorePurchaseResult.InsufficientBalance:
+                    GameSoundService.Play(GameSound.Error);
                     _feedback.text = "助力币不足";
                     break;
                 case MysteriousStorePurchaseResult.SlotsFull:
+                    GameSoundService.Play(GameSound.Error);
                     _feedback.text = "当前可装备助力道具已达上限，\n请在下方移除道具后再次购买。";
                     break;
             }
@@ -237,10 +242,12 @@ namespace GameLogic
             _removeIcon.Render(item.Buff.Quality);
             _removeLevel.text = item.Level + "级";
             _confirmation.SetActive(true);
+            GameSoundService.Play(GameSound.UiOpen);
         }
 
         private void CancelRemoval()
         {
+            if (_confirmation.activeSelf) GameSoundService.Play(GameSound.UiClose);
             _removeBuffId = 0;
             _confirmation.SetActive(false);
         }
@@ -248,7 +255,11 @@ namespace GameLogic
         private void ConfirmRemoval()
         {
             if (_disposed || _session == null || _removeBuffId == 0) return;
-            if (_session.Remove(_removeBuffId)) _feedback.text = "已移除助力，全部层数已清除";
+            if (_session.Remove(_removeBuffId))
+            {
+                _feedback.text = "已移除助力，全部层数已清除";
+                GameSoundService.Play(GameSound.BuffRemove);
+            }
             CancelRemoval();
             RefreshView();
         }

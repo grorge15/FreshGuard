@@ -24,7 +24,7 @@ MonoBehaviour:
   - name: Sound
     mute: 0
     volume: 0.5
-    agentHelperCount: 4
+    agentHelperCount: 12
     AudioType: 0
     audioRolloffMode: 0
     minDistance: 1
@@ -32,7 +32,7 @@ MonoBehaviour:
   - name: UISound
     mute: 0
     volume: 0.5
-    agentHelperCount: 4
+    agentHelperCount: 8
     AudioType: 1
     audioRolloffMode: 0
     minDistance: 1

@@ -82,6 +82,7 @@ namespace GameLogic
             }
             if (_preparationDigit != digit)
             {
+                if (digit > 0) GameSoundService.Play(GameSound.Countdown, pitch: Mathf.Clamp(1.15f - digit * 0.035f, 0.85f, 1.15f));
                 _preparationDigit = digit;
                 _preparationCountdown.text = digit > 0 ? digit.ToString() : string.Empty;
             }

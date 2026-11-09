@@ -380,6 +380,7 @@ namespace GameLogic
                 if (IsContactRunning && placed.TryGetComboRobot(_comboRegistry, Side, out var robot))
                 {
                     placed.PlayCollisionFeedback();
+                    GameSoundService.PlayForSide(GameSound.RobotHit, Side);
                     RobotContactDetected?.Invoke(this, robot.InstanceId);
                 }
                 if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
@@ -605,6 +606,9 @@ namespace GameLogic
             BounceCount++;
             SecondsSinceEffectiveInteraction = 0f;
             var robot = obstacle != null ? obstacle.GetComponentInParent<RobotView>() : null;
+            if (robot != null && IsContactRunning && obstacle == robot.GetPhysicalCollider() &&
+                robot.TryGetComboRobot(_comboRegistry, Side, out _))
+                GameSoundService.PlayForSide(GameSound.RobotHit, Side);
             if (robot == null) ResetComboCount();
             var glass = obstacle != null ? obstacle.GetComponent<GlassView>() : null;
             if (glass != null) ProcessRecoveryGlass(glass);
@@ -612,6 +616,7 @@ namespace GameLogic
             {
                 var point = obstacle.ClosestPoint(center);
                 _impactFeedback?.PlayWall(point, center - point);
+                GameSoundService.PlayForSide(GameSound.BallWall, Side);
             }
             if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
             gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, WorldRadius + PlacementClearance * 1.5f,
@@ -850,7 +855,10 @@ namespace GameLogic
                 if (robot != null) ProcessRobotCombo(robot, collision.collider, bounced);
                 if (bounced && glass != null) ApplyGlassCollision(glass, impactPoint, impactNormal);
                 else if (bounced && robot == null && collision.collider.GetComponentInParent<PhysicalCollisionBoundary>() != null)
+                {
                     _impactFeedback?.PlayWall(impactPoint, impactNormal);
+                    GameSoundService.PlayForSide(GameSound.BallWall, Side);
+                }
                 if (bounced) ApplyBounceAcceleration(robot != null);
                 ApplyEffectiveVelocity();
             }
@@ -897,6 +905,8 @@ namespace GameLogic
             if (_protectedContacts.ContainsKey(robot.InstanceId)) return;
             if (!contact.AttackHandled || IsBerserk && _rules != null && contact.StayElapsed >= _rules.RageStayInterval)
             {
+                // 只提示首次接触；暴走持续接触的攻击脉冲不重复播放碰撞声。
+                if (!contact.AttackHandled) GameSoundService.PlayForSide(GameSound.RobotHit, Side);
                 contact.AttackHandled = true;
                 contact.StayElapsed = 0f;
                 SecondsSinceEffectiveInteraction = 0f;
@@ -920,7 +930,12 @@ namespace GameLogic
             if (_rageReentryRemaining > 0f) return;
             ComboCount++;
             _comboElapsed = 0d;
-            if (ComboCount <= 50 && ComboCount % 10 == 0) ShowComboPopup();
+            if (ComboCount <= 50 && ComboCount % 10 == 0)
+            {
+                if (Side == BattleSide.Player && ComboCount != (_rules?.ComboTriggerCount ?? 50))
+                    GameSoundService.Play(GameSound.Combo, pitch: 1f + ComboCount / 100f);
+                ShowComboPopup();
+            }
             if (ComboCount == (_rules?.ComboTriggerCount ?? 50)) ComboThresholdReached?.Invoke(this);
         }
 

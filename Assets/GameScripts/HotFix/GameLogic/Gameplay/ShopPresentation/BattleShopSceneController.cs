@@ -334,6 +334,8 @@ namespace GameLogic
 
         private void OnBerserkChanged(BattleSide side, bool active)
         {
+            if (side == BattleSide.Player && IsCombatRunning)
+                GameSoundService.Play(active ? GameSound.RageStart : GameSound.RageEnd);
             if (side == BattleSide.Player) ShopWindow?.RefreshBerserkBar();
             var views = new List<RobotView>();
             foreach (var instance in _views.Values)
@@ -533,6 +535,7 @@ namespace GameLogic
                     }
                     try { _enemies?.StartBattle(); }
                     catch (Exception e) { Debug.LogException(e, this); return; }
+                    GameSoundService.Play(GameSound.BattleStart);
                     startedThisFrame = true;
                 }
                 var frameContext = Context;

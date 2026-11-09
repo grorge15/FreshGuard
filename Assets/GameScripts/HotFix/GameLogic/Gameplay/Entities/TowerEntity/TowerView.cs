@@ -74,7 +74,12 @@ namespace GameLogic
         {
             if (_tower == null || snapshot.InstanceId != _tower.InstanceId) return;
             Render(snapshot.CurrentHp, snapshot.MaxHp, snapshot.Side);
-            if (snapshot.CurrentHp < snapshot.PreviousHp) PlayHitShake();
+            if (snapshot.CurrentHp < snapshot.PreviousHp)
+            {
+                PlayHitShake();
+                GameSoundService.PlayForSide(snapshot.CurrentHp == 0 ? GameSound.TowerDestroyed : GameSound.TowerHit,
+                    snapshot.Side);
+            }
         }
 
         private void PlayHitShake()

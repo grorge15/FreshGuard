@@ -140,6 +140,7 @@ namespace GameLogic
             var session = _session;
             var host = _host;
             var result = ShopOperationResult.InvalidPlacement;
+            var purchasing = _source.Kind == RobotDragSourceKind.ShopOffer;
             try
             {
                 if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
@@ -147,6 +148,9 @@ namespace GameLogic
                 if (_ui.IsOverShop(_position))
                 {
                     int? targetSlot = _ui.TryGetShopSlot(_position, out shopSlot) ? (int?)shopSlot : null;
+                    if (targetSlot.HasValue)
+                        foreach (var slot in context.GetState(BattleSide.Player).Slots)
+                            if (slot.SlotId == targetSlot.Value && slot.Offer != null && !slot.IsPurchased) purchasing = true;
                     result = context.TryCommitShopDrop(session.InteractionId, targetSlot);
                 }
                 else
@@ -163,6 +167,8 @@ namespace GameLogic
             catch (Exception e) { Debug.LogException(e); }
             finally
             {
+                if (result == ShopOperationResult.Success && purchasing && host != null && host.Context == context && !context.IsEnded)
+                    GameSoundService.Play(GameSound.Purchase);
                 if (generation == _generation)
                 {
                     Cancel();
