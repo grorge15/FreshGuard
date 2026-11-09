@@ -26,7 +26,7 @@ Transform:
   m_GameObject: {fileID: 3774107878421665918}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.65, y: 0.65, z: 0.65}
+  m_LocalScale: {x: 0.845, y: 0.845, z: 0.845}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 7683998179661389739}
@@ -73,7 +73,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 2
-  m_Sprite: {fileID: 21300000, guid: ae4211c8bb59be744bcebdf2c77d8613, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 53d43d48ba87b8441ad6569d4da86458, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -218,6 +218,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _body: {fileID: 884231924481299934}
   _healthFill: {fileID: 3629490657002137147}
+  _playerBodySprite: {fileID: 21300000, guid: 53d43d48ba87b8441ad6569d4da86458, type: 3}
+  _opponentBodySprite: {fileID: 21300000, guid: 092b109ab45eb2f4cab24ca1adf54780, type: 3}
 --- !u!61 &8341035427423849657
 BoxCollider2D:
   m_ObjectHideFlags: 0

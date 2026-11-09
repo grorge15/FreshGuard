@@ -10,6 +10,8 @@ namespace GameLogic
     {
         [SerializeField] private SpriteRenderer _body;
         [SerializeField] private SpriteRenderer _healthFill;
+        [SerializeField] private Sprite _playerBodySprite;
+        [SerializeField] private Sprite _opponentBodySprite;
         [SerializeField, Min(0.01f)] private float _hitShakeAmplitude = 0.07f;
         [SerializeField, Min(0.05f)] private float _hitShakeDuration = 0.22f;
         private TowerEntity _tower;
@@ -111,7 +113,9 @@ namespace GameLogic
             // 血条左边缘固定，只让右端随剩余血量向左收缩。
             _healthFill.transform.localPosition = _fullFillPosition + _fullFillLeftOffset * (1f - HealthFraction);
             var color = side == BattleSide.Player ? new Color(0.3f, 0.75f, 1f) : new Color(1f, 0.4f, 0.3f);
-            _body.color = IsDead ? new Color(0.35f, 0.35f, 0.35f) : color;
+            var bodySprite = side == BattleSide.Player ? _playerBodySprite : _opponentBodySprite;
+            if (bodySprite != null) _body.sprite = bodySprite;
+            _body.color = IsDead ? new Color(0.35f, 0.35f, 0.35f) : bodySprite != null ? Color.white : color;
             _healthFill.color = color;
         }
 

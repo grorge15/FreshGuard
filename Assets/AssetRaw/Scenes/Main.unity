@@ -340,6 +340,8 @@ MonoBehaviour:
   _playerClearColor: {r: 0.12941177, g: 0.68235296, b: 0.84705883, a: 1}
   _opponentClearColor: {r: 0.91764706, g: 0.69803923, b: 0.30980393, a: 1}
   _battleBackground: {fileID: 21300000, guid: ff7e7c87b88b4bdebdcf4ff3b3be5836, type: 3}
+  _battleBackgroundScale9By16: 0.57
+  _battleBackgroundScale9By18: 0.52
 --- !u!114 &164109973
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -536,11 +538,11 @@ PrefabInstance:
       objectReference: {fileID: 21300000, guid: 659ab9500216e8941a7f243bc1fde919, type: 3}
     - target: {fileID: 1162574225245119580, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: _boardBackground
-      value:
+      value: 
       objectReference: {fileID: 2042964650}
     - target: {fileID: 1162574225245119580, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: _blockedSlotSprite
-      value:
+      value: 
       objectReference: {fileID: 21300000, guid: fc680a82a82c4119b3e13c890d7b3455, type: 3}
     - target: {fileID: 1171797309108826311, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: m_Sprite
@@ -1677,11 +1679,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 884231924481299934, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_Color.g
-      value: 0.75
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 884231924481299934, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_Color.r
-      value: 0.3
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3629490657002137147, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_Color.g
@@ -1699,6 +1701,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: PlayerTower
       objectReference: {fileID: 0}
+    - target: {fileID: 7127748674610340550, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.030999975
+      objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_RootOrder
       value: 2
@@ -1713,11 +1719,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.71
+      value: 1.675
       objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 1.89
+      value: 1.927
       objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalPosition.z
@@ -1750,6 +1756,10 @@ PrefabInstance:
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9126996506698226329, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.031
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
@@ -2982,12 +2992,16 @@ PrefabInstance:
     m_TransformParent: {fileID: 1973142976}
     m_Modifications:
     - target: {fileID: 884231924481299934, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 092b109ab45eb2f4cab24ca1adf54780, type: 3}
+    - target: {fileID: 884231924481299934, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_Color.b
-      value: 0.3
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 884231924481299934, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_Color.g
-      value: 0.4
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3629490657002137147, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_Color.b
@@ -3000,6 +3014,10 @@ PrefabInstance:
     - target: {fileID: 6922345064266525850, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_Name
       value: OpponentTower
+      objectReference: {fileID: 0}
+    - target: {fileID: 7127748674610340550, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.040000282
       objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_RootOrder
@@ -3015,11 +3033,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 1.73
+      value: 1.687
       objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -1.83
+      value: -1.782
       objectReference: {fileID: 0}
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalPosition.z
@@ -3052,6 +3070,10 @@ PrefabInstance:
     - target: {fileID: 7683998179661389739, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9126996506698226329, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.04
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3c46307625147c04199cbb141bb86dde, type: 3}
@@ -3656,11 +3678,11 @@ PrefabInstance:
       objectReference: {fileID: 21300000, guid: 1433ec57d53330842a042a1985b4f3b1, type: 3}
     - target: {fileID: 1162574225245119580, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: _boardBackground
-      value:
+      value: 
       objectReference: {fileID: 1467540174}
     - target: {fileID: 1162574225245119580, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: _blockedSlotSprite
-      value:
+      value: 
       objectReference: {fileID: 21300000, guid: b1e2aa587baf4b08b55e73c9a016ce2e, type: 3}
     - target: {fileID: 1171797309108826311, guid: 069610b07ce111e4a8d1e04bb292bafc, type: 3}
       propertyPath: m_Sprite
