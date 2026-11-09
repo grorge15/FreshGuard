@@ -4,72 +4,57 @@ using UnityEngine;
 
 namespace GameLogic
 {
-    /// <summary>仅显示命中瞬间的位置快照；寿命由战斗控制器推进，不负责选敌或伤害。</summary>
+    /// <summary>命中快照上的火花与逐跳闪电序列帧；不选敌、不结算伤害。</summary>
     [DisallowMultipleComponent]
     public sealed class LightningChainEffectView : MonoBehaviour
     {
-        [SerializeField] private LineRenderer _chainLine;
-        [SerializeField] private LineRenderer _hitFlash;
-        [Min(0.01f)] public float Lifetime = 0.2f;
+        [SerializeField] private BattleSpriteAnimation _chainTemplate;
+        [SerializeField] private BattleSpriteAnimation _sparkTemplate;
+        [SerializeField, Min(0.01f)] private float _chainReferenceLength = 4f;
+        [SerializeField, Min(0.01f)] private float _chainThickness = 0.22f;
+        [Min(0.01f)] public float Lifetime = 10f / 24f;
+        private readonly List<BattleSpriteAnimation> _chains = new List<BattleSpriteAnimation>();
+        private readonly List<BattleSpriteAnimation> _sparks = new List<BattleSpriteAnimation>();
         private float _elapsed;
         private float _duration;
         private bool _playing;
-        private readonly Color _chainColor = new Color(0.12f, 0.65f, 1f, 1f);
-        private readonly Color _flashColor = new Color(0.8f, 0.97f, 1f, 1f);
 
         public void Play(IReadOnlyList<Vector3> positions)
         {
             Clear();
             if (positions == null || positions.Count == 0) return;
-            if (_chainLine == null || _hitFlash == null)
-                throw new InvalidOperationException("闪电链预制体必须绑定 ChainLine 和 HitFlash。");
-            if (float.IsNaN(Lifetime) || float.IsInfinity(Lifetime) || Lifetime <= 0f)
-                throw new InvalidOperationException("闪电链表现 Lifetime 必须为有限正数。");
-            _chainLine.useWorldSpace = _hitFlash.useWorldSpace = true;
-            // 每跳固定折点，端点严格落在已锁定目标位置；不保留调用方列表。
-            if (positions.Count > 1)
+            if (_chainTemplate == null || _sparkTemplate == null ||
+                !IsPositive(Lifetime) || !IsPositive(_chainReferenceLength) || !IsPositive(_chainThickness))
+                throw new InvalidOperationException("闪电表现需要两种序列帧模板及有效尺寸、寿命。");
+            _duration = Mathf.Max(Lifetime, Mathf.Max(_chainTemplate.Duration, _sparkTemplate.Duration));
+            for (var i = 0; i < positions.Count; i++)
             {
-                _chainLine.positionCount = 1 + (positions.Count - 1) * 4;
-                _chainLine.SetPosition(0, positions[0]);
-                var index = 1;
-                for (var target = 1; target < positions.Count; target++)
-                {
-                    var from = positions[target - 1];
-                    var to = positions[target];
-                    var direction = to - from;
-                    var normal = new Vector3(-direction.y, direction.x, 0f).normalized;
-                    var offset = Mathf.Min(0.035f, direction.magnitude * 0.1f);
-                    for (var point = 1; point <= 4; point++)
-                    {
-                        var position = point == 4 ? to : Vector3.Lerp(from, to, point / 4f) +
-                            normal * (point % 2 == 0 ? -offset : offset);
-                        _chainLine.SetPosition(index++, position);
-                    }
-                }
-                _chainLine.enabled = true;
+                var spark = GetOrCreate(_sparks, _sparkTemplate, i);
+                spark.transform.position = positions[i];
+                spark.transform.rotation = Quaternion.identity;
+                spark.Sample(0f);
+                if (i == 0) continue;
+                var direction = positions[i] - positions[i - 1];
+                if (direction.sqrMagnitude < 0.000001f) continue;
+                var chain = GetOrCreate(_chains, _chainTemplate, i - 1);
+                chain.transform.position = positions[i - 1];
+                chain.transform.rotation = Quaternion.Euler(0, 0, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
+                chain.transform.localScale = new Vector3(direction.magnitude / _chainReferenceLength, _chainThickness, 1f);
+                chain.Sample(0f);
             }
-            // 首名即使没有可连锁目标，也以 XY 平面的八角星芒反馈命中。
-            _hitFlash.positionCount = 17;
-            for (var i = 0; i <= 16; i++)
-            {
-                var angle = i * Mathf.PI / 8f;
-                var radius = i % 2 == 0 ? 0.13f : 0.035f;
-                _hitFlash.SetPosition(i, positions[0] + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * radius);
-            }
-            _hitFlash.enabled = true;
-            _duration = Lifetime;
             _playing = true;
-            PresentAlpha(1f);
+            var group = GetComponent<BattleSideRenderGroup>();
+            if (group != null && group.Registry != null) group.Bind(group.Registry, group.Side);
         }
 
-        /// <returns>表现已到期或未播放时返回 true，调用方可立即回收。</returns>
         public bool Advance(float deltaTime)
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!_playing) return true;
             _elapsed += deltaTime;
             if (_elapsed >= _duration) { Clear(); return true; }
-            PresentAlpha(1f - _elapsed / _duration);
+            foreach (var chain in _chains) if (chain.gameObject.activeSelf) chain.Sample(_elapsed);
+            foreach (var spark in _sparks) if (spark.gameObject.activeSelf) spark.Sample(_elapsed);
             return false;
         }
 
@@ -77,21 +62,26 @@ namespace GameLogic
         {
             _playing = false;
             _elapsed = _duration = 0f;
-            if (_chainLine != null) { _chainLine.enabled = false; _chainLine.positionCount = 0; }
-            if (_hitFlash != null) { _hitFlash.enabled = false; _hitFlash.positionCount = 0; }
-            PresentAlpha(1f);
+            if (_chainTemplate != null) { _chainTemplate.Clear(); _chainTemplate.gameObject.SetActive(false); }
+            if (_sparkTemplate != null) { _sparkTemplate.Clear(); _sparkTemplate.gameObject.SetActive(false); }
+            foreach (var chain in _chains) { chain.Clear(); chain.gameObject.SetActive(false); }
+            foreach (var spark in _sparks) { spark.Clear(); spark.gameObject.SetActive(false); }
         }
 
-        private void PresentAlpha(float alpha)
+        private static BattleSpriteAnimation GetOrCreate(List<BattleSpriteAnimation> items,
+            BattleSpriteAnimation template, int index)
         {
-            var chain = _chainColor;
-            chain.a = alpha;
-            var flash = _flashColor;
-            flash.a = alpha;
-            if (_chainLine != null) _chainLine.startColor = _chainLine.endColor = chain;
-            if (_hitFlash != null) _hitFlash.startColor = _hitFlash.endColor = flash;
+            while (items.Count <= index)
+            {
+                var item = Instantiate(template, template.transform.parent, false);
+                item.name = template.name + "_" + items.Count;
+                items.Add(item);
+            }
+            items[index].gameObject.SetActive(true);
+            return items[index];
         }
 
+        private static bool IsPositive(float value) => !float.IsNaN(value) && !float.IsInfinity(value) && value > 0f;
         private void OnDisable() { Clear(); }
     }
 }
