@@ -7,6 +7,8 @@ namespace GameLogic
         [SerializeField] private Transform _playerWorldRoot;
         [SerializeField] private Transform _opponentWorldRoot;
         [SerializeField] private BattleSideRenderRegistry _renderRegistry;
+        [SerializeField] private SpriteRenderer _playerPortal;
+        [SerializeField] private SpriteRenderer _opponentPortal;
         [SerializeField, Range(0.01f, 1f)] private float _opponentMaxSizeRatio = 1f;
         [SerializeField] private Color _playerClearColor = new Color32(33, 174, 216, 255);
         [SerializeField] private Color _opponentClearColor = new Color32(234, 178, 79, 255);
@@ -65,6 +67,7 @@ namespace GameLogic
             window.ApplyScreenLayout(shopPosition, shopScale, infoPosition, infoScale);
             ApplyCamera(_sceneCamera, candidate.PlayerViewport, screen, playerCenter, playerSize);
             ApplyCamera(_opponentCamera, candidate.OpponentViewport, screen, opponentCenter, opponentSize);
+            MatchPortalScreenSize();
             _sceneCamera.backgroundColor = _playerClearColor;
             _opponentCamera.backgroundColor = _opponentClearColor;
             RefreshBackground(screen);
@@ -125,6 +128,18 @@ namespace GameLogic
         }
 
         internal void SetInformationVisible(bool visible) => _infoRenderLayer?.Refresh(visible);
+
+        private void MatchPortalScreenSize()
+        {
+            if (_playerPortal == null || _opponentPortal == null || _sceneCamera == null || _opponentCamera == null) return;
+            var playerPixelsPerUnit = _sceneCamera.pixelHeight / (2f * _sceneCamera.orthographicSize);
+            var opponentPixelsPerUnit = _opponentCamera.pixelHeight / (2f * _opponentCamera.orthographicSize);
+            var scale = _opponentPortal.transform.lossyScale;
+            if (opponentPixelsPerUnit <= 0f || Mathf.Abs(scale.x) < 0.0001f || Mathf.Abs(scale.y) < 0.0001f) return;
+            // 只调整显示尺寸，保持传送门所在的敌人出生节点及其变换不变。
+            var worldSize = (Vector2)_playerPortal.bounds.size * (playerPixelsPerUnit / opponentPixelsPerUnit);
+            _opponentPortal.size = new Vector2(worldSize.x / Mathf.Abs(scale.x), worldSize.y / Mathf.Abs(scale.y));
+        }
 
         private void RefreshBackground(Vector2 screen)
         {
