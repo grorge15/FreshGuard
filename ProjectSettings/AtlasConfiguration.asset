@@ -15,13 +15,15 @@ MonoBehaviour:
   outputAtlasDir: Assets/AssetArt/Atlas
   sourceAtlasRootDir:
   - Assets/AssetRaw/UIRaw/Atlas
+  - Assets/AssetRaw/Actor/Sprites
   rootChildAtlasDir:
   - Assets/AssetRaw/UIRaw/Atlas/SingleAtlas
-  - Assets/AssetRaw/Actor/Sprites
+  - Assets/AssetRaw/Actor/Sprites/Robots
   - "Assets/AssetRaw/Actor/Sprites/Enemy/Frame/\u9AB7\u9AC5\u5175"
-  - Assets/AssetRaw/UI/UISprites
+  - Assets/AssetRaw/Actor/Sprites/Bullets/Frames
   singleAtlasDir:
-  - Assets/AssetRaw/UIRaw/Atlas/Background
+  - Assets/AssetRaw/Actor/Raw
+  - Assets/AssetRaw/UI/UIRaw
   excludeFolder:
   - Assets/AssetRaw/UIRaw/Raw
   androidFormat: 50

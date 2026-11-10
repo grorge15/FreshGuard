@@ -69,27 +69,13 @@ SpriteAtlasAsset:
     secondaryTextureSettings: {}
     variantMultiplier: 1
     packables:
-    - {fileID: 21300000, guid: bc6f580eb2d758f4699f564b6d7b4551, type: 3}
-    - {fileID: 21300000, guid: 991adb447a4854244902c1585d59d473, type: 3}
-    - {fileID: 21300000, guid: 3c8a2c76bd4a9884484f9c3a455f0146, type: 3}
-    - {fileID: 21300000, guid: e26903ba97f0f7a48a12b3636d0a1ef4, type: 3}
-    - {fileID: 21300000, guid: cbdb5d402fa4e4042900ffe2fe0d4f75, type: 3}
-    - {fileID: 21300000, guid: 1433ec57d53330842a042a1985b4f3b1, type: 3}
-    - {fileID: 21300000, guid: 9a9ec9570b9de9246aae26341c95f3c2, type: 3}
-    - {fileID: 21300000, guid: aa5c2014ebf6e874b9ec459447c64759, type: 3}
-    - {fileID: 21300000, guid: 139b1874de69a8e42827614df7068411, type: 3}
-    - {fileID: 21300000, guid: 72c25458f00e03c4a877732156db6fb7, type: 3}
-    - {fileID: 21300000, guid: cdd5e21c92cee1647bce38203857bd5c, type: 3}
-    - {fileID: 21300000, guid: fdbc86fb53f3d934a9fc7b457eb29089, type: 3}
-    - {fileID: 21300000, guid: 5c58a590b20d66a4293dbb36c7b1843e, type: 3}
-    - {fileID: 21300000, guid: 55ada28b66863cd4e8c395a530b41678, type: 3}
-    - {fileID: 21300000, guid: 659ab9500216e8941a7f243bc1fde919, type: 3}
-    - {fileID: 21300000, guid: 6d19fa2cdbc29ef46a072b0f181ffdc1, type: 3}
-    - {fileID: 21300000, guid: eb6c94cc61b2adc4b8c65bacf3d06843, type: 3}
-    - {fileID: 21300000, guid: 485ac1832f31e2f458a5bfd49949f89a, type: 3}
-    - {fileID: 21300000, guid: 0cf9da59c08061b41b1ce508c0280153, type: 3}
-    - {fileID: 21300000, guid: 01509d1d8ec1fe34cacb7fec8e29f17f, type: 3}
-    - {fileID: 21300000, guid: cec206e52c9b38543a2f3ac1ce263a43, type: 3}
+    - {fileID: 21300000, guid: 1b699399380c08c42814d71e3d5b9f59, type: 3}
+    - {fileID: 21300000, guid: 3d849f3718ac88c4fb811c7e63b67762, type: 3}
+    - {fileID: 21300000, guid: 5843a09050a561242b9b6da33c3d91e9, type: 3}
+    - {fileID: 21300000, guid: 55a37a5242821e94ba3ded1153a0e5ac, type: 3}
+    - {fileID: 21300000, guid: a4713bd9d6ea71e48af673806fdf3b61, type: 3}
+    - {fileID: 21300000, guid: f333936ad141d7f48acfb556dd58de60, type: 3}
+    - {fileID: 21300000, guid: cf48bfce61d03064ab1595625490995c, type: 3}
     bindAsDefault: 1
     isAtlasV2: 1
     cachedData: {fileID: 0}

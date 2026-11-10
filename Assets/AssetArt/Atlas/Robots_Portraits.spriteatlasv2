@@ -61,22 +61,30 @@ SpriteAtlasAsset:
     packingSettings:
       serializedVersion: 2
       padding: 4
-      blockOffset: 1
+      blockOffset: 3
       allowAlphaSplitting: 0
-      enableRotation: 1
-      enableTightPacking: 1
+      enableRotation: 0
+      enableTightPacking: 0
       enableAlphaDilation: 1
     secondaryTextureSettings: {}
     variantMultiplier: 1
     packables:
     - {fileID: 21300000, guid: 92c34738fe1dc4a469acf96374bb483b, type: 3}
+    - {fileID: 21300000, guid: 417e7a05c2c772c4ea48d9ac550f2614, type: 3}
     - {fileID: 21300000, guid: dd769d03fc4b2da4993bb724fda55282, type: 3}
     - {fileID: 21300000, guid: 3c11a2175a121274188b304010c99b47, type: 3}
+    - {fileID: 21300000, guid: 27547a9f9b2c4e44fa5fda3b99c72628, type: 3}
+    - {fileID: 21300000, guid: 28e73e6e8f44be84487ad3871e76dbb1, type: 3}
     - {fileID: 21300000, guid: 097047ba4da027e4f8f34e89a6f6092e, type: 3}
     - {fileID: 21300000, guid: bfd4e9412af809645a195474767a3e23, type: 3}
     - {fileID: 21300000, guid: 0f5082e031839ef4c85ce4705c36a95a, type: 3}
+    - {fileID: 21300000, guid: 3213804db86ab3d45b3ca2687aa7ca73, type: 3}
     - {fileID: 21300000, guid: e15eeb9c1ecd5194285875865f192e3f, type: 3}
     - {fileID: 21300000, guid: 155bb7f95e7fcd6449d8d0a83d4c4614, type: 3}
+    - {fileID: 21300000, guid: 3311c91d18fa08f49ae80c9656a7e8ba, type: 3}
+    - {fileID: 21300000, guid: ead1e4d496c0a2047b4de4d7e652e397, type: 3}
+    - {fileID: 21300000, guid: 7825f0764a6e28240bfc42aa0d9f1449, type: 3}
+    - {fileID: 21300000, guid: b64decb7ed51381479749d8b3e117733, type: 3}
     bindAsDefault: 1
     isAtlasV2: 1
     cachedData: {fileID: 0}

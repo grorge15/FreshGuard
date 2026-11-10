@@ -69,13 +69,17 @@ SpriteAtlasAsset:
     secondaryTextureSettings: {}
     variantMultiplier: 1
     packables:
-    - {fileID: 21300000, guid: fc886e565f79d75408c1cf110806b569, type: 3}
-    - {fileID: 21300000, guid: 1c86c0dc175d56d4b90542b6444f969c, type: 3}
-    - {fileID: 21300000, guid: d3708771cfd73f34da5ef72ad4c64361, type: 3}
-    - {fileID: 21300000, guid: 4373c144936283a40a2155d9de4b1196, type: 3}
-    - {fileID: 21300000, guid: f34dc121ab9a1364a8e6f6a33d5d5271, type: 3}
-    - {fileID: 21300000, guid: 94ebd4ea1373eb34aa9b990f705804ef, type: 3}
-    - {fileID: 21300000, guid: 7d29abd3c61e74b44903bfd55faadfd7, type: 3}
+    - {fileID: 21300000, guid: ded374c62700b1940a283337583a7756, type: 3}
+    - {fileID: 21300000, guid: a27bbd16e0a268b46bf7ac9a97137cb0, type: 3}
+    - {fileID: 21300000, guid: 46d8a2a252351444a8313b882b9bf896, type: 3}
+    - {fileID: 21300000, guid: caa55c4e7c15796418f190df657cf605, type: 3}
+    - {fileID: 21300000, guid: b23b787421137c94fb41f39128d49d84, type: 3}
+    - {fileID: 21300000, guid: 84493c10bbfd2174286aebc23228197b, type: 3}
+    - {fileID: 21300000, guid: 4a7e5529801f1b940954d600bd7a9948, type: 3}
+    - {fileID: 21300000, guid: e79afc84de138aa4eb5aaa875c915b7f, type: 3}
+    - {fileID: 21300000, guid: d058f1ded2f4f3e4fb9261603fdc5ff6, type: 3}
+    - {fileID: 21300000, guid: 7b81609a07f59054388fd65ce231f0fe, type: 3}
+    - {fileID: 21300000, guid: 5a168618a5a901b469e3f4830c40dad9, type: 3}
     bindAsDefault: 1
     isAtlasV2: 1
     cachedData: {fileID: 0}

@@ -61,23 +61,29 @@ SpriteAtlasAsset:
     packingSettings:
       serializedVersion: 2
       padding: 4
-      blockOffset: 1
+      blockOffset: 3
       allowAlphaSplitting: 0
-      enableRotation: 1
-      enableTightPacking: 1
+      enableRotation: 0
+      enableTightPacking: 0
       enableAlphaDilation: 1
     secondaryTextureSettings: {}
     variantMultiplier: 1
     packables:
-    - {fileID: 21300000, guid: 00a5bd9c5394adc4caa9ee3fa472f57f, type: 3}
-    - {fileID: 21300000, guid: ded374c62700b1940a283337583a7756, type: 3}
-    - {fileID: 21300000, guid: 46d8a2a252351444a8313b882b9bf896, type: 3}
-    - {fileID: 21300000, guid: caa55c4e7c15796418f190df657cf605, type: 3}
-    - {fileID: 21300000, guid: 84493c10bbfd2174286aebc23228197b, type: 3}
-    - {fileID: 21300000, guid: 4a7e5529801f1b940954d600bd7a9948, type: 3}
-    - {fileID: 21300000, guid: e79afc84de138aa4eb5aaa875c915b7f, type: 3}
-    - {fileID: 21300000, guid: 7b81609a07f59054388fd65ce231f0fe, type: 3}
-    - {fileID: 21300000, guid: 5a168618a5a901b469e3f4830c40dad9, type: 3}
+    - {fileID: 21300000, guid: 9176b8f3129728540b4124ff02162104, type: 3}
+    - {fileID: 21300000, guid: 1ce1564995fd6fb41b64d5511cc33573, type: 3}
+    - {fileID: 21300000, guid: 42540b00fa422064ba108316596a7018, type: 3}
+    - {fileID: 21300000, guid: b7f2dd5df069a5449b4db1bbcb7502c8, type: 3}
+    - {fileID: 21300000, guid: 11712ff49f171824785534d835d986a9, type: 3}
+    - {fileID: 21300000, guid: 25e283343ee5aab49a3a4d084ab685a0, type: 3}
+    - {fileID: 21300000, guid: c84550ccb3b54bb469ccc62d96555cea, type: 3}
+    - {fileID: 21300000, guid: 17d13edd944a8ad4ab5bc0eb60750c9e, type: 3}
+    - {fileID: 21300000, guid: c29d1344b4603f645a9f22af3e6798e1, type: 3}
+    - {fileID: 21300000, guid: bc90226e105108647a1c08836a75290a, type: 3}
+    - {fileID: 21300000, guid: cc20ca61309b35d489f82515dd80d39a, type: 3}
+    - {fileID: 21300000, guid: 238586770aba1a145a7007cb99fc0764, type: 3}
+    - {fileID: 21300000, guid: f0c1c7677492f404cb43632e02d576f3, type: 3}
+    - {fileID: 21300000, guid: 1aa48e831cd9982448ba8f77d8189244, type: 3}
+    - {fileID: 21300000, guid: b5ab21dc2316fa64289e69a4db75b3b1, type: 3}
     bindAsDefault: 1
     isAtlasV2: 1
     cachedData: {fileID: 0}
