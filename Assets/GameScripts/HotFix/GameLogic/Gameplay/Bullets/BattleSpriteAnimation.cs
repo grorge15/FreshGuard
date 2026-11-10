@@ -14,15 +14,21 @@ namespace GameLogic
         public float Duration => _clip != null ? _clip.length : 0f;
 
         public void Sample(float elapsed)
+            => SampleClip(_clip, elapsed, _loop);
+
+        public void Sample(AnimationClip clip, float elapsed)
+            => SampleClip(clip, elapsed, false);
+
+        private void SampleClip(AnimationClip clip, float elapsed, bool loop)
         {
             EntityValidation.RequireFiniteNonNegative(elapsed, nameof(elapsed));
-            if (_clip == null || _clip.length <= 0f)
+            if (clip == null || clip.length <= 0f)
                 throw new InvalidOperationException("序列帧表现需要有效的 AnimationClip。");
             if (_renderer == null) _renderer = GetComponent<SpriteRenderer>();
             var animator = GetComponent<Animator>();
             if (animator != null) animator.enabled = false;
-            var time = _loop ? Mathf.Repeat(elapsed, _clip.length) : Mathf.Min(elapsed, _clip.length);
-            _clip.SampleAnimation(gameObject, time);
+            var time = loop ? Mathf.Repeat(elapsed, clip.length) : Mathf.Min(elapsed, clip.length);
+            clip.SampleAnimation(gameObject, time);
             _renderer.enabled = true;
         }
 

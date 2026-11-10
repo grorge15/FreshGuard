@@ -233,13 +233,20 @@ namespace GameLogic
         {
             CacheVisuals();
             // 越靠下越靠前；同一高度再用实例 ID 保证稳定顺序，避免排序相同导致的闪烁。
-            var order = Mathf.RoundToInt(-transform.position.y * 100f) * 10 + Mathf.Abs(InstanceId % 10);
+            GetVisualSorting(out _, out var order);
             foreach (var renderer in _spriteRenderers)
                 if (renderer != null)
                 {
                     renderer.spriteSortPoint = SpriteSortPoint.Pivot;
                     renderer.sortingOrder = order;
                 }
+        }
+
+        internal void GetVisualSorting(out int layer, out int order)
+        {
+            CacheVisuals();
+            layer = _spriteRenderers.Length > 0 && _spriteRenderers[0] != null ? _spriteRenderers[0].sortingLayerID : 0;
+            order = Mathf.RoundToInt(-transform.position.y * 100f) * 10 + Mathf.Abs(InstanceId % 10);
         }
 
         private bool HasAliveEntity()
