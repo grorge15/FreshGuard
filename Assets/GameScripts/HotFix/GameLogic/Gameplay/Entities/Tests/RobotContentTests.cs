@@ -118,7 +118,7 @@ namespace GameLogic.Tests
             Assert.IsNotNull(settings);
             var assets = settings.BeginCollect("DefaultPackage", true, false).CollectAssets;
             Assert.AreEqual(12, _tables.TbRobot.DataList.Count, "源表保留尚未启用的机器人。");
-            Assert.AreEqual(10, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
+            Assert.AreEqual(11, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
             Assert.AreEqual(28, _tables.TbRobotShape.DataList.Count);
             foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603, 701, 702, 703, 704 })
             {
@@ -126,7 +126,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(config.RobotPrefab, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab").Address);
                 Assert.AreEqual(config.RobotIcon, assets.Single(asset => asset.AssetInfo.AssetPath ==
-                    "Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png").Address);
+                    "Assets/AssetRaw/Actor/Sprites/Robots/RobotsIcon/" + config.RobotIcon + ".png").Address);
                 var portrait = config.RobotPortrait;
                 Assert.AreEqual(portrait, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + portrait + ".png").Address);
@@ -134,7 +134,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(frame, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Sprites/Robots/LevelFrames/" + frame + ".png").Address);
             }
-            foreach (var name in new[] { "JuiceBullet", "JuiceBulletLandingEffect" })
+            foreach (var name in new[] { "JuiceBullet", "JuiceBulletLandingEffect", "RobotBullet", "ContainerBullet" })
                 Assert.AreEqual(name, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Prefabs/bullets/" + name + ".prefab").Address);
         }
