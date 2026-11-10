@@ -151,7 +151,7 @@ namespace GameLogic
                         var config = tables.TbRobot.Get(id);
                         if (!GameModule.Resource.CheckLocationValid(config.RobotPrefab) ||
                             !GameModule.Resource.CheckLocationValid(config.RobotIcon) ||
-                            !GameModule.Resource.CheckLocationValid(RobotLevelStyle.PortraitForIcon(config.RobotIcon)))
+                            !GameModule.Resource.CheckLocationValid(config.RobotPortrait))
                             throw new InvalidOperationException("商店机器人资源未收集：" + id);
                     }
                 if (!GameModule.Resource.CheckLocationValid("MainCombatUI"))

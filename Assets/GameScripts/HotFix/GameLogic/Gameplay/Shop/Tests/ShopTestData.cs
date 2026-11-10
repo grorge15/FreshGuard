@@ -40,6 +40,7 @@ namespace GameLogic.Tests
             robotBuffer.WriteFloat(1f);
             robotBuffer.WriteInt(20);
             robotBuffer.WriteInt(10);
+            robotBuffer.WriteString("RobotPortrait");
             robotBuffer.WriteFloat(0.6f);
             robotBuffer.WriteFloat(1f);
             robotBuffer.WriteString("RobotBullet");

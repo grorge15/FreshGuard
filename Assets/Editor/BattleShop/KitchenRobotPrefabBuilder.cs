@@ -40,7 +40,7 @@ namespace FreshGuard.Editor
                 var source = SpriteFolder + "Portraits/" + names[index] + ".png";
                 var icon = SpriteFolder + "Robots/" + config.RobotIcon + ".png";
                 var frame = SpriteFolder + "LevelFrames/" + RobotLevelStyle.FrameForIcon(config.RobotIcon) + ".png";
-                var portrait = SpriteFolder + "Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png";
+                var portrait = SpriteFolder + "Portraits/" + config.RobotPortrait + ".png";
                 ExtendMiddle(SpriteFolder + "Robots/" + template + "Icon.png", icon, width, height);
                 ExtendMiddle(SpriteFolder + "LevelFrames/" + template + "LevelFrame.png", frame, width, height);
                 BakePortrait(source, portrait, width, height);

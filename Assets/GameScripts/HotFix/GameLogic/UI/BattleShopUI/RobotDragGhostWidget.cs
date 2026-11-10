@@ -10,10 +10,10 @@ namespace GameLogic
         {
             _visual = new RobotIconPresentation(FindChildComponent<Image>("m_img_RobotIcon"));
         }
-        public void Show(string icon, int level, Vector2 position, Camera camera)
+        public void Show(string icon, string portrait, int level, Vector2 position, Camera camera)
         {
             Visible = true;
-            _visual.Render(icon, level, true);
+            _visual.Render(icon, portrait, level, true);
             Move(position, camera);
             transform.SetAsLastSibling();
         }

@@ -66,6 +66,7 @@ namespace GameLogic.Tests
             data.WriteString(config.RobotIcon); data.WriteInt(differentResource ? config.ShapeId : config.ShapeId + 1);
             data.WriteInt(config.SkillId); data.WriteFloat(config.MinTriggerInterval);
             data.WriteInt(config.AttackDamage); data.WriteInt(config.DamagePerLevel);
+            data.WriteString(config.RobotPortrait);
             var incompatible = new GameConfig.robot.Robot(data);
             Assert.IsFalse(view.TryUseConfiguration(incompatible, _f.Tables));
             Assert.AreEqual(original, view.ConfigId);
