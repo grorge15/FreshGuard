@@ -1,4 +1,4 @@
-"""Rebuild synthesized sounds and the user's glass-break and robot-impact clips."""
+"""Rebuild synthesized sounds and the user's glass and robot-impact clips."""
 from pathlib import Path
 from io import BytesIO
 import json
@@ -25,7 +25,7 @@ SOUNDS = [
  ('ReelStop','老虎机商店','槽位停定','三个商品槽依次停定',.78,.055,True,'stop','后两个槽位依次略微升调'),
  ('Purchase','老虎机商店','购买成功','玩家完成商品购买或购买参与的合并',.75,.10,True,'purchase','只表示交易成功；不添加机器人合成音效'),
  ('BallWall','能源球','撞墙反弹','己方能源球发生有效墙面反弹',.38,.075,False,'wall','仅己方棋盘；己方所有球共享限频'),
- ('GlassHit','玻璃','玻璃受击','己方玻璃实际扣耐久但尚未破碎',.40,.07,False,'glasshit','仅己方棋盘；恢复原版音色，音量由44%微调至40%'),
+ ('GlassHit','玻璃','玻璃受击','己方玻璃实际扣耐久但尚未破碎',.40,.07,False,'glasshit','用户素材：玻璃碰撞_轻.MP3；仅己方；玻璃扣耐久但未破碎时播放'),
  ('GlassBreak','玻璃','普通玻璃破碎','己方普通玻璃耐久归零',.60,.075,False,'glassbreak','用户调整素材：玻璃破碎.MP3；仅己方；保留编辑后的短促碎裂声'),
  ('GlassRainbow','玻璃','彩色玻璃破碎','己方彩色玻璃耐久归零',.69,.09,False,'rainbow','用户调整素材：玻璃破碎.MP3；仅己方；使用同一声音，不额外叠加和弦'),
  ('CoinCollect','局内奖励','能源币到账','奖励飞行图标到达商店余额图标',.58,.075,True,'coin','仅玩家奖励；批量到账限频'),
@@ -90,6 +90,12 @@ def user_robot_hit():
             raise ValueError('Robot source must be mono 16-bit PCM at 44100 Hz')
         return np.frombuffer(w.readframes(w.getnframes()), dtype='<i2').astype(np.float64)/32768
 
+def user_glass_hit():
+    with wave.open(str(ROOT/'Tools/Audio/Sources/GlassHit_User/glass_hit_user.wav'), 'rb') as w:
+        if (w.getnchannels(), w.getsampwidth(), w.getframerate()) != (1, 2, RATE):
+            raise ValueError('User glass hit source must be mono 16-bit PCM at 44100 Hz')
+        return np.frombuffer(w.readframes(w.getnframes()), dtype='<i2').astype(np.float64)/32768
+
 def user_glass_break():
     with wave.open(str(ROOT/'Tools/Audio/Sources/GlassBreak_User/glass_break_user.wav'), 'rb') as w:
         if (w.getnchannels(), w.getsampwidth(), w.getframerate()) != (1, 2, RATE):
@@ -115,7 +121,9 @@ def make(recipe):
         return y
     if recipe=='purchase': return notes([1047,1568],.065,.28)
     if recipe=='wall': return mix((0,tone(560,.095,45)*.8),(0,tone(1100,.06,65)*.16),(0,noise(.04,1300,6000,80)*.18))
-    if recipe=='glasshit': return glass()
+    if recipe=='glasshit':
+        glass()  # 保持原合成器的随机推进次数，不改变其他音效。
+        return user_glass_hit()
     if recipe in ('glassbreak','rainbow'):
         # 保持原合成器的随机推进次数，让本次替换不影响其他声音的波形。
         glass(True)
@@ -143,7 +151,7 @@ def main():
     changed=[]
     for sound,module,label,trigger,volume,cooldown,ui,recipe,note in SOUNDS:
         x=make(recipe)
-        user_glass=sound in ('GlassBreak','GlassRainbow')
+        user_glass=sound in ('GlassHit','GlassBreak','GlassRainbow')
         if not user_glass:
             x-=x.mean()
             edge=min(160,len(x)//8)
@@ -163,6 +171,11 @@ def main():
         entry=dict(id=sound,module=module,label=label,trigger=trigger,location=name,volume=volume,cooldown=cooldown,ui=ui,loop=sound=='ReelSpin',duration=round(len(x)/RATE,3),source='原创程序合成，无第三方采样',note=note)
         if sound=='RobotHit':
             entry.update(source='用户提供：刀打骷髅.MP3',sourceFile='Tools/Audio/Sources/刀打骷髅.MP3',sourceProcessing='44.1 kHz单声道PCM转码、峰值匹配与首尾淡化；保留音高和时长')
+        elif sound=='GlassHit':
+            entry.update(source='用户提供：玻璃碰撞_轻.MP3',
+                sourceFile='Tools/Audio/Sources/GlassHit_User/玻璃碰撞_轻.MP3',
+                sourceOriginalPath='F:/视频剪辑/玻璃碰撞_轻.MP3',
+                sourceProcessing='仅44.1 kHz单声道PCM格式转换；保留音高、完整时长与素材音量')
         elif sound in ('GlassBreak','GlassRainbow'):
             entry.update(source='用户调整后提供：玻璃破碎.MP3',
                 sourceFile='Tools/Audio/Sources/GlassBreak_User/玻璃破碎.MP3',
