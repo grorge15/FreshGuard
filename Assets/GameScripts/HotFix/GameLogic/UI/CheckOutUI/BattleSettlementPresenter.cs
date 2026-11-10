@@ -33,6 +33,16 @@ namespace GameLogic
             _cancellation = new CancellationTokenSource();
         }
 
+        /// <summary>主动离开只取消本局结算归属，迟到的终局通知不能再打开结算页。</summary>
+        public void AbandonBattle(long battleId)
+        {
+            if (_released || battleId <= 0 || _activeBattleId != battleId) return;
+            _activeBattleId = _handledBattleId = 0;
+            _generation++;
+            CancelPending();
+            CloseOwnedWindow(battleId);
+        }
+
         private void OnRequested(BattleSettlementSnapshot snapshot)
         {
             if (_released || snapshot.BattleId <= 0 || snapshot.BattleId != _activeBattleId ||

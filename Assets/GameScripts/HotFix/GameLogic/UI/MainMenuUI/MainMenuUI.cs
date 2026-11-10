@@ -20,6 +20,7 @@ namespace GameLogic
         private Button _startButton;
         private Button _energyPlusButton;
         private Button _coinsPlusButton;
+        private Button _settingsButton;
         private bool _starting;
         private string _statusMessage;
         private float _statusUntil;
@@ -43,6 +44,7 @@ namespace GameLogic
             _startButton = FindButton("StartBattleButton", "StartButton", "BattleButton");
             _energyPlusButton = FindButton("EnergyPlusButton", "EnergyPlus", "EnergyAdd");
             _coinsPlusButton = FindButton("CoinsPlusButton", "CoinsPlus", "CoinsAdd");
+            _settingsButton = FindButton("m_btn_Settings");
         }
 
         protected override void OnCreate()
@@ -50,6 +52,7 @@ namespace GameLogic
             if (_startButton != null) _startButton.onClick.AddListener(OnStartClicked);
             if (_energyPlusButton != null) _energyPlusButton.onClick.AddListener(OnEnergyPlusClicked);
             if (_coinsPlusButton != null) _coinsPlusButton.onClick.AddListener(OnCoinsPlusClicked);
+            if (_settingsButton != null) _settingsButton.onClick.AddListener(OnSettingsClicked);
             GameSoundService.BindButtons(gameObject);
         }
 
@@ -76,6 +79,12 @@ namespace GameLogic
             State?.AddEnergy(5);
             GameApp.SavePlayerStateAsync().Forget();
             RefreshView();
+        }
+
+        private void OnSettingsClicked()
+        {
+            if (_starting || _disposed || !Visible) return;
+            GameModule.UI.ShowUIAsync<SettingsUI>(this);
         }
 
         private void OnCoinsPlusClicked()
@@ -225,6 +234,7 @@ namespace GameLogic
             if (_startButton != null) _startButton.onClick.RemoveListener(OnStartClicked);
             if (_energyPlusButton != null) _energyPlusButton.onClick.RemoveListener(OnEnergyPlusClicked);
             if (_coinsPlusButton != null) _coinsPlusButton.onClick.RemoveListener(OnCoinsPlusClicked);
+            if (_settingsButton != null) _settingsButton.onClick.RemoveListener(OnSettingsClicked);
         }
     }
 }

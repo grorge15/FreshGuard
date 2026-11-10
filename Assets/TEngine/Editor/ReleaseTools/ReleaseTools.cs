@@ -182,6 +182,7 @@ namespace TEngine
                 pipeline = new ScriptableBuildPipeline();
                 buildParameters = scriptableBuildParameters;
                 scriptableBuildParameters.CompressOption = config.CompressOption;
+                scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
                 scriptableBuildParameters.BuiltinShadersBundleName = GetBuiltinShaderBundleName("DefaultPackage");
                 scriptableBuildParameters.ReplaceAssetPathWithAddress = Settings.UpdateSetting.GetReplaceAssetPathWithAddress();
             }
@@ -237,6 +238,7 @@ namespace TEngine
                 pipeline = new ScriptableBuildPipeline();
                 buildParameters = scriptableBuildParameters;
                 scriptableBuildParameters.CompressOption = ECompressOption.LZ4;
+                scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
                 scriptableBuildParameters.BuiltinShadersBundleName = GetBuiltinShaderBundleName("DefaultPackage");
                 scriptableBuildParameters.ReplaceAssetPathWithAddress = Settings.UpdateSetting.GetReplaceAssetPathWithAddress();
             }

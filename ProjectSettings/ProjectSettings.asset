@@ -782,7 +782,8 @@ PlayerSettings:
     tvOS: UNITY_POST_PROCESSING_STACK_V2;TextMeshPro
   additionalCompilerArguments: {}
   platformArchitecture: {}
-  scriptingBackend: {}
+  scriptingBackend:
+    Android: 1
   il2cppCompilerConfiguration: {}
   managedStrippingLevel:
     EmbeddedLinux: 1
