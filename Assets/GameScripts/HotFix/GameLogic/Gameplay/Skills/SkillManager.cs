@@ -20,7 +20,6 @@ namespace GameLogic
         public int Level { get; }
         public string TimelineKey { get; set; }
         public int BulletId { get; set; }
-        public long? CycleBuffInstanceId { get; set; }
         public Dictionary<string, float> Parameters { get; } = new Dictionary<string, float>();
         public IReadOnlyList<CombatBuffApplication> HitBuffs => _level.CaptureHitBuffs(Parameters);
         public bool IsCancelled { get; private set; }
@@ -49,7 +48,6 @@ namespace GameLogic
         public SkillTarget Target { get; }
         public string TimelineKey { get; }
         public int BulletId { get; }
-        public long? CycleBuffInstanceId { get; }
         public IReadOnlyDictionary<string, float> Parameters { get; }
         public IReadOnlyList<CombatBuffApplication> HitBuffs { get; }
         internal SkillCastSnapshot(SkillCastContext context)
@@ -57,7 +55,7 @@ namespace GameLogic
             Owner = context.Request.Owner; SkillId = context.Request.SkillId; Target = context.Request.Target;
             Level = context.Level; Trigger = context.Request.Trigger; TimelineKey = context.TimelineKey;
             Parameters = BuffObj.Copy(context.Parameters);
-            BulletId = context.BulletId; CycleBuffInstanceId = context.CycleBuffInstanceId;
+            BulletId = context.BulletId;
             HitBuffs = context.HitBuffs;
         }
         public float Get(string key, float fallback = 0f) => Parameters.TryGetValue(key, out var value) ? value : fallback;

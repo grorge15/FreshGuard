@@ -35,8 +35,7 @@ namespace GameLogic
             Buffs = new BuffManager(this);
             BuffBehaviors.Register("slow", () => new SlowBuffBehavior(this));
             BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
-            BuffBehaviors.Register("chain_cycle", () => new ChainCycleBuffBehavior());
-            BuffBehaviors.Register("juice_charge", () => new JuiceChargeBuffBehavior(this));
+            BuffBehaviors.Register("attack_cycle", () => new AttackCycleBuffBehavior(this));
             TriggeredSkills = new BuffTriggeredSkillQueue(this);
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));

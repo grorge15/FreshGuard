@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 
 namespace GameLogic
 {
@@ -14,20 +13,20 @@ namespace GameLogic
             public long BuffInstanceId { get; }
             public int SkillId { get; }
             public int Cost { get; }
-            public Vector3 Position { get; }
-            internal PendingCast(SkillOwnerRef owner, long buffId, int skillId, int cost, Vector3 position)
-            { Owner = owner; BuffInstanceId = buffId; SkillId = skillId; Cost = cost; Position = position; }
+            public SkillTarget Target { get; }
+            internal PendingCast(SkillOwnerRef owner, long buffId, int skillId, int cost, SkillTarget target)
+            { Owner = owner; BuffInstanceId = buffId; SkillId = skillId; Cost = cost; Target = target; }
         }
         private readonly BattleRuntime _battle;
-        private readonly Dictionary<SkillOwnerRef, PendingCast> _pending = new Dictionary<SkillOwnerRef, PendingCast>();
+        private readonly Dictionary<(SkillOwnerRef, long), PendingCast> _pending = new Dictionary<(SkillOwnerRef, long), PendingCast>();
         private bool _processing;
         public int Count => _pending.Count;
         internal BuffTriggeredSkillQueue(BattleRuntime battle) { _battle = battle; }
-        public bool TryGet(SkillOwnerRef owner, out PendingCast cast) => _pending.TryGetValue(owner, out cast);
-        internal void Enqueue(SkillOwnerRef owner, long buffId, int skillId, int cost, Vector3 position)
-        { if (!_battle.IsDisposed && !_pending.ContainsKey(owner)) _pending.Add(owner, new PendingCast(owner, buffId, skillId, cost, position)); }
+        public bool TryGet(SkillOwnerRef owner, long buffId, out PendingCast cast) => _pending.TryGetValue((owner, buffId), out cast);
+        internal void Enqueue(SkillOwnerRef owner, long buffId, int skillId, int cost, SkillTarget target)
+        { if (!_battle.IsDisposed && !_pending.ContainsKey((owner, buffId))) _pending.Add((owner, buffId), new PendingCast(owner, buffId, skillId, cost, target)); }
         internal void Cancel(SkillOwnerRef owner, long buffId)
-        { if (_pending.TryGetValue(owner, out var pending) && pending.BuffInstanceId == buffId) _pending.Remove(owner); }
+        { _pending.Remove((owner, buffId)); }
         internal void Clear() => _pending.Clear();
         public void Process()
         {
@@ -35,19 +34,41 @@ namespace GameLogic
             _processing = true;
             try
             {
-                foreach (var pending in _pending.Values.OrderBy(p => p.Owner.EntityId).ToArray())
+                foreach (var pending in _pending.Values.OrderBy(p => p.Owner.EntityId).ThenBy(p => p.BuffInstanceId).ToArray())
                 {
                     if (_battle.IsDisposed || !_battle.CanCastNow()) break;
-                    if (!_pending.TryGetValue(pending.Owner, out var current) || !ReferenceEquals(current, pending)) continue;
+                    if (!TryGet(pending.Owner, pending.BuffInstanceId, out var current) || !ReferenceEquals(current, pending)) continue;
                     if (!_battle.TryResolveOwner(pending.Owner, out var owner) ||
                         !owner.Buffs.Items.Any(b => b.InstanceId == pending.BuffInstanceId))
                     { Cancel(pending.Owner, pending.BuffInstanceId); continue; }
                     if (!owner.CanCast || _battle.Timelines.HasChannel(pending.Owner)) continue;
+                    if (!_battle.Catalog.TryGet(pending.SkillId, out var skill)) continue;
+                    if (!TrySelectTarget(pending, skill, out var target)) continue;
                     _battle.Skills.TryCast(new SkillCastRequest(pending.Owner, pending.SkillId, SkillTriggerSource.Buff,
-                        SkillTarget.AtPosition(pending.Owner.Side, pending.Position), pending.BuffInstanceId));
+                        target, pending.BuffInstanceId));
                 }
             }
             finally { _processing = false; }
+        }
+
+        private bool TrySelectTarget(PendingCast pending, SkillModel skill, out SkillTarget target)
+        {
+            target = pending.Target;
+            if (skill.TargetRule == SkillTargetRule.None) { target = SkillTarget.None; return true; }
+            if (skill.TargetRule == SkillTargetRule.SameSidePosition)
+            { target = SkillTarget.AtPosition(pending.Owner.Side, pending.Target.Position); return true; }
+            if (skill.TargetRule != SkillTargetRule.SameSideEnemy) return true;
+            if (target.Kind == SkillTargetKind.Entity && _battle.Registry.TryGet(target.EntityId, out var current) &&
+                current.Side == pending.Owner.Side && current is EnemyEntity currentEnemy && currentEnemy.IsAlive) return true;
+            // 等待期间目标失效，按普通攻击相同的路线优先级重选；无目标时保留请求。
+            EnemyEntity best = null;
+            foreach (var id in _battle.Registry.CopyIds())
+                if (_battle.Registry.TryGet(id, out var entity) && entity.Side == pending.Owner.Side &&
+                    entity is EnemyEntity enemy && enemy.IsAlive &&
+                    (best == null || enemy.RouteProgress > best.RouteProgress ||
+                        enemy.RouteProgress == best.RouteProgress && enemy.InstanceId < best.InstanceId)) best = enemy;
+            if (best == null) return false;
+            target = SkillTarget.Entity(pending.Owner.Side, best.InstanceId); return true;
         }
     }
 }

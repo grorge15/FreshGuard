@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 namespace GameLogic
 {
+    public enum AttackCycleAction { None, ReplaceBullet, CastSkill }
+
     public sealed class BuffModel
     {
         public int Id { get; }
@@ -11,7 +13,10 @@ namespace GameLogic
         public int Priority { get; }
         public float TickInterval { get; }
         public int TriggerSkillId { get; }
-        public BuffModel(int id, string behaviorKey, int maxStacks = 1, int priority = 0, float tickInterval = 0f, int triggerSkillId = 0)
+        public int CountSkillId { get; }
+        public AttackCycleAction CycleAction { get; }
+        public BuffModel(int id, string behaviorKey, int maxStacks = 1, int priority = 0, float tickInterval = 0f,
+            int triggerSkillId = 0, int countSkillId = 0, AttackCycleAction cycleAction = AttackCycleAction.None)
         {
             EntityValidation.RequirePositive(id, nameof(id));
             EntityValidation.RequirePositive(maxStacks, nameof(maxStacks));
@@ -20,6 +25,9 @@ namespace GameLogic
             Id = id; BehaviorKey = behaviorKey; MaxStacks = maxStacks; Priority = priority; TickInterval = tickInterval;
             if (triggerSkillId < 0) throw new ArgumentOutOfRangeException(nameof(triggerSkillId));
             TriggerSkillId = triggerSkillId;
+            if (countSkillId < 0 || !Enum.IsDefined(typeof(AttackCycleAction), cycleAction))
+                throw new ArgumentOutOfRangeException(nameof(countSkillId));
+            CountSkillId = countSkillId; CycleAction = cycleAction;
         }
     }
     public sealed class BuffObj
@@ -71,7 +79,6 @@ namespace GameLogic
         void OnRemoved(BuffContainer container, BuffObj buff);
         void OnTick(BuffContainer container, BuffObj buff);
         void OnCast(BuffContainer container, BuffObj buff, SkillCastContext context);
-        void OnAttackLaunched(BuffContainer container, BuffObj buff, SkillCastSnapshot cast);
         void OnAttack(BuffContainer container, BuffObj buff, CombatOutcomeDraft attack);
         void OnHit(BuffContainer container, BuffObj buff, CombatDamageContext context);
         void OnBeHurt(BuffContainer container, BuffObj buff, CombatDamageContext context);
@@ -90,7 +97,6 @@ namespace GameLogic
         public virtual void OnRemoved(BuffContainer container, BuffObj buff) { }
         public virtual void OnTick(BuffContainer container, BuffObj buff) { }
         public virtual void OnCast(BuffContainer container, BuffObj buff, SkillCastContext context) { }
-        public virtual void OnAttackLaunched(BuffContainer container, BuffObj buff, SkillCastSnapshot cast) { }
         public virtual void OnAttack(BuffContainer container, BuffObj buff, CombatOutcomeDraft attack) { }
         public virtual void OnHit(BuffContainer container, BuffObj buff, CombatDamageContext context) { }
         public virtual void OnBeHurt(BuffContainer container, BuffObj buff, CombatDamageContext context) { }

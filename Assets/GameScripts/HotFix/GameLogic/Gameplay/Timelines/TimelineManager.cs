@@ -17,14 +17,6 @@ namespace GameLogic
         public void RegisterFactory(string key, Func<SkillCastSnapshot, TimelineModel> factory) => _factories.Add(key, factory);
         public void RegisterAction(string key, ITimelineAction action) => _actions.Add(key, action ?? throw new ArgumentNullException(nameof(action)));
         public bool HasChannel(SkillOwnerRef owner) => _active.ContainsKey(owner);
-        public void NotifyAttackLaunched(SkillCastSnapshot cast)
-        {
-            if (!IsActive(cast) || !_active.TryGetValue(cast.Owner, out var timeline) || timeline.AttackLaunchNotified) return;
-            // 先封口，通知中的嵌套调用不能再次增加次数。
-            timeline.AttackLaunchNotified = true;
-            if (_battle.TryResolveOwner(cast.Owner, out var owner))
-                owner.Buffs.OnAttackLaunched(cast, () => !_battle.IsDisposed);
-        }
         public bool IsActive(SkillCastSnapshot cast) => cast != null &&
             _active.TryGetValue(cast.Owner, out var timeline) && !timeline.IsFinished && ReferenceEquals(timeline.Cast, cast);
         public bool TryPrepare(SkillCastSnapshot cast, out TimelineObj timeline, out SkillCastFailure failure)

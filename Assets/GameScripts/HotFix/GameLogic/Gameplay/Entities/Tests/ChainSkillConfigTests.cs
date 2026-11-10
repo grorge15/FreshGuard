@@ -54,7 +54,7 @@ namespace GameLogic.Tests
                 Assert.IsTrue(catalog.TryGetLevel(1605, level, out var values));
                 Assert.AreEqual(10 + level * 10, values.Parameters["damage"]);
                 Assert.AreEqual(5f, values.Parameters["attackCycleCount"]);
-                Assert.AreEqual(3600f, values.Parameters["chainBulletId"]);
+                Assert.AreEqual(3600f, values.Parameters["cycleBulletId"]);
                 Assert.AreEqual(5f, values.Parameters["chainTargetCount"]);
                 Assert.AreEqual(0.9f, values.Parameters["chainRange"]);
                 Assert.AreEqual(0.7f, values.Parameters["chainDamageRatio"]);
@@ -70,10 +70,12 @@ namespace GameLogic.Tests
                 Assert.AreEqual(20f, bullet.Speed);
                 Assert.AreEqual(0.05f, bullet.HitRadius);
                 Assert.AreEqual(id == 3600 ? "chain" : "direct", bullet.BehaviorKey);
-                Assert.AreEqual(id == 3600 ? "LightningChainEffect" : string.Empty, bullet.HitEffectPrefab);
+                Assert.AreEqual("LightningChainEffect", bullet.HitEffectPrefab);
             }
             Assert.IsTrue(catalog.TryGetBuff(2602, out var passive));
-            Assert.AreEqual("chain_cycle", passive.BehaviorKey);
+            Assert.AreEqual("attack_cycle", passive.BehaviorKey);
+            Assert.AreEqual(1605, passive.CountSkillId);
+            Assert.AreEqual(AttackCycleAction.ReplaceBullet, passive.CycleAction);
             Assert.AreEqual(1, passive.MaxStacks);
             Assert.AreEqual(0, tables.TbBuff.Get(2602).TriggerSkillId);
         }
@@ -117,8 +119,8 @@ namespace GameLogic.Tests
         [TestCase("ChainDamageRatio", 0f)]
         [TestCase("ChainDamageRatio", 1.01f)]
         [TestCase("ChainDamageRatio", float.PositiveInfinity)]
-        [TestCase("ChainBulletId", 3500)]
-        [TestCase("ChainBulletId", 999999)]
+        [TestCase("CycleBulletId", 3500)]
+        [TestCase("CycleBulletId", 999999)]
         public void InvalidEnabledCycleConfigurationFailsBeforeBattle(string field, object value)
         {
             var tables = LoadTables();

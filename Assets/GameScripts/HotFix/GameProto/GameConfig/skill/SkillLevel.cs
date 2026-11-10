@@ -37,13 +37,11 @@ public sealed partial class SkillLevel : Luban.BeanBase
         ChainRange = _buf.ReadFloat();
         ChainDamageRatio = _buf.ReadFloat();
         IsolateDuration = _buf.ReadFloat();
-        JuiceRequired = _buf.ReadInt();
         DropCount = _buf.ReadInt();
         DropSpacing = _buf.ReadFloat();
         SplashRadius = _buf.ReadFloat();
-        ContactsRequired = _buf.ReadInt();
         AttackCycleCount = _buf.ReadInt();
-        ChainBulletId = _buf.ReadInt();
+        CycleBulletId = _buf.ReadInt();
         ChainTargetCount = _buf.ReadInt();
     }
 
@@ -134,10 +132,6 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// </summary>
     public readonly float IsolateDuration;
     /// <summary>
-    /// 释放技能所需果汁量
-    /// </summary>
-    public readonly int JuiceRequired;
-    /// <summary>
     /// 每次沿路果汁轰炸的滴数量
     /// </summary>
     public readonly int DropCount;
@@ -150,17 +144,13 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// </summary>
     public readonly float SplashRadius;
     /// <summary>
-    /// 触发额外技能所需的有效碰球次数，未使用填0
-    /// </summary>
-    public readonly int ContactsRequired;
-    /// <summary>
-    /// 成功攻击循环次数，至少1
+    /// 一次攻击施法接受后累计1次；达到次数执行周期动作
     /// </summary>
     public readonly int AttackCycleCount;
     /// <summary>
-    /// 循环末次替换弹丸ID
+    /// replace_bullet动作使用的替换弹丸ID，其余填0
     /// </summary>
-    public readonly int ChainBulletId;
+    public readonly int CycleBulletId;
     /// <summary>
     /// 闪电链总人数，包含首名
     /// </summary>
@@ -197,13 +187,11 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "chainRange:" + ChainRange + ","
         + "chainDamageRatio:" + ChainDamageRatio + ","
         + "isolateDuration:" + IsolateDuration + ","
-        + "juiceRequired:" + JuiceRequired + ","
         + "dropCount:" + DropCount + ","
         + "dropSpacing:" + DropSpacing + ","
         + "splashRadius:" + SplashRadius + ","
-        + "contactsRequired:" + ContactsRequired + ","
         + "attackCycleCount:" + AttackCycleCount + ","
-        + "chainBulletId:" + ChainBulletId + ","
+        + "cycleBulletId:" + CycleBulletId + ","
         + "chainTargetCount:" + ChainTargetCount + ","
         + "}";
     }

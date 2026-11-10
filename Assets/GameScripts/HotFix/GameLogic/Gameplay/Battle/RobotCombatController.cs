@@ -324,7 +324,7 @@ namespace GameLogic
             PrepareNextAsync(reserve, GetPool(reserve, skillId, model)).Forget();
             for (var level = 1; level <= skill.MaxLevel; level++)
                 if (_context.Battle.Catalog.TryGetLevel(skillId, level, out var values) &&
-                    values.Parameters.TryGetValue("chainBulletId", out var id) &&
+                    values.Parameters.TryGetValue("cycleBulletId", out var id) &&
                     _context.Battle.Catalog.TryGetBullet((int)id, out var replacement))
                     PrepareNextAsync(reserve, GetPool(reserve, skillId, replacement)).Forget();
         }
@@ -485,8 +485,7 @@ namespace GameLogic
                             (IProjectileWorld)_bulletWorld, chain, positions => PlayHitEffect(model.HitEffectPrefab, cast.Owner.Side, positions))));
                     Launch(reserve, instance, state);
                     launched = true;
-                    _context.Battle.Timelines.NotifyAttackLaunched(cast);
-                    // 注册即为成功发射；激活表现的OnEnable可重入取消施法，不能影响已提交的次数。
+                    // 次数已在施法接受时提交；激活表现不会再次计数。
                     if (OwnsBattle && !state.IsResolved && instance != null) instance.SetActive(true);
                 }
                 finally { if (!launched) ReturnPrepared(sourceId, cast.SkillId, model.Prefab, instance); }

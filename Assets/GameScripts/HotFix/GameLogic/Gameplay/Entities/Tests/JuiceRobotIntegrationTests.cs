@@ -45,7 +45,7 @@ namespace GameLogic.Tests
                 }
             }
             Assert.AreEqual(6, ordinary); Assert.AreEqual(10, drops);
-            Assert.AreEqual(0, Counter(robot).JuiceCount);
+            Assert.AreEqual(0, Counter(robot).AttackCount);
         }
 
         [Test]
@@ -53,14 +53,14 @@ namespace GameLogic.Tests
         {
             Prepare(); _holdFirstChild = true; var robot = AddRobot();
             for (var i = 0; i < 5; i++) Assert.AreEqual(1, Shoot(robot).Length);
-            Assert.IsTrue(Counter(robot).Pending); Assert.AreEqual(3, Counter(robot).JuiceCount);
+            Assert.IsTrue(Counter(robot).Pending); Assert.AreEqual(3, Counter(robot).AttackCount);
             Assert.AreEqual(1, _f.Context.Battle.TriggeredSkills.Count);
             Assert.IsNotNull(_pending);
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/bullets/JuiceBullet.prefab");
             _pending.TrySetResult(UnityEngine.Object.Instantiate(prefab, _pendingParent));
             _combat.AdvanceAttacks(0);
             Assert.AreEqual(5, States().Count(s => s.Action.SkillId == 1604));
-            Assert.AreEqual(0, Counter(robot).JuiceCount);
+            Assert.AreEqual(0, Counter(robot).AttackCount);
             _combat.AdvanceAttacks(0);
             Assert.AreEqual(5, States().Count(s => s.Action.SkillId == 1604));
         }
@@ -159,8 +159,8 @@ namespace GameLogic.Tests
         }
         private BulletState[] States() => _f.Root.GetComponentsInChildren<RobotBulletView>()
             .Where(v => v.State != null).Select(v => v.State).ToArray();
-        private static JuiceChargeBuffBehavior Counter(RobotEntity robot) =>
-            (JuiceChargeBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2601).Behavior;
+        private static AttackCycleBuffBehavior Counter(RobotEntity robot) =>
+            (AttackCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2601).Behavior;
         private UniTask<GameObject> Load(string name, Transform parent, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();

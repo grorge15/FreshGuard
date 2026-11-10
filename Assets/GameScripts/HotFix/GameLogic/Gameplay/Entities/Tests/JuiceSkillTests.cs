@@ -57,7 +57,7 @@ namespace GameLogic.Tests
             Assert.IsTrue(catalog.TryGet(1603, out _), "1603应启用");
             Assert.IsTrue(catalog.TryGet(1604, out _), "1604应启用");
             Assert.IsTrue(catalog.TryGetLevel(1603, 1, out var normal));
-            Assert.AreEqual(3, normal.Parameters["juiceRequired"]);
+            Assert.AreEqual(3, normal.Parameters["attackCycleCount"]);
             Assert.IsTrue(catalog.TryGetLevel(1604, 5, out var juice));
             Assert.AreEqual(36, juice.Parameters["damage"]);
             Assert.AreEqual(5, juice.Parameters["dropCount"]);

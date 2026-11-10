@@ -50,7 +50,6 @@ namespace GameLogic
         public int Cursor { get; internal set; }
         public bool IsFinished { get; internal set; }
         public bool IsCancelled { get; internal set; }
-        internal bool AttackLaunchNotified;
         internal readonly Action[] Actions;
         private Action[] _releases;
         internal TimelineObj(TimelineModel model, SkillCastSnapshot cast, Action[] actions, Action[] releases)

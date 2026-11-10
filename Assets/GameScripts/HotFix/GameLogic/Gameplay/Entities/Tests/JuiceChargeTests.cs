@@ -15,12 +15,12 @@ namespace GameLogic.Tests
                 for (var i = 0; i < 6; i++)
                 {
                     Assert.IsTrue(f.Cast().Accepted);
-                    Assert.AreEqual(i % 3 + 1, f.Counter.JuiceCount);
+                    Assert.AreEqual(i % 3 + 1, f.Counter.AttackCount);
                     f.Battle.TriggeredSkills.Process();
                 }
                 Assert.AreEqual(6, f.Action.Casts.Count(c => c.SkillId == 1603));
                 Assert.AreEqual(2, f.Action.Casts.Count(c => c.SkillId == 1604));
-                Assert.AreEqual(0, f.Counter.JuiceCount);
+                Assert.AreEqual(0, f.Counter.AttackCount);
                 Assert.IsFalse(f.Counter.Pending);
             }
         }
@@ -36,10 +36,10 @@ namespace GameLogic.Tests
                 Assert.AreEqual(SkillCastFailure.NotAllowed, f.Battle.Skills.TryCast(f.Request(), () => false).Failure);
                 f.Robot.Buffs.Add(new BuffModel(90, "test", priority: -10), f.Robot.OwnerRef, 100, behavior: new CancelCast());
                 Assert.AreEqual(SkillCastFailure.Cancelled, f.Cast().Failure);
-                Assert.AreEqual(0, f.Counter.JuiceCount);
+                Assert.AreEqual(0, f.Counter.AttackCount);
                 f.Robot.Buffs.Remove(f.Robot.Buffs.Items.Single(b => b.Model.Id == 90));
                 Assert.IsTrue(f.Cast().Accepted);
-                Assert.AreEqual(1, f.Counter.JuiceCount);
+                Assert.AreEqual(1, f.Counter.AttackCount);
             }
         }
 
@@ -50,12 +50,12 @@ namespace GameLogic.Tests
             {
                 f.Action.FailChild = true;
                 for (var i = 0; i < 9; i++) { Assert.IsTrue(f.Cast().Accepted); f.Battle.TriggeredSkills.Process(); }
-                Assert.AreEqual(3, f.Counter.JuiceCount);
+                Assert.AreEqual(3, f.Counter.AttackCount);
                 Assert.AreEqual(1, f.Battle.TriggeredSkills.Count);
                 Assert.AreEqual(9, f.Action.Casts.Count);
                 f.Action.FailChild = false;
                 f.Battle.TriggeredSkills.Process(); f.Battle.TriggeredSkills.Process();
-                Assert.AreEqual(0, f.Counter.JuiceCount);
+                Assert.AreEqual(0, f.Counter.AttackCount);
                 Assert.AreEqual(1, f.Action.Casts.Count(c => c.SkillId == 1604));
             }
         }
@@ -68,7 +68,7 @@ namespace GameLogic.Tests
                 for (var i = 0; i < 3; i++) Assert.IsTrue(f.Cast().Accepted);
                 f.Battle.CanCastNow = () => false;
                 f.Battle.TriggeredSkills.Process();
-                Assert.AreEqual(3, f.Counter.JuiceCount);
+                Assert.AreEqual(3, f.Counter.AttackCount);
                 f.Robot.Buffs.Remove(f.Robot.Buffs.Items.Single(b => b.Model.Id == 2601));
                 Assert.AreEqual(0, f.Battle.TriggeredSkills.Count);
                 f.Battle.CanCastNow = () => true;
@@ -86,7 +86,7 @@ namespace GameLogic.Tests
                 Assert.IsTrue(f.Cast().Accepted);
                 Assert.IsTrue(f.Robot.TryUpgrade());
                 Assert.AreSame(original, f.Counter);
-                Assert.AreEqual(1, f.Counter.JuiceCount);
+                Assert.AreEqual(1, f.Counter.AttackCount);
                 Assert.IsTrue(f.Robot.Skills.TryGet(1604, out var child));
                 Assert.AreEqual(2, child.Level);
                 Assert.IsTrue(f.Robot.Skills.TryGet(1603, out var main));
@@ -107,10 +107,10 @@ namespace GameLogic.Tests
                 second.TrySetLocation(RobotLocation.Board, new BoardCoordinate(1, 0));
                 for (var i = 0; i < 3; i++) Assert.IsTrue(f.Cast().Accepted);
                 Assert.IsTrue(f.Battle.Skills.TryCast(new SkillCastRequest(second.OwnerRef, 1603, SkillTriggerSource.AI, SkillTarget.None)).Accepted);
-                var other = (JuiceChargeBuffBehavior)second.Buffs.Items.Single().Behavior;
-                Assert.AreEqual(1, other.JuiceCount);
+                var other = (AttackCycleBuffBehavior)second.Buffs.Items.Single().Behavior;
+                Assert.AreEqual(1, other.AttackCount);
                 f.Battle.TriggeredSkills.Process();
-                Assert.AreEqual(0, f.Counter.JuiceCount); Assert.AreEqual(1, other.JuiceCount);
+                Assert.AreEqual(0, f.Counter.AttackCount); Assert.AreEqual(1, other.AttackCount);
             }
         }
 
@@ -119,16 +119,16 @@ namespace GameLogic.Tests
             internal readonly BattleRuntime Battle = new BattleRuntime(704);
             internal readonly RobotEntity Robot;
             internal readonly CastAction Action = new CastAction();
-            internal JuiceChargeBuffBehavior Counter => (JuiceChargeBuffBehavior)Robot.Buffs.Items.Single(b => b.Model.Id == 2601).Behavior;
+            internal AttackCycleBuffBehavior Counter => (AttackCycleBuffBehavior)Robot.Buffs.Items.Single(b => b.Model.Id == 2601).Behavior;
             internal Fixture()
             {
                 var catalog = new SkillCatalog();
-                catalog.Add(new BuffModel(2601, "juice_charge", triggerSkillId: 1604));
+                catalog.Add(new BuffModel(2601, "attack_cycle", triggerSkillId: 1604, countSkillId: 1603, cycleAction: AttackCycleAction.CastSkill));
                 catalog.Add(new SkillModel(1603, SkillType.NormalAttack, "test", 5, 0, SkillTargetRule.None, new[] { 2601 }));
                 catalog.Add(new SkillModel(1604, SkillType.Robot, "test", 5, 0, SkillTargetRule.SameSidePosition));
                 for (var i = 1; i <= 5; i++)
                 {
-                    catalog.Add(new SkillLevelModel(1603, i, new Dictionary<string,float> { { "juiceRequired", 3 } }));
+                    catalog.Add(new SkillLevelModel(1603, i, new Dictionary<string,float> { { "attackCycleCount", 3 } }));
                     catalog.Add(new SkillLevelModel(1604, i, new Dictionary<string,float> { { "damage", 6 + i * 6 } }));
                 }
                 Battle.Configure(catalog);

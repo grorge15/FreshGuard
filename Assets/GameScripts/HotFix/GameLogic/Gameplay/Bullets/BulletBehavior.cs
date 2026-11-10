@@ -69,7 +69,12 @@ namespace GameLogic
         public void OnHit(BulletHitContext context)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
-            context.Combat.ResolveProjectileHit(context.Attack, context.TargetId ?? throw new InvalidOperationException("普通弹缺少目标。"));
+            var targetId = context.TargetId ?? throw new InvalidOperationException("普通弹缺少目标。");
+            // 扣血可能移除目标，表现必须先冻结命中位置。
+            var hasPosition = context.World.TryGetPosition(context.Attack.Action.SourceSide, targetId, out var position);
+            var result = context.Combat.ResolveProjectileHit(context.Attack, targetId);
+            if (hasPosition && result.DamageResult != DamageResult.Ignored)
+                context.Present?.Invoke(new[] { context.Attack.Action.Origin, position });
         }
     }
 
@@ -86,7 +91,8 @@ namespace GameLogic
                 !context.Attack.TryBeginChain()) return;
 
             var ids = new List<int> { context.TargetId.Value };
-            var positions = new List<Vector3> { position };
+            // 起点只参与连线，不计入连锁人数或伤害衰减。
+            var positions = new List<Vector3> { action.Origin, position };
             var selected = new HashSet<int> { context.TargetId.Value };
             // 世界查询返回共享缓存也可安全使用：所有选择都先于任意扣血回调。
             var candidates = world.GetTargets(action.SourceSide);

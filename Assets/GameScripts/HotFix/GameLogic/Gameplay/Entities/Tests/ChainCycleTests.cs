@@ -8,25 +8,20 @@ namespace GameLogic.Tests
     public sealed class ChainCycleTests
     {
         [Test]
-        public void CastChoosesFifthBulletWithoutSpendingFailedAttempts()
+        public void AcceptedCastCountsWithoutLaunchNotification()
         {
             using (var f = new Fixture())
             {
-                var skip = true;
-                f.Action.Launch = cast =>
-                {
-                    if (skip) { skip = false; return; }
-                    f.Battle.Timelines.NotifyAttackLaunched(cast);
-                };
-                for (var i = 0; i < 11; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
-                CollectionAssert.AreEqual(new[] { 3605, 3605, 3605, 3605, 3605, 3600, 3605, 3605, 3605, 3605, 3600 },
+                f.Action.Launch = cast => { };
+                for (var i = 0; i < 10; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
+                CollectionAssert.AreEqual(new[] { 3605, 3605, 3605, 3605, 3600, 3605, 3605, 3605, 3605, 3600 },
                     f.Action.Executed.Select(c => c.BulletId));
                 Assert.AreEqual(0, f.Counter(f.First).AttackCount);
             }
         }
 
         [Test]
-        public void FailedPreparationAndCancelledCastOrTimelineDoNotSpendCounter()
+        public void RejectedCastDoesNotCountButAcceptedTimelineCancellationKeepsCount()
         {
             using (var f = new Fixture(true))
             {
@@ -43,29 +38,31 @@ namespace GameLogic.Tests
                 f.Battle.Timelines.Cancel(f.First.OwnerRef);
                 f.Battle.Timelines.Advance(1);
                 Assert.AreEqual(0, f.Action.Executed.Count);
-                Assert.AreEqual(0, f.Counter(f.First).AttackCount);
+                Assert.AreEqual(1, f.Counter(f.First).AttackCount);
                 Assert.IsTrue(f.Cast(f.First).Accepted);
                 f.Battle.Timelines.Advance(1);
-                Assert.AreEqual(1, f.Counter(f.First).AttackCount);
+                Assert.AreEqual(2, f.Counter(f.First).AttackCount);
             }
         }
 
         [Test]
-        public void MultipleLaunchNotificationsInOneCastOnlyCommitOnce()
+        public void MultipleTimelineNodesCountOncePerAcceptedCast()
         {
             using (var f = new Fixture())
             {
-                f.Action.Launch = cast =>
-                {
-                    for (var pellet = 0; pellet < 5; pellet++) f.Battle.Timelines.NotifyAttackLaunched(cast);
-                };
+                f.Battle.Timelines.Register(new TimelineModel("multi", 0,
+                    Enumerable.Range(0, 5).Select(_ => new TimelineNode(0, "launch")).ToArray()));
+                f.First.Buffs.Add(new BuffModel(99, "test"), f.First.OwnerRef, 10, behavior: new MultiTimeline());
                 Assert.IsTrue(f.Cast(f.First).Accepted);
+                Assert.AreEqual(5, f.Action.Executed.Count);
                 Assert.AreEqual(1, f.Counter(f.First).AttackCount);
-                f.Battle.Timelines.NotifyAttackLaunched(f.Action.Executed[0]);
-                Assert.AreEqual(1, f.Counter(f.First).AttackCount);
-                Assert.IsTrue(f.Cast(f.First).Accepted);
-                Assert.AreEqual(2, f.Counter(f.First).AttackCount);
             }
+        }
+
+        private sealed class MultiTimeline : BuffBehavior
+        {
+            public override void OnCast(BuffContainer container, BuffObj buff, SkillCastContext context)
+                => context.TimelineKey = "multi";
         }
 
         [Test]
@@ -125,7 +122,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void RecreatedPassiveRejectsNotificationFromItsRemovedPredecessor()
+        public void RecreatedPassiveDoesNotReceiveProgressFromOldTimeline()
         {
             using (var f = new Fixture(true))
             {
@@ -135,7 +132,7 @@ namespace GameLogic.Tests
                 f.First.Buffs.Remove(oldBuff);
                 f.Refresh(f.First);
                 var current = f.First.Buffs.Items.Single(b => b.Model.Id == 2602);
-                Assert.AreNotEqual(oldCast.CycleBuffInstanceId, current.InstanceId);
+                Assert.AreNotEqual(oldBuff.InstanceId, current.InstanceId);
                 f.Battle.Timelines.Advance(1);
                 Assert.AreEqual(0, f.Counter(f.First).AttackCount);
                 Assert.IsTrue(f.Cast(f.First).Accepted);
@@ -149,7 +146,7 @@ namespace GameLogic.Tests
             internal readonly BattleRuntime Battle = new BattleRuntime(711);
             internal readonly RobotEntity First;
             internal readonly LaunchAction Action = new LaunchAction();
-            private readonly BuffModel _passive = new BuffModel(2602, "chain_cycle");
+            private readonly BuffModel _passive = new BuffModel(2602, "attack_cycle", countSkillId: 1605, cycleAction: AttackCycleAction.ReplaceBullet);
             internal Fixture(bool delayed = false)
             {
                 var catalog = new SkillCatalog();
@@ -159,14 +156,14 @@ namespace GameLogic.Tests
                 catalog.Add(new SkillLevelModel(1605, 1, Parameters(5, 20)));
                 catalog.Add(new SkillLevelModel(1605, 2, Parameters(4, 30)));
                 Battle.Configure(catalog);
-                Action.Launch = cast => Battle.Timelines.NotifyAttackLaunched(cast);
+                Action.Launch = cast => { };
                 Battle.Timelines.RegisterAction("launch", Action);
                 Battle.Timelines.Register(new TimelineModel("test", delayed ? 1 : 0,
                     new[] { new TimelineNode(delayed ? 0.5f : 0, "launch") }));
                 First = Robot();
             }
             private static Dictionary<string, float> Parameters(int cycle, int damage) =>
-                new Dictionary<string, float> { { "attackCycleCount", cycle }, { "chainBulletId", 3600 }, { "damage", damage } };
+                new Dictionary<string, float> { { "attackCycleCount", cycle }, { "cycleBulletId", 3600 }, { "damage", damage } };
             internal RobotEntity Robot()
             {
                 var robot = Battle.Registry.CreateRobot(701, BattleSide.Player, 1, 1605);
@@ -175,8 +172,8 @@ namespace GameLogic.Tests
             }
             internal SkillCastResult Cast(RobotEntity robot) => Battle.Skills.TryCast(new SkillCastRequest(robot.OwnerRef,
                 1605, SkillTriggerSource.AI, SkillTarget.None));
-            internal ChainCycleBuffBehavior Counter(RobotEntity robot) =>
-                (ChainCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2602).Behavior;
+            internal AttackCycleBuffBehavior Counter(RobotEntity robot) =>
+                (AttackCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2602).Behavior;
             internal void Refresh(RobotEntity robot) => Battle.Buffs.Submit(
                 new AddBuffInfo(_passive, robot.OwnerRef, robot.OwnerRef, permanent: true));
             public void Dispose() => Battle.Dispose();
