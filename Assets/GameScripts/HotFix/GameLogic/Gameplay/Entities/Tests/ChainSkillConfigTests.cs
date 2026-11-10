@@ -20,7 +20,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count);
             Assert.AreEqual(9, tables.TbBullet.DataList.Count);
             Assert.AreEqual(7, tables.TbBuff.DataList.Count);
-            CollectionAssert.AreEquivalent(new[] { 1500, 1501, 1502, 1503, 1504, 1505, 1506, 1507, 1603, 1604, 1605 },
+            CollectionAssert.AreEquivalent(new[] { 1500, 1501, 1502, 1503, 1504, 1505, 1506, 1507, 1602, 1603, 1604, 1605, 1607 },
                 tables.TbSkill.DataList.Where(row => row.Enabled).Select(row => row.Id));
 
             foreach (var row in tables.TbSkill.DataList)
@@ -28,11 +28,11 @@ namespace GameLogic.Tests
             foreach (var row in tables.TbSkillLevel.DataList)
                 Assert.AreEqual(tables.TbSkill.Get(row.SkillId).Enabled,
                     catalog.TryGetLevel(row.SkillId, row.Level, out _), "等级记录 " + row.Id);
-            Assert.AreEqual(11, tables.TbSkill.DataList.Count(row => catalog.TryGet(row.Id, out _)));
-            Assert.AreEqual(55, tables.TbSkillLevel.DataList.Count(row => catalog.TryGetLevel(row.SkillId, row.Level, out _)));
-            CollectionAssert.AreEquivalent(new[] { 3500, 3501, 3502, 3600, 3603, 3604, 3605 },
+            Assert.AreEqual(13, tables.TbSkill.DataList.Count(row => catalog.TryGet(row.Id, out _)));
+            Assert.AreEqual(65, tables.TbSkillLevel.DataList.Count(row => catalog.TryGetLevel(row.SkillId, row.Level, out _)));
+            CollectionAssert.AreEquivalent(new[] { 3500, 3501, 3502, 3600, 3602, 3603, 3604, 3605 },
                 tables.TbBullet.DataList.Where(row => catalog.TryGetBullet(row.Id, out _)).Select(row => row.Id));
-            CollectionAssert.AreEquivalent(new[] { 2505, 2507, 2601, 2602 },
+            CollectionAssert.AreEquivalent(new[] { 2505, 2507, 2600, 2601, 2602, 2604 },
                 tables.TbBuff.DataList.Where(row => catalog.TryGetBuff(row.Id, out _)).Select(row => row.Id));
             Assert.AreEqual(BulletHitMode.AreaAtLanding, tables.TbBullet.Get(3604).HitMode);
             Assert.IsTrue(catalog.TryGetBullet(3604, out _), "榨汁机落地区域弹已启用。");
@@ -87,7 +87,7 @@ namespace GameLogic.Tests
             var config = tables.TbRobot.Get(701);
             Assert.AreEqual(1605, config.SkillId);
             Assert.IsTrue(File.Exists(Path.Combine(Application.dataPath, "AssetRaw/Actor/Prefabs/Robots", config.RobotPrefab + ".prefab")));
-            Assert.IsTrue(File.Exists(Path.Combine(Application.dataPath, "AssetRaw/Actor/Sprites/Robots/Robots", config.RobotIcon + ".png")));
+            Assert.IsTrue(File.Exists(Path.Combine(Application.dataPath, "AssetRaw/Actor/Sprites/Robots/RobotsIcon", config.RobotIcon + ".png")));
             using (var registry = new BattleEntityRegistry())
             {
                 var robot = registry.CreateRobotFromConfig(config, BattleSide.Player, 5);

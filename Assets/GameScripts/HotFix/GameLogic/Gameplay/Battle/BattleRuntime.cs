@@ -20,6 +20,7 @@ namespace GameLogic
         public BattlefieldRuntime Player { get; }
         public BattlefieldRuntime Opponent { get; }
         public bool IsDisposed { get; private set; }
+        public event Action<SkillOwnerRef, bool, string> EnemyIsolationChanged;
         // 终局请求立即失效；暂停只影响 CanCastNow，不影响已提交伤害的通知。
         public Func<bool> IsBattleValid { get; set; } = () => true;
         public Func<bool> CanCastNow { get; set; } = () => true;
@@ -36,6 +37,7 @@ namespace GameLogic
             BuffBehaviors.Register("slow", () => new SlowBuffBehavior(this));
             BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
             BuffBehaviors.Register("attack_cycle", () => new AttackCycleBuffBehavior(this));
+            BuffBehaviors.Register("store_isolation", () => new StoreIsolationBuffBehavior(this));
             TriggeredSkills = new BuffTriggeredSkillQueue(this);
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
@@ -88,6 +90,12 @@ namespace GameLogic
             Buffs.Submit(new AddBuffInfo(model, source, target.OwnerRef, duration,
                 durationSetTo: true, param: BuffObj.Copy(parameters)));
         }
+        internal void SetEnemyIsolation(EnemyEntity enemy, bool isolated, string prefab)
+        {
+            if (enemy.IsIsolated == isolated) return;
+            enemy.SetIsolated(isolated);
+            if (!IsDisposed) EnemyIsolationChanged?.Invoke(enemy.OwnerRef, isolated, prefab);
+        }
         public bool TryResolveOwner(SkillOwnerRef reference, out ISkillOwner owner)
         {
             owner = null;
@@ -131,6 +139,7 @@ namespace GameLogic
             clean(Timelines.Dispose); clean(Bullets.Dispose); clean(Player.Clear); clean(Opponent.Clear); clean(Combat.Dispose);
             foreach (var id in Registry.CopyIds())
                 if (Registry.TryGet(id, out var entity)) { entity.Skills.Clear(); clean(entity.Buffs.Dispose); }
+            EnemyIsolationChanged = null;
             if (_ownsRegistry) clean(Registry.Dispose);
             if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         }

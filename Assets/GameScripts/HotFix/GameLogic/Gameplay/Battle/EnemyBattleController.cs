@@ -12,7 +12,7 @@ namespace GameLogic
 {
     /// <summary>双方连续出兵、整局时钟和节点移动；实例身份始终与所属对局一起使用。</summary>
     [DisallowMultipleComponent]
-    public sealed class EnemyBattleController : MonoBehaviour
+    public sealed partial class EnemyBattleController : MonoBehaviour
     {
         [Header("我方战场路线：按数组顺序移动")]
         [Tooltip("按顺序拖入节点 Transform：Element 0 为出生圆心，Element 1、2 为 P1、P2 圆心。普通怪在各圆内独立选点；精英怪与 Boss 始终经过圆心。同侧 Tower 自动作为终点；下次初始化对局生效。")]
@@ -132,6 +132,7 @@ namespace GameLogic
                 throw new ArgumentException("敌人准备缺少场景、对局、配置或加载器。");
             _host = host;
             _context = context;
+            InitializeIsolation(load, token);
             context.Combat.DamageApplying += OnDamageApplying;
             context.Combat.TargetResolved += OnTargetResolved;
             context.Combat.KnockbackRequested += OnKnockbackRequested;
@@ -297,6 +298,7 @@ namespace GameLogic
                     _elapsed = next;
                     MoveAll(step);
                     AdvanceEnemyBuffs(step);
+                    SyncIsolationEffects();
                     if (!IsRunning) return;
                     SpawnDue();
                     if (!IsRunning) return;
@@ -314,6 +316,7 @@ namespace GameLogic
                 var entry = pair.Value;
                 if (entry.View == null || !_context.Registry.TryGet(pair.Key, out var entity) ||
                     !(entity is EnemyEntity enemy) || !enemy.IsAlive) continue;
+                if (enemy.IsIsolated) continue;
                 var position = entry.View.transform.position;
                 var remaining = 0d;
                 for (var i = entry.NextPoint; i < entry.Points.Length; i++)
@@ -426,6 +429,7 @@ namespace GameLogic
             entry.NextPoint = next;
             entry.View.transform.position = Vector3.Lerp(points[next - 1], points[next], u);
             enemy.TrySetRouteProgress(progress);
+            SyncIsolationEffects();
             return true;
         }
 
@@ -448,6 +452,8 @@ namespace GameLogic
                     _context.Registry.Remove(id, EntityRemovalReason.Manual, out _);
                     continue;
                 }
+                entry.View.SetMoving(!enemy.IsIsolated);
+                if (enemy.IsIsolated) continue;
                 var distance = enemy.MoveSpeed * deltaTime;
                 var position = entry.View.transform.position;
                 var points = entry.Points;
@@ -636,6 +642,7 @@ namespace GameLogic
             if (!OwnsBattle || snapshot.RemovalReason != EntityRemovalReason.Killed || snapshot.Kind != EntityKind.Enemy ||
                 _context.Registry.TryGet(snapshot.InstanceId, out _) ||
                 !_active.TryGetValue(snapshot.InstanceId, out var entry) || entry.Group.Side != snapshot.Side) return;
+            ReleaseIsolationEffect(snapshot.InstanceId);
             _active.Remove(snapshot.InstanceId);
             if (entry.View == null) return;
             _deathPositions[snapshot.InstanceId] = (snapshot.Side, entry.View.transform.position);
@@ -680,6 +687,7 @@ namespace GameLogic
         public void Clear()
         {
             _generation++;
+            ClearIsolation();
             _prepared = _preparing = _started = false;
             _hasAbnormalRemoval = false;
             _elapsed = 0d;

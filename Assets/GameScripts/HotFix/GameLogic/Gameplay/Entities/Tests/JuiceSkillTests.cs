@@ -20,9 +20,9 @@ namespace GameLogic.Tests
             var tables = new Tables(file => new ByteBuf(File.ReadAllBytes(
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", file + ".bytes"))));
             var profile = AssetDatabase.LoadAssetAtPath<DemoBattleProfile>("Assets/AssetRaw/Configs/DemoBattleProfile.asset");
-            Assert.AreEqual(704, profile.Robots.Last().RobotId);
-            Assert.IsTrue(profile.Robots.Last().Unlocked);
-            Assert.AreEqual(5, profile.Robots.Last().ReferenceLevel);
+            var juicer = profile.Robots.Single(r => r.RobotId == 704);
+            Assert.IsTrue(juicer.Unlocked);
+            Assert.AreEqual(5, juicer.ReferenceLevel);
             var candidates = profile.Robots.Where(r => r.Unlocked).Select(r => r.RobotId).ToArray();
             var rules = ShopRules.FromTables(tables);
             foreach (var weights in rules.SlotCandidateWeights)
@@ -31,7 +31,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(weights[candidates.Length - 1], weights[candidates.Length]);
             }
             using (var context = new BattleShopContext(rules, candidates, candidates, tables.TbRobot.Get,
-                new LastCandidateRandom(),
+                new CandidateRandom(Array.IndexOf(candidates, 704), candidates.Length),
                 isRobotEnabled: id => tables.TbSkill.Get(tables.TbRobot.Get(id).SkillId).Enabled))
             {
                 context.Battle.Configure(SkillConfigAdapter.FromTables(tables));
@@ -89,9 +89,11 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, calls);
         }
 
-        private sealed class LastCandidateRandom : IShopRandom
+        private sealed class CandidateRandom : IShopRandom
         {
-            public double NextDouble() => 0.999;
+            private readonly double _sample;
+            public CandidateRandom(int index, int count) { _sample = (index + 0.5) / count; }
+            public double NextDouble() => _sample;
             public int NextInt(int maxExclusive) => maxExclusive - 1;
         }
 

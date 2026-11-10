@@ -23,12 +23,14 @@ namespace GameLogic
             }
             var needsSlow = false;
             var needsPoison = false;
+            var needsIsolation = false;
             foreach (var row in tables.TbSkillLevel.DataList)
             {
                 if (!enabledSkills.Contains(row.SkillId)) continue;
                 if (row.CycleBulletId != 0) requiredBullets.Add(row.CycleBulletId);
                 needsSlow |= row.Slow > 0f;
                 needsPoison |= HasPoison(row);
+                needsIsolation |= row.IsolateDuration > 0f;
             }
             foreach (var row in tables.TbBullet.DataList)
             {
@@ -42,17 +44,20 @@ namespace GameLogic
                 if (!catalog.TryGetBullet(id, out _)) throw new InvalidOperationException("缺少启用技能依赖的弹丸：" + id);
             var slowBuffId = 0;
             var poisonBuffId = 0;
+            var isolationBuffId = 0;
             foreach (var row in tables.TbBuff.DataList)
             {
                 if (!requiredBuffs.Contains(row.Id) && !(needsSlow && row.BehaviorKey == "slow") &&
-                    !(needsPoison && row.BehaviorKey == "poison")) continue;
-                if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "attack_cycle")
+                    !(needsPoison && row.BehaviorKey == "poison") &&
+                    !(needsIsolation && row.BehaviorKey == "store_isolation")) continue;
+                if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "attack_cycle" && row.BehaviorKey != "store_isolation")
                     throw new InvalidOperationException("启用技能引用了未知Buff行为：" + row.Id + "/" + row.BehaviorKey);
                 var cycleAction = AttackCycleAction.None;
                 if (row.BehaviorKey == "attack_cycle")
                 {
                     cycleAction = row.CycleAction == "replace_bullet" ? AttackCycleAction.ReplaceBullet :
-                        row.CycleAction == "cast_skill" ? AttackCycleAction.CastSkill : AttackCycleAction.None;
+                        row.CycleAction == "cast_skill" ? AttackCycleAction.CastSkill :
+                        row.CycleAction == "enhance_attack" ? AttackCycleAction.EnhanceAttack : AttackCycleAction.None;
                     if (row.MaxStacks != 1 || row.TickInterval != 0f || row.CountSkillId <= 0 ||
                         !enabledSkills.Contains(row.CountSkillId) || cycleAction == AttackCycleAction.None ||
                         (cycleAction == AttackCycleAction.ReplaceBullet ? row.TriggerSkillId != 0 :
@@ -60,7 +65,13 @@ namespace GameLogic
                         throw new InvalidOperationException("攻击周期Buff参数无效：" + row.Id);
                 }
                 catalog.Add(new BuffModel(row.Id, row.BehaviorKey, row.MaxStacks, row.Priority, row.TickInterval,
-                    row.TriggerSkillId, row.CountSkillId, cycleAction));
+                    row.TriggerSkillId, row.CountSkillId, cycleAction, row.EffectPrefab));
+                if (row.BehaviorKey == "store_isolation")
+                {
+                    if (isolationBuffId != 0 || row.MaxStacks != 1 || row.TickInterval != 0f || string.IsNullOrWhiteSpace(row.EffectPrefab))
+                        throw new InvalidOperationException("装盒需要唯一Buff、单实例、独立持续时间与表现资源。");
+                    isolationBuffId = row.Id;
+                }
                 if (row.BehaviorKey == "slow")
                 {
                     if (slowBuffId != 0) throw new InvalidOperationException("当前Slow字段必须对应唯一减速Buff。");
@@ -91,7 +102,8 @@ namespace GameLogic
                 if (!enabledSkills.Contains(row.SkillId)) continue;
                 if (!catalog.TryGet(row.SkillId, out var model) || row.Level < 1 || row.Level > model.MaxLevel ||
                     row.Damage < 0 || !EntityValidation.IsFiniteNonNegative(row.Slow) || row.Slow > 1f ||
-                    !EntityValidation.IsFiniteNonNegative(row.Duration)) throw new InvalidOperationException("技能等级配置无效：" + row.Id);
+                    !EntityValidation.IsFiniteNonNegative(row.Duration) ||
+                    !EntityValidation.IsFiniteNonNegative(row.IsolateDuration)) throw new InvalidOperationException("技能等级配置无效：" + row.Id);
                 ValidateRobotLevel(row, model, catalog);
                 if (row.Slow > 0f && (slowBuffId == 0 || row.Duration <= 0f))
                     throw new InvalidOperationException("减速技能缺少Buff或有效持续时间：" + row.Id);
@@ -108,7 +120,7 @@ namespace GameLogic
                 }
                 var parameters = new Dictionary<string, float>
                 {
-                    { "damage", row.Damage }, { "slow", row.Slow }, { "duration", row.Duration },
+                    { "isolateDuration", row.IsolateDuration }, { "damage", row.Damage }, { "slow", row.Slow }, { "duration", row.Duration },
                     { "scatterCount", row.ScatterCount }, { "scatterAngle", row.ScatterAngle },
                     { "pierceTargetCount", row.PierceTargetCount }, { "burstCount", row.BurstCount },
                     { "burstInterval", row.BurstInterval }, { "knockbackDistance", row.KnockbackDistance },
@@ -121,8 +133,8 @@ namespace GameLogic
                     { "dropSpacing", row.DropSpacing }, { "splashRadius", row.SplashRadius }
                 };
                 catalog.Add(new SkillLevelModel(row.SkillId, row.Level, parameters,
-                    CaptureHitBuffs(slowBuffId, poisonBuffId, row.SkillId, parameters),
-                    values => CaptureHitBuffs(slowBuffId, poisonBuffId, row.SkillId, values)));
+                    CaptureHitBuffs(slowBuffId, poisonBuffId, isolationBuffId, row.SkillId, parameters),
+                    values => CaptureHitBuffs(slowBuffId, poisonBuffId, isolationBuffId, row.SkillId, values)));
             }
             foreach (var row in tables.TbSkill.DataList)
             {
@@ -136,6 +148,24 @@ namespace GameLogic
                         throw new InvalidOperationException("周期Buff的统计技能与安装技能不一致：" + id);
                     if (passive.TriggerSkillId > 0 && !catalog.TryGet(passive.TriggerSkillId, out _))
                         throw new InvalidOperationException("缺少启用的被动触发技能：" + passive.TriggerSkillId);
+                    if (passive.CycleAction == AttackCycleAction.EnhanceAttack)
+                    {
+                        catalog.TryGet(row.Id, out var primary);
+                        catalog.TryGet(passive.TriggerSkillId, out var child);
+                        if (primary.Type != SkillType.NormalAttack || primary.TargetRule != child.TargetRule ||
+                            (child.TimelineKey != "robot.single" && child.TimelineKey != "robot.store") ||
+                            !catalog.TryGetBullet(primary.BulletId, out var normalBullet) ||
+                            !catalog.TryGetBullet(child.BulletId, out var enhancedBullet) ||
+                            normalBullet.Prefab != enhancedBullet.Prefab || enhancedBullet.HitMode != BulletHitMode.LockedTarget ||
+                            enhancedBullet.BehaviorKey != "direct")
+                            throw new InvalidOperationException("强化普攻需要相同目标规则、同资源的单目标弹丸：" + passive.Id);
+                        for (var level = 1; level <= primary.MaxLevel; level++)
+                        {
+                            if (!catalog.TryGetLevel(child.Id, Math.Min(level, child.MaxLevel), out var effects) ||
+                                effects.HitBuffs.Count == 0 || effects.Parameters["damage"] != 0)
+                                throw new InvalidOperationException("强化普攻子技能只提供命中效果，伤害沿用普攻：" + child.Id);
+                        }
+                    }
                 }
             }
             return catalog;
@@ -169,6 +199,10 @@ namespace GameLogic
 
         private static void ValidateRobotLevel(GameConfig.skill.SkillLevel row, SkillModel skill, SkillCatalog catalog)
         {
+            if (skill.TimelineKey == "robot.store" && (row.IsolateDuration <= 0f ||
+                skill.TargetRule != SkillTargetRule.SameSideEnemy || !catalog.TryGetBullet(skill.BulletId, out var store) ||
+                store.HitMode != BulletHitMode.LockedTarget || store.BehaviorKey != "direct"))
+                throw new InvalidOperationException("装盒技能需要单目标弹丸和有效持续时间：" + row.Id);
             if (skill.TimelineKey == "robot.juice" && (skill.TargetRule != SkillTargetRule.SameSidePosition ||
                 row.DropCount < 1 || !EntityValidation.IsFiniteNonNegative(row.DropSpacing) || row.DropSpacing <= 0f ||
                 !EntityValidation.IsFiniteNonNegative(row.SplashRadius) || row.SplashRadius <= 0f ||
@@ -219,10 +253,16 @@ namespace GameLogic
             return new[] { new CombatBuffApplication(buffId, duration, new Dictionary<string, float> { { "slow", slow } }) };
         }
 
-        private static IReadOnlyList<CombatBuffApplication> CaptureHitBuffs(int slowBuffId, int poisonBuffId,
+        private static IReadOnlyList<CombatBuffApplication> CaptureHitBuffs(int slowBuffId, int poisonBuffId, int isolationBuffId,
             int skillId, IReadOnlyDictionary<string, float> parameters)
         {
             var effects = new List<CombatBuffApplication>(CaptureSlowBuff(slowBuffId, parameters));
+            if (parameters.TryGetValue("isolateDuration", out var isolateDuration) && isolateDuration != 0f)
+            {
+                if (isolationBuffId == 0 || !EntityValidation.IsFiniteNonNegative(isolateDuration) || isolateDuration <= 0f)
+                    throw new InvalidOperationException("装盒缺少Buff或有效持续时间：" + skillId);
+                effects.Add(new CombatBuffApplication(isolationBuffId, isolateDuration));
+            }
             if (!parameters.TryGetValue("poisonMaxLayers", out var cap) || cap == 0f) return effects;
             var damage = parameters["poisonDamage"];
             var duration = parameters["poisonDuration"];

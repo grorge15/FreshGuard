@@ -143,7 +143,7 @@ namespace GameLogic
                 new[] { new TimelineNode(0f, "robot.juice.drops") }));
             _context.Battle.Timelines.Register(new TimelineModel("robot.single", 0f,
                 new[] { new TimelineNode(0f, "robot.bullet") }));
-            foreach (var key in new[] { "robot.scatter", "robot.pierce", "robot.impact" })
+            foreach (var key in new[] { "robot.scatter", "robot.pierce", "robot.impact", "robot.store" })
                 _context.Battle.Timelines.Register(new TimelineModel(key, 0f,
                     new[] { new TimelineNode(0f, "robot.bullet") }));
             _context.Battle.Timelines.RegisterFactory("robot.burst", CreateBurstTimeline);

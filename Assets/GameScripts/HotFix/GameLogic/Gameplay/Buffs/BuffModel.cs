@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace GameLogic
 {
-    public enum AttackCycleAction { None, ReplaceBullet, CastSkill }
+    public enum AttackCycleAction { None, ReplaceBullet, CastSkill, EnhanceAttack }
 
     public sealed class BuffModel
     {
@@ -15,8 +15,10 @@ namespace GameLogic
         public int TriggerSkillId { get; }
         public int CountSkillId { get; }
         public AttackCycleAction CycleAction { get; }
+        public string EffectPrefab { get; }
         public BuffModel(int id, string behaviorKey, int maxStacks = 1, int priority = 0, float tickInterval = 0f,
-            int triggerSkillId = 0, int countSkillId = 0, AttackCycleAction cycleAction = AttackCycleAction.None)
+            int triggerSkillId = 0, int countSkillId = 0, AttackCycleAction cycleAction = AttackCycleAction.None,
+            string effectPrefab = null)
         {
             EntityValidation.RequirePositive(id, nameof(id));
             EntityValidation.RequirePositive(maxStacks, nameof(maxStacks));
@@ -28,6 +30,7 @@ namespace GameLogic
             if (countSkillId < 0 || !Enum.IsDefined(typeof(AttackCycleAction), cycleAction))
                 throw new ArgumentOutOfRangeException(nameof(countSkillId));
             CountSkillId = countSkillId; CycleAction = cycleAction;
+            EffectPrefab = effectPrefab ?? string.Empty;
         }
     }
     public sealed class BuffObj
