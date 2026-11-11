@@ -8,6 +8,50 @@ namespace GameLogic.Tests
     public sealed class ChainCycleTests
     {
         [Test]
+        public void ReplacedSkillOwnsItsTimelineLevelAndParametersWithoutSecondCast()
+        {
+            using (var f = new Fixture(replaceSkill: true))
+            {
+                for (var i = 0; i < 4; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
+                Assert.IsTrue(f.Cast(f.First).Accepted);
+                var fifth = f.Action.LastPrepared;
+                Assert.AreEqual(1600, fifth.SkillId);
+                Assert.AreEqual(3600, fifth.BulletId);
+                Assert.AreEqual(45, fifth.Get("damage"), "参数取子技能，不沿用普攻");
+                Assert.AreEqual(4, f.Action.Executed.Count);
+                Assert.AreEqual(SkillCastFailure.Busy, f.Cast(f.First).Failure);
+                Assert.IsTrue(f.First.TryUpgrade());
+                f.Battle.Timelines.Advance(.25f);
+                Assert.AreEqual(5, f.Action.Executed.Count);
+                Assert.AreEqual(1, fifth.Level);
+                Assert.AreEqual(45, fifth.Get("damage"));
+                Assert.AreEqual(0, f.Counter(f.First).AttackCount);
+            }
+        }
+
+        [Test]
+        public void ReplacementCooldownAndReservationFailureDoNotConsumeFifth()
+        {
+            using (var f = new Fixture(replaceSkill: true))
+            {
+                for (var i = 0; i < 4; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
+                Assert.IsTrue(f.First.Skills.TryGet(1600, out var child));
+                child.CooldownRemaining = 1;
+                Assert.AreEqual(SkillCastFailure.Cooldown, f.Cast(f.First).Failure);
+                Assert.AreEqual(4, f.Counter(f.First).AttackCount);
+                child.CooldownRemaining = 0;
+                f.Action.Prepared = false;
+                Assert.AreEqual(SkillCastFailure.NotPrepared, f.Cast(f.First).Failure);
+                Assert.AreEqual(4, f.Counter(f.First).AttackCount);
+                f.Action.Prepared = true;
+                Assert.IsTrue(f.Cast(f.First).Accepted);
+                f.Battle.Timelines.Advance(.25f);
+                Assert.AreEqual(1600, f.Action.Executed.Last().SkillId);
+                Assert.AreEqual(0, f.Counter(f.First).AttackCount);
+            }
+        }
+
+        [Test]
         public void AcceptedCastCountsWithoutLaunchNotification()
         {
             using (var f = new Fixture())
@@ -146,11 +190,19 @@ namespace GameLogic.Tests
             internal readonly BattleRuntime Battle = new BattleRuntime(711);
             internal readonly RobotEntity First;
             internal readonly LaunchAction Action = new LaunchAction();
-            private readonly BuffModel _passive = new BuffModel(2602, "attack_cycle", countSkillId: 1605, cycleAction: AttackCycleAction.ReplaceBullet);
-            internal Fixture(bool delayed = false)
+            private readonly BuffModel _passive;
+            internal Fixture(bool delayed = false, bool replaceSkill = false)
             {
                 var catalog = new SkillCatalog();
+                _passive = new BuffModel(2602, "attack_cycle", triggerSkillId: replaceSkill ? 1600 : 0,
+                    countSkillId: 1605, cycleAction: replaceSkill ? AttackCycleAction.ReplaceSkill : AttackCycleAction.ReplaceBullet);
                 catalog.Add(_passive);
+                if (replaceSkill)
+                {
+                    catalog.Add(new SkillModel(1600, SkillType.Robot, "chain", 5, 0, SkillTargetRule.None, bulletId: 3600));
+                    catalog.Add(new SkillLevelModel(1600, 1, new Dictionary<string, float> { { "damage", 45 } }));
+                    catalog.Add(new SkillLevelModel(1600, 2, new Dictionary<string, float> { { "damage", 65 } }));
+                }
                 catalog.Add(new SkillModel(1605, SkillType.Robot, "test", 5, 0, SkillTargetRule.None,
                     new[] { 2602 }, 3605));
                 catalog.Add(new SkillLevelModel(1605, 1, Parameters(5, 20)));
@@ -158,6 +210,7 @@ namespace GameLogic.Tests
                 Battle.Configure(catalog);
                 Action.Launch = cast => { };
                 Battle.Timelines.RegisterAction("launch", Action);
+                Battle.Timelines.Register(new TimelineModel("chain", .25f, new[] { new TimelineNode(.25f, "launch") }));
                 Battle.Timelines.Register(new TimelineModel("test", delayed ? 1 : 0,
                     new[] { new TimelineNode(delayed ? 0.5f : 0, "launch") }));
                 First = Robot();

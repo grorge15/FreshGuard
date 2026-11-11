@@ -50,9 +50,9 @@ namespace GameLogic.Tests
                     continue;
                 }
                 Assert.IsTrue(catalog.TryGetBullet(skill.BulletId, out var bullet));
-                if (row.Id == 1605)
+                if (row.Id == 1605 || row.Id == 1600)
                 {
-                    Assert.AreEqual(3605, bullet.Id);
+                    Assert.AreEqual(row.Id == 1605 ? 3605 : 3600, bullet.Id);
                     Assert.AreEqual("InductionBolt", bullet.Prefab);
                     Assert.AreEqual(BulletFlightType.Straight, bullet.FlightType);
                     Assert.IsFalse(bullet.TrackTarget);
