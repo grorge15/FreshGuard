@@ -50,7 +50,6 @@ namespace GameLogic.Tests
             Assert.IsTrue(catalog.TryGet(1606, out var primary));
             Assert.AreEqual(3500, primary.BulletId);
             Assert.IsTrue(catalog.TryGetBuff(2603, out var passive));
-            Assert.AreEqual(AttackCycleAction.CastSkill, passive.CycleAction);
             Assert.AreEqual(1601, passive.TriggerSkillId);
             Assert.AreEqual(1606, passive.CountSkillId);
             Assert.IsFalse(catalog.TryGetBullet(3601, out _));

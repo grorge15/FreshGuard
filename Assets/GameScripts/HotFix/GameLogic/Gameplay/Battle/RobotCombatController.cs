@@ -359,11 +359,7 @@ namespace GameLogic
             if (!_context.Battle.Catalog.TryGet(skillId, out var skill) ||
                 !_context.Battle.Catalog.TryGetBullet(skill.BulletId, out var model)) return;
             PrepareNextAsync(reserve, GetPool(reserve, skillId, model)).Forget();
-            for (var level = 1; level <= skill.MaxLevel; level++)
-                if (_context.Battle.Catalog.TryGetLevel(skillId, level, out var values) &&
-                    values.Parameters.TryGetValue("cycleBulletId", out var id) &&
-                    _context.Battle.Catalog.TryGetBullet((int)id, out var replacement))
-                    PrepareNextAsync(reserve, GetPool(reserve, skillId, replacement)).Forget();
+
         }
 
         private bool TryPrepareBullet(SkillCastSnapshot cast, TimelineNode node, out Action execute, out Action release)

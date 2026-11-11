@@ -76,7 +76,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void FifthAttackUsesChildTimelineAndWaitsForCastAnimationBeforeOneShot()
+        public void FifthNormalAttackRemainsAndQueuedChildWaitsForCastAnimation()
         {
             Prepare(); var robot = AddRobot();
             for (var i = 0; i < 4; i++) Shoot(robot).Cancel();
@@ -85,18 +85,23 @@ namespace GameLogic.Tests
             var before = States();
             _f.Context.Registry.AdvanceTime(1);
             Assert.IsTrue(Contact(robot));
-            Assert.IsTrue(_f.Context.Battle.Timelines.HasChannel(robot.OwnerRef), "第五次应占用独立前摇通道");
-            Assert.IsEmpty(States().Except(before), "前摇开始不应发出普通弹或闪电弹");
+            var normal = States().Except(before).Single();
+            Assert.AreEqual(1605, normal.Action.SkillId, "第五次普通攻击保留");
+            Assert.AreEqual(0, Counter(robot).AttackCount, "接触入口已接受额外子技能并扣除次数，发弹仍需等待前摇");
+            _f.Context.Battle.TriggeredSkills.Process();
+            Assert.IsTrue(_f.Context.Battle.Timelines.HasChannel(robot.OwnerRef), "子技能占用独立前摇通道");
+            Assert.IsFalse(States().Any(b => b.Action.SkillId == 1600));
+            normal.Cancel(); // 单独验证闪电链前摇，避免普通弹提前击杀目标。
             Assert.AreNotSame(original, portrait.sprite, "前摇应显示技能序列帧");
             var pausedFrame = portrait.sprite;
             _f.Host.SetFrozen(true); _combat.AdvanceExistingBullets(1);
             Assert.AreSame(pausedFrame, portrait.sprite, "暂停不得推进前摇动画");
             _f.Host.SetFrozen(false);
             _combat.AdvanceExistingBullets(.125f); _f.Context.Battle.Timelines.Advance(.125f);
-            Assert.IsEmpty(States().Except(before));
+            Assert.IsFalse(States().Any(b => b.Action.SkillId == 1600));
             Assert.AreNotSame(pausedFrame, portrait.sprite);
             _combat.AdvanceExistingBullets(.125f); _f.Context.Battle.Timelines.Advance(.125f);
-            var shot = States().Except(before).Single();
+            var shot = States().Single(b => b.Action.SkillId == 1600);
             Assert.AreEqual(1600, shot.Action.SkillId);
             Assert.AreEqual(3600, shot.Launcher.Model.Id);
             Assert.AreEqual(0, shot.Elapsed, "新弹不能多飞一整帧");
@@ -114,6 +119,7 @@ namespace GameLogic.Tests
             var original = portrait.sprite;
             _f.Context.Registry.AdvanceTime(1);
             Assert.IsTrue(Contact(robot));
+            _f.Context.Battle.TriggeredSkills.Process();
             var before = States();
             _f.Context.Battle.Timelines.Cancel(robot.OwnerRef);
             Assert.AreSame(original, portrait.sprite);
@@ -132,6 +138,7 @@ namespace GameLogic.Tests
             var original = portrait.sprite;
             _f.Context.Registry.AdvanceTime(1);
             Assert.IsTrue(Contact(robot));
+            _f.Context.Battle.TriggeredSkills.Process();
             Assert.AreNotSame(original, portrait.sprite);
             _combat.Dispose(); _combat = null;
             Assert.AreSame(original, portrait.sprite);
@@ -142,34 +149,49 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void UnpreparedCastAnimationRejectsFifthWithoutConsumingCycle()
+        public void UnpreparedChildKeepsFifthNormalAndWaitsWithoutRepeatingIt()
         {
             Prepare(); var robot = AddRobot();
             for (var i = 0; i < 4; i++) Shoot(robot).Cancel();
             var animation = _views[robot.InstanceId].GetComponent<RobotCastAnimationView>();
-            Assert.IsNotNull(animation);
             animation.enabled = false;
             _f.Context.Registry.AdvanceTime(1);
-            Assert.IsFalse(Contact(robot));
-            Assert.AreEqual(4, Counter(robot).AttackCount);
+            var before = States();
+            Assert.IsTrue(Contact(robot));
+            var normal = States().Except(before).Single();
+            Assert.AreEqual(1605, normal.Action.SkillId);
+            _f.Context.Battle.TriggeredSkills.Process();
+            Assert.AreEqual(5, Counter(robot).AttackCount);
+            Assert.IsTrue(Counter(robot).Pending);
             animation.enabled = true;
-            Assert.AreEqual(1600, Shoot(robot).Action.SkillId);
+            _f.Context.Battle.TriggeredSkills.Process();
+            _f.Context.Battle.Timelines.Advance(.25f);
+            var emitted = States().Except(before).ToArray();
+            Assert.AreEqual(2, emitted.Length);
+            Assert.AreEqual(1, emitted.Count(b => b.Action.SkillId == 1605));
+            Assert.AreEqual(1, emitted.Count(b => b.Action.SkillId == 1600));
+            Assert.AreEqual(0, Counter(robot).AttackCount);
         }
 
         [Test]
-        public void RealControllerEmitsTwoCompleteFourDirectOneChainCycles()
+        public void TwoCyclesEmitTenNormalShotsAndTwoAdditionalChainShots()
         {
-            Prepare(); var robot = AddRobot(); var ids = new List<int>();
+            Prepare(); var robot = AddRobot(); var normal = 0; var chain = 0;
             for (var i = 0; i < 10; i++)
             {
-                var shot = Shoot(robot);
-                ids.Add(shot.Launcher.Model.Id);
-                Assert.AreEqual(i % 5 == 4 ? "chain" : "direct", shot.Launcher.Model.BehaviorKey);
-                Assert.AreEqual(20, shot.Action.BaseDamage);
+                _f.Context.Registry.AdvanceTime(1); var before = States();
+                Assert.IsTrue(Contact(robot));
+                _f.Context.Battle.TriggeredSkills.Process();
+                _f.Context.Battle.Timelines.Advance(.25f);
+                var emitted = States().Except(before).ToArray();
+                Assert.AreEqual(i % 5 == 4 ? 2 : 1, emitted.Length);
+                normal += emitted.Count(b => b.Action.SkillId == 1605);
+                chain += emitted.Count(b => b.Action.SkillId == 1600);
+                foreach (var shot in emitted) Assert.AreEqual(20, shot.Action.BaseDamage);
             }
-            CollectionAssert.AreEqual(new[] { 3605, 3605, 3605, 3605, 3600, 3605, 3605, 3605, 3605, 3600 }, ids);
+            Assert.AreEqual(10, normal); Assert.AreEqual(2, chain);
             Assert.AreEqual(0, Counter(robot).AttackCount);
-            Assert.AreEqual(10, _combat.LiveBulletCount);
+            Assert.AreEqual(12, _combat.LiveBulletCount);
         }
 
         [Test]
@@ -326,13 +348,19 @@ namespace GameLogic.Tests
             _f.Context.Registry.AdvanceTime(1);
             var before = States();
             Assert.IsTrue(Contact(robot));
+            _f.Context.Battle.TriggeredSkills.Process();
             if (_f.Context.Battle.Timelines.HasChannel(robot.OwnerRef))
             {
                 // 发射次数测试只推进施法，避免前几枚测试弹在前摇内提前击杀唯一目标。
-                // 战斗分段与动画采样由FifthAttackUsesChildTimeline测试覆盖。
+                // 战斗分段与动画采样由独立前摇测试覆盖。
                 _f.Context.Battle.Timelines.Advance(.25f);
             }
-            return States().Except(before).Single();
+            var emitted = States().Except(before).ToArray();
+            var child = emitted.SingleOrDefault(b => b.Action.SkillId == 1600);
+            if (child == null) return emitted.Single();
+            // 命中测试只推进目标弹；完整并行发射数量由TwoCycles测试覆盖。
+            foreach (var ordinary in emitted.Where(b => b != child)) ordinary.Cancel();
+            return child;
         }
         private bool Contact(RobotEntity robot)
         { _combat.SyncRobots(); return _combat.TryAttackFromContact(_f.Context.BattleId, robot.Side, robot.InstanceId); }

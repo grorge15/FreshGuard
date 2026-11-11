@@ -54,7 +54,7 @@ namespace GameLogic.Tests
                 Assert.IsTrue(catalog.TryGetLevel(1605, level, out var values));
                 Assert.AreEqual(10 + level * 10, values.Parameters["damage"]);
                 Assert.AreEqual(5f, values.Parameters["attackCycleCount"]);
-                Assert.AreEqual(0f, values.Parameters["cycleBulletId"]);
+                Assert.IsFalse(values.Parameters.ContainsKey("cycleBulletId"));
                 Assert.IsTrue(catalog.TryGetLevel(1600, level, out values));
                 Assert.AreEqual(10 + level * 10, values.Parameters["damage"]);
                 Assert.AreEqual(.25f, values.Parameters["castWindup"]);
@@ -78,7 +78,6 @@ namespace GameLogic.Tests
             Assert.IsTrue(catalog.TryGetBuff(2602, out var passive));
             Assert.AreEqual("attack_cycle", passive.BehaviorKey);
             Assert.AreEqual(1605, passive.CountSkillId);
-            Assert.AreEqual(AttackCycleAction.ReplaceSkill, passive.CycleAction);
             Assert.AreEqual(1, passive.MaxStacks);
             Assert.AreEqual(1600, tables.TbBuff.Get(2602).TriggerSkillId);
         }
@@ -124,12 +123,10 @@ namespace GameLogic.Tests
         [TestCase("ChainDamageRatio", 0f)]
         [TestCase("ChainDamageRatio", 1.01f)]
         [TestCase("ChainDamageRatio", float.PositiveInfinity)]
-        [TestCase("CycleBulletId", 3500)]
-        [TestCase("CycleBulletId", 999999)]
         public void InvalidEnabledCycleConfigurationFailsBeforeBattle(string field, object value)
         {
             var tables = LoadTables();
-            SetField(tables.TbSkillLevel.Get(field == "AttackCycleCount" || field == "CycleBulletId" ? 160501 : 160001), field, value);
+            SetField(tables.TbSkillLevel.Get(field == "AttackCycleCount" ? 160501 : 160001), field, value);
             Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
         }
 
