@@ -13,10 +13,13 @@ namespace GameLogic
     public sealed class EnemyView : MonoBehaviour
     {
         [SerializeField] private int _configId;
+        [SerializeField] private bool _faceMovement;
+        [SerializeField] private bool _spriteFacesRight = true;
         private Animator _animator;
         private BattleEntityRegistry _registry;
         private SpriteRenderer[] _spriteRenderers;
         private Color[] _baseSpriteColors;
+        private bool[] _baseSpriteFlipX;
         private Transform[] _shakeRoots;
         private Vector3[] _shakeLocalOffsets;
         private bool _moving;
@@ -71,6 +74,20 @@ namespace GameLogic
             if (!HasAliveEntity()) return false;
             _moving = moving;
             if (!_attacking) PlayState(_moving ? "Move" : "Idle");
+            return true;
+        }
+
+        public bool FaceMovement(Vector2 direction)
+        {
+            if (!_faceMovement || !HasAliveEntity() ||
+                float.IsNaN(direction.x) || float.IsInfinity(direction.x) ||
+                float.IsNaN(direction.y) || float.IsInfinity(direction.y)) return false;
+            // 单视角角色保持直立；纵向路段的小幅横向偏移不触发左右反复切换。
+            if (Mathf.Abs(direction.x) <= Mathf.Max(0.0001f, Mathf.Abs(direction.y) * 0.2f)) return false;
+            CacheVisuals();
+            var mirror = (direction.x > 0f) != _spriteFacesRight;
+            for (var i = 0; i < _spriteRenderers.Length; i++)
+                if (_spriteRenderers[i] != null) _spriteRenderers[i].flipX = _baseSpriteFlipX[i] ^ mirror;
             return true;
         }
 
@@ -192,10 +209,12 @@ namespace GameLogic
             if (_spriteRenderers != null) return;
             _spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
             _baseSpriteColors = new Color[_spriteRenderers.Length];
+            _baseSpriteFlipX = new bool[_spriteRenderers.Length];
             var roots = new List<Transform>();
             for (var i = 0; i < _spriteRenderers.Length; i++)
             {
                 _baseSpriteColors[i] = _spriteRenderers[i].color;
+                _baseSpriteFlipX[i] = _spriteRenderers[i].flipX;
                 var visual = _spriteRenderers[i].transform;
                 if (visual == transform) continue;
                 while (visual.parent != transform) visual = visual.parent;
@@ -272,6 +291,8 @@ namespace GameLogic
             _attacking = false;
             _removing = false;
             ClearHitFeedback();
+            for (var i = 0; i < _spriteRenderers.Length; i++)
+                if (_spriteRenderers[i] != null) _spriteRenderers[i].flipX = _baseSpriteFlipX[i];
         }
 
         private void PlayState(string state, bool restart = false)
