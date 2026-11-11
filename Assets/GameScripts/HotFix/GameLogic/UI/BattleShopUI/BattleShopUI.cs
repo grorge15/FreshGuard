@@ -173,7 +173,7 @@ namespace GameLogic
                 item.SetMergeCandidate(eligible, eligible && item.SlotId == _hoveredOfferSlot);
             }
         }
-        public void ShowGhost(string icon, int level, Vector2 position) { _ghost.Show(icon, level, position, EventCamera); }
+        public void ShowGhost(string icon, string portrait, int level, Vector2 position) { _ghost.Show(icon, portrait, level, position, EventCamera); }
         public void MoveGhost(Vector2 position) { _ghost?.Move(position, EventCamera); }
         public void HideGhost() { if (_ghost != null && _ghost.gameObject != null) _ghost.Visible = false; }
         public void ShowFailure(ShopOperationResult result)

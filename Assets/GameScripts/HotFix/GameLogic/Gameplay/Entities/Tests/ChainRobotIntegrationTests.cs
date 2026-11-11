@@ -66,6 +66,7 @@ namespace GameLogic.Tests
             data.WriteString(config.RobotIcon); data.WriteInt(differentResource ? config.ShapeId : config.ShapeId + 1);
             data.WriteInt(config.SkillId); data.WriteFloat(config.MinTriggerInterval);
             data.WriteInt(config.AttackDamage); data.WriteInt(config.DamagePerLevel);
+            data.WriteString(config.RobotPortrait);
             var incompatible = new GameConfig.robot.Robot(data);
             Assert.IsFalse(view.TryUseConfiguration(incompatible, _f.Tables));
             Assert.AreEqual(original, view.ConfigId);
@@ -103,8 +104,43 @@ namespace GameLogic.Tests
             Assert.AreEqual(2, Counter(second).AttackCount);
         }
 
+        [TestCase(false, false)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public void EveryInductionHitConnectsLaunchOriginAndKeepsDamageAndEffectLifetime(bool chain, bool singleTarget)
+        {
+            Prepare(); var robot = AddRobot();
+            if (singleTarget)
+            {
+                var distant = _f.Views.Where(v => _f.Side(v) == BattleSide.Player)
+                    .OrderBy(v => v.InstanceId).Last();
+                distant.transform.position = Vector3.up * 8;
+            }
+            if (chain) for (var i = 0; i < 4; i++) Shoot(robot).Cancel();
+            var shot = Shoot(robot);
+            var target = _f.Views.Single(v => v.InstanceId == shot.Action.TargetInstanceIds[0]);
+            var hitPosition = target.transform.position;
+            // 连线起点使用发射快照，不随机器人在弹丸飞行期间移动。
+            _views[robot.InstanceId].transform.position += Vector3.right * 2;
+            var damage = new List<int>();
+            _f.Context.Combat.TargetResolved += c => damage.Add(c.Result.RequestedDamage);
+            _combat.AdvanceExistingBullets(1);
+            CollectionAssert.AreEqual(chain && !singleTarget ? new[] { 20, 14 } : new[] { 20 }, damage);
+            var effect = _f.Root.GetComponentsInChildren<LightningChainEffectView>().Single();
+            var segments = effect.transform.Find("ChainSegments").GetComponentsInChildren<SpriteRenderer>()
+                .OrderBy(r => r.name).ToArray();
+            Assert.AreEqual(chain && !singleTarget ? 2 : 1, segments.Length);
+            Assert.That(Vector3.Distance(shot.Action.Origin, segments[0].transform.position), Is.LessThan(.001f));
+            Assert.That(Vector3.Distance(hitPosition, segments[0].transform.TransformPoint(Vector3.right * 4)), Is.LessThan(.001f));
+            _combat.AdvanceExistingBullets(0);
+            Assert.IsTrue(effect.gameObject.activeInHierarchy, "战斗暂停时保留闪电");
+            _combat.AdvanceExistingBullets(1);
+            Assert.IsFalse(effect.gameObject.activeInHierarchy, "表现播放结束后回收");
+            Assert.AreEqual(chain && !singleTarget ? 2 : 1, damage.Count, "表现不得再次造成伤害");
+        }
+
         [Test]
-        public void DisabledViewAndAttackHookCancellationDoNotCountAsLaunches()
+        public void RejectedCastDoesNotCountButAcceptedCastCountsBeforeAttackHookCancellation()
         {
             Prepare(); var robot = AddRobot();
             _views[robot.InstanceId].SetActive(false);
@@ -115,10 +151,10 @@ namespace GameLogic.Tests
                 behavior: new Hooks { Attack = () => _f.Context.Battle.Timelines.Cancel(robot.OwnerRef) });
             Assert.IsTrue(Contact(robot));
             Assert.AreEqual(0, _combat.LiveBulletCount);
-            Assert.AreEqual(0, Counter(robot).AttackCount);
+            Assert.AreEqual(1, Counter(robot).AttackCount);
             robot.Buffs.Remove(robot.Buffs.Items.Single(b => b.Model.Id == 404));
             Assert.AreEqual(3605, Shoot(robot).Launcher.Model.Id);
-            Assert.AreEqual(1, Counter(robot).AttackCount);
+            Assert.AreEqual(2, Counter(robot).AttackCount);
         }
 
         [Test]
@@ -215,8 +251,8 @@ namespace GameLogic.Tests
         { _combat.SyncRobots(); return _combat.TryAttackFromContact(_f.Context.BattleId, robot.Side, robot.InstanceId); }
         private BulletState[] States() => _f.Root.GetComponentsInChildren<RobotBulletView>()
             .Where(v => v.State != null).Select(v => v.State).ToArray();
-        private static ChainCycleBuffBehavior Counter(RobotEntity robot) =>
-            (ChainCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2602).Behavior;
+        private static AttackCycleBuffBehavior Counter(RobotEntity robot) =>
+            (AttackCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2602).Behavior;
         private UniTask<GameObject> Load(string name, Transform parent, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();

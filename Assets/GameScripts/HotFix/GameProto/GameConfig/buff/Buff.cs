@@ -22,6 +22,9 @@ public sealed partial class Buff : Luban.BeanBase
         Priority = _buf.ReadInt();
         TickInterval = _buf.ReadFloat();
         TriggerSkillId = _buf.ReadInt();
+        CountSkillId = _buf.ReadInt();
+        CycleAction = _buf.ReadString();
+        EffectPrefab = _buf.ReadString();
     }
 
     public static Buff DeserializeBuff(ByteBuf _buf)
@@ -53,6 +56,18 @@ public sealed partial class Buff : Luban.BeanBase
     /// 被动满足触发条件后释放的技能ID，0表示没有
     /// </summary>
     public readonly int TriggerSkillId;
+    /// <summary>
+    /// 累计攻击次数的技能ID，非周期Buff填0
+    /// </summary>
+    public readonly int CountSkillId;
+    /// <summary>
+    /// 达标动作：replace_bullet替换本次弹丸；cast_skill额外释放子技能
+    /// </summary>
+    public readonly string CycleAction;
+    /// <summary>
+    /// Buff持续表现资源名，非表现Buff留空
+    /// </summary>
+    public readonly string EffectPrefab;
    
     public const int __ID__ = 9300270;
     public override int GetTypeId() => __ID__;
@@ -70,6 +85,9 @@ public sealed partial class Buff : Luban.BeanBase
         + "priority:" + Priority + ","
         + "tickInterval:" + TickInterval + ","
         + "triggerSkillId:" + TriggerSkillId + ","
+        + "countSkillId:" + CountSkillId + ","
+        + "cycleAction:" + CycleAction + ","
+        + "effectPrefab:" + EffectPrefab + ","
         + "}";
     }
 }

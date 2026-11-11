@@ -27,6 +27,7 @@ public sealed partial class Robot : Luban.BeanBase
         MinTriggerInterval = _buf.ReadFloat();
         AttackDamage = _buf.ReadInt();
         DamagePerLevel = _buf.ReadInt();
+        RobotPortrait = _buf.ReadString();
     }
 
     public static Robot DeserializeRobot(ByteBuf _buf)
@@ -75,6 +76,10 @@ public sealed partial class Robot : Luban.BeanBase
     /// 每级增加伤害
     /// </summary>
     public readonly int DamagePerLevel;
+    /// <summary>
+    /// 机器人立绘资源名（独立于底板）
+    /// </summary>
+    public readonly string RobotPortrait;
    
     public const int __ID__ = 1376639430;
     public override int GetTypeId() => __ID__;
@@ -97,6 +102,7 @@ public sealed partial class Robot : Luban.BeanBase
         + "minTriggerInterval:" + MinTriggerInterval + ","
         + "attackDamage:" + AttackDamage + ","
         + "damagePerLevel:" + DamagePerLevel + ","
+        + "robotPortrait:" + RobotPortrait + ","
         + "}";
     }
 }

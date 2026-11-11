@@ -40,9 +40,24 @@ namespace GameLogic
             if (context.Request.SkillId != model.CountSkillId || Pending) return;
             var required = PositiveInteger(context.Parameters, "attackCycleCount");
             var next = Math.Min(required, AttackCount + 1);
-            if (model.CycleAction == AttackCycleAction.ReplaceBullet)
+            if (model.CycleAction == AttackCycleAction.ReplaceBullet || model.CycleAction == AttackCycleAction.EnhanceAttack)
             {
-                if (next >= required) context.BulletId = PositiveInteger(context.Parameters, "cycleBulletId");
+                if (next >= required)
+                {
+                    if (model.CycleAction == AttackCycleAction.ReplaceBullet)
+                        context.BulletId = PositiveInteger(context.Parameters, "cycleBulletId");
+                    else
+                    {
+                        // 子技能提供弹道与命中效果，仍是本次普攻的一枚弹，不再排队额外施法。
+                        if (!_battle.TryResolveOwner(container.Owner, out var owner) ||
+                            !owner.Skills.TryGet(model.TriggerSkillId, out var child) ||
+                            !_battle.Catalog.TryGetLevel(child.Model.Id, child.Level, out var level))
+                        { context.Cancel(); return; }
+                        context.BulletId = child.Model.BulletId;
+                        context.TimelineKey = child.Model.TimelineKey;
+                        foreach (var effect in level.CaptureHitBuffs(level.Parameters)) context.AddHitBuff(effect);
+                    }
+                }
                 context.DeferUntilAccepted(() =>
                 {
                     if (IsCurrent(container, buff)) AttackCount = next >= required ? 0 : next;

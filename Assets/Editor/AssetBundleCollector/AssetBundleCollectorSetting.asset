@@ -142,6 +142,14 @@ MonoBehaviour:
         FilterRuleName: CollectAll
         AssetTags: 
         UserData: 
+      - CollectPath: Assets/AssetArt/Atlas
+        CollectorGUID: 9d6134158c52933418338d95eebd1c39
+        CollectorType: 0
+        AddressRuleName: AddressByFileName
+        PackRuleName: PackSeparately
+        FilterRuleName: CollectAll
+        AssetTags: 
+        UserData: 
     - GroupName: UIRaw
       GroupDesc: 
       AssetTags: 

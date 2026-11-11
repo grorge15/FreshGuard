@@ -98,7 +98,7 @@ namespace GameLogic
                 { Cancel(); return; }
                 Phase = RobotDragPhase.Dragging;
                 _host.SetPlayerDragging(true);
-                _ui.ShowGhost(config.RobotIcon, level, _position);
+                _ui.ShowGhost(config.RobotIcon, config.RobotPortrait, level, _position);
                 _ui.RefreshView();
             }
             if (Phase == RobotDragPhase.Dragging) UpdatePreview();

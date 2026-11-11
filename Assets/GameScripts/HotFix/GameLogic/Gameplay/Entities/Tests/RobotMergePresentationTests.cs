@@ -50,7 +50,7 @@ namespace GameLogic.Tests
                     Assert.Greater(frame.sortingOrder, icon.sortingOrder);
                     Assert.Less(frame.sortingOrder, portrait.sortingOrder);
                     Assert.AreSame(AssetDatabase.LoadAssetAtPath<Sprite>(
-                        "Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png"), portrait.sprite);
+                        "Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + config.RobotPortrait + ".png"), portrait.sprite);
                     Assert.AreEqual(icon.sprite.pivot, portrait.sprite.pivot);
                     Assert.AreEqual(icon.sprite.rect, portrait.sprite.rect);
                     Assert.AreEqual(icon.sprite.pixelsPerUnit, portrait.sprite.pixelsPerUnit);
@@ -217,12 +217,13 @@ namespace GameLogic.Tests
                         {
                             // 验证已完成加载后的真实刷新路径；本测试不启动游戏资源下载器。
                             icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png");
-                            portrait.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + RobotLevelStyle.PortraitForIcon(config.RobotIcon) + ".png");
+                            portrait.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + config.RobotPortrait + ".png");
                             frame.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/LevelFrames/" + RobotLevelStyle.FrameForIcon(config.RobotIcon) + ".png");
                             typeof(RobotIconPresentation).GetField("_location", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(visual, config.RobotIcon);
+                            typeof(RobotIconPresentation).GetField("_portraitLocation", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(visual, config.RobotPortrait);
                             for (var level = 1; level <= 5; level++)
                             {
-                                visual.Render(config.RobotIcon, level, true);
+                                visual.Render(config.RobotIcon, config.RobotPortrait, level, true);
                                 Assert.IsTrue(icon.enabled);
                                 Assert.IsTrue(portrait.enabled);
                                 Assert.IsNull(icon.transform.Find("m_rect_LevelStars"));
@@ -231,7 +232,7 @@ namespace GameLogic.Tests
                                 Assert.IsTrue(frame.enabled);
                                 Assert.AreEqual(RobotLevelStyle.FrameColorForLevel(level), frame.color);
                             }
-                            visual.Render(config.RobotIcon, 5, false);
+                            visual.Render(config.RobotIcon, config.RobotPortrait, 5, false);
                             Assert.IsFalse(icon.enabled);
                             Assert.IsFalse(portrait.enabled);
                             Assert.IsFalse(frame.enabled, "隐藏时不能留下边框。");

@@ -12,6 +12,7 @@ namespace GameLogic
         private readonly RectTransform[] _reelWindows = new RectTransform[ShopRules.OfferBatchCount];
         private readonly RectTransform[] _reelStrips = new RectTransform[ShopRules.OfferBatchCount];
         private readonly Image[][] _reelCells = new Image[ShopRules.OfferBatchCount][];
+        private readonly RobotIconPresentation[] _reelTargets = new RobotIconPresentation[ShopRules.OfferBatchCount];
         private readonly bool[] _reelStopped = new bool[ShopRules.OfferBatchCount];
         private Image[] _reelPalette;
         private RectTransform _leverPivot;
@@ -94,15 +95,12 @@ namespace GameLogic
             for (var i = 0; i < _reelWindows.Length; i++)
             {
                 var offer = slots[i].Offer;
-                var icon = ConfigSystem.Instance.Tables.TbRobot.Get(offer.RobotId).RobotIcon;
-                Image source = null;
-                foreach (var entry in _reelPalette)
-                    if (entry.name == icon) { source = entry; break; }
+                var config = ConfigSystem.Instance.Tables.TbRobot.Get(offer.RobotId);
                 var cells = _reelCells[i];
                 var target = cells[cells.Length - 1];
-                CopyRobotVisual(source, target);
-                target.color = RobotLevelStyle.ColorForLevel(offer.Level);
-                target.transform.Find("m_img_LevelFrame").GetComponent<Image>().color = RobotLevelStyle.FrameColorForLevel(offer.Level);
+                _reelTargets[i]?.Dispose();
+                _reelTargets[i] = new RobotIconPresentation(target);
+                _reelTargets[i].Render(config.RobotIcon, config.RobotPortrait, offer.Level, true);
             }
         }
 
@@ -177,6 +175,11 @@ namespace GameLogic
 
         internal void CancelSlotRefresh()
         {
+            for (var i = 0; i < _reelTargets.Length; i++)
+            {
+                _reelTargets[i]?.Dispose();
+                _reelTargets[i] = null;
+            }
             _spinSound?.Stop();
             _spinSound = null;
             IsRefreshing = false;

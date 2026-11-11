@@ -16,13 +16,21 @@ namespace GameLogic
     {
         private readonly SkillLevelModel _level;
         private readonly List<Action> _acceptanceCommits = new List<Action>();
+        private readonly List<CombatBuffApplication> _additionalHitBuffs = new List<CombatBuffApplication>();
         public SkillCastRequest Request { get; }
         public int Level { get; }
         public string TimelineKey { get; set; }
         public int BulletId { get; set; }
-        public long? CycleBuffInstanceId { get; set; }
         public Dictionary<string, float> Parameters { get; } = new Dictionary<string, float>();
-        public IReadOnlyList<CombatBuffApplication> HitBuffs => _level.CaptureHitBuffs(Parameters);
+        public IReadOnlyList<CombatBuffApplication> HitBuffs
+        {
+            get
+            {
+                var result = new List<CombatBuffApplication>(_level.CaptureHitBuffs(Parameters));
+                result.AddRange(_additionalHitBuffs);
+                return result.AsReadOnly();
+            }
+        }
         public bool IsCancelled { get; private set; }
         internal SkillCastContext(SkillCastRequest request, SkillObj skill, SkillLevelModel level)
         {
@@ -31,6 +39,8 @@ namespace GameLogic
             foreach (var pair in level.Parameters) Parameters.Add(pair.Key, pair.Value);
         }
         public void Cancel() => IsCancelled = true;
+        public void AddHitBuff(CombatBuffApplication effect) =>
+            _additionalHitBuffs.Add(effect ?? throw new ArgumentNullException(nameof(effect)));
         // 仅暂存本次同步施法的状态变化；不是Buff生命周期回调。
         public void DeferUntilAccepted(Action commit) => _acceptanceCommits.Add(commit ?? throw new ArgumentNullException(nameof(commit)));
         internal void CommitAcceptance()
@@ -49,7 +59,6 @@ namespace GameLogic
         public SkillTarget Target { get; }
         public string TimelineKey { get; }
         public int BulletId { get; }
-        public long? CycleBuffInstanceId { get; }
         public IReadOnlyDictionary<string, float> Parameters { get; }
         public IReadOnlyList<CombatBuffApplication> HitBuffs { get; }
         internal SkillCastSnapshot(SkillCastContext context)
@@ -57,7 +66,7 @@ namespace GameLogic
             Owner = context.Request.Owner; SkillId = context.Request.SkillId; Target = context.Request.Target;
             Level = context.Level; Trigger = context.Request.Trigger; TimelineKey = context.TimelineKey;
             Parameters = BuffObj.Copy(context.Parameters);
-            BulletId = context.BulletId; CycleBuffInstanceId = context.CycleBuffInstanceId;
+            BulletId = context.BulletId;
             HitBuffs = context.HitBuffs;
         }
         public float Get(string key, float fallback = 0f) => Parameters.TryGetValue(key, out var value) ? value : fallback;

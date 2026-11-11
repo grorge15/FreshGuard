@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 6422693477710553564}
   - component: {fileID: 8968436186337838547}
   - component: {fileID: 285889188749481488}
+  - component: {fileID: 3683394345678378360}
   m_Layer: 0
   m_Name: Visual
   m_TagString: Untagged
@@ -93,7 +94,7 @@ Animator:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4108874993155053981}
-  m_Enabled: 1
+  m_Enabled: 0
   m_Avatar: {fileID: 0}
   m_Controller: {fileID: 9100000, guid: 739a1c9f769b21142a063fa31528ff7a, type: 2}
   m_CullingMode: 0
@@ -106,6 +107,20 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &3683394345678378360
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4108874993155053981}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6e982b7a091cbc340b50f78977278431, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _clip: {fileID: 7400000, guid: 95192aa302924b0479e6bffe74ab8c89, type: 2}
+  _loop: 0
 --- !u!1 &5155981471966644102
 GameObject:
   m_ObjectHideFlags: 0
@@ -115,7 +130,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6942712688559744281}
-  - component: {fileID: 5862033816305295464}
+  - component: {fileID: 6632883736889036004}
   m_Layer: 0
   m_Name: ContainerBullet
   m_TagString: Untagged
@@ -139,7 +154,7 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5862033816305295464
+--- !u!114 &6632883736889036004
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -148,6 +163,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 5155981471966644102}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a1bb2fc37c0d0cc45ac080d37c696e90, type: 3}
+  m_Script: {fileID: 11500000, guid: b174be107ba048c468cac99220961f56, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _animation: {fileID: 3683394345678378360}
+  _close: {fileID: 7400000, guid: 95192aa302924b0479e6bffe74ab8c89, type: 2}
+  _open: {fileID: 7400000, guid: 56044eeec1f4d3a438ace035f0db2d23, type: 2}

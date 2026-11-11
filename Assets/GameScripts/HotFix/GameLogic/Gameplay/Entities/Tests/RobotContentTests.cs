@@ -21,6 +21,21 @@ namespace GameLogic.Tests
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
         }
 
+        [Test]
+        public void InductionPortraitIsIndependentFromSharedFrostBackground()
+        {
+            var induction = _tables.TbRobot.Get(701);
+            var frost = _tables.TbRobot.Get(601);
+            Assert.AreEqual(frost.RobotIcon, induction.RobotIcon, "同形状的机器人允许复用底板。");
+            Assert.AreEqual("RobotInductionCookerPortrait", induction.RobotPortrait);
+            Assert.AreNotEqual(frost.RobotPortrait, induction.RobotPortrait);
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Assets/AssetRaw/Actor/Sprites/Robots/Portraits/RobotInductionCookerPortrait.png");
+            Assert.IsNotNull(sprite, "电磁炉立绘必须能作为 Sprite 加载。");
+            Assert.AreEqual("27547a9f9b2c4e44fa5fda3b99c72628", AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(sprite)),
+                "重命名应保留用户提供立绘的 GUID。");
+        }
+
         [TestCase(501, "CannonRobotEntity")]
         [TestCase(502, "ScatterRobotEntity")]
         [TestCase(503, "PiercingRobotEntity")]
@@ -103,7 +118,7 @@ namespace GameLogic.Tests
             Assert.IsNotNull(settings);
             var assets = settings.BeginCollect("DefaultPackage", true, false).CollectAssets;
             Assert.AreEqual(12, _tables.TbRobot.DataList.Count, "源表保留尚未启用的机器人。");
-            Assert.AreEqual(10, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
+            Assert.AreEqual(11, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
             Assert.AreEqual(28, _tables.TbRobotShape.DataList.Count);
             foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603, 701, 702, 703, 704 })
             {
@@ -111,15 +126,15 @@ namespace GameLogic.Tests
                 Assert.AreEqual(config.RobotPrefab, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab").Address);
                 Assert.AreEqual(config.RobotIcon, assets.Single(asset => asset.AssetInfo.AssetPath ==
-                    "Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png").Address);
-                var portrait = RobotLevelStyle.PortraitForIcon(config.RobotIcon);
+                    "Assets/AssetRaw/Actor/Sprites/Robots/RobotsIcon/" + config.RobotIcon + ".png").Address);
+                var portrait = config.RobotPortrait;
                 Assert.AreEqual(portrait, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Sprites/Robots/Portraits/" + portrait + ".png").Address);
                 var frame = RobotLevelStyle.FrameForIcon(config.RobotIcon);
                 Assert.AreEqual(frame, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Sprites/Robots/LevelFrames/" + frame + ".png").Address);
             }
-            foreach (var name in new[] { "JuiceBullet", "JuiceBulletLandingEffect" })
+            foreach (var name in new[] { "JuiceBullet", "JuiceBulletLandingEffect", "RobotBullet", "ContainerBullet" })
                 Assert.AreEqual(name, assets.Single(asset => asset.AssetInfo.AssetPath ==
                     "Assets/AssetRaw/Actor/Prefabs/bullets/" + name + ".prefab").Address);
         }

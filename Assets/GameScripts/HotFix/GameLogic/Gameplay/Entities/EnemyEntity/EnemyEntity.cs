@@ -19,6 +19,7 @@ namespace GameLogic
         public Enemy Configuration { get; private set; }
         public int Cycle { get; private set; }
         public bool IsAlive => !IsRemoved && CurrentHp > 0;
+        public bool IsIsolated { get; private set; }
         public override bool CanCast => IsAlive;
 
         // MemoryPool.Acquire<T>() requires a public parameterless constructor.
@@ -34,6 +35,7 @@ namespace GameLogic
             BaseSpeed = baseSpeed;
             MoveSpeed = baseSpeed;
             RouteProgress = 0f;
+            IsIsolated = false;
         }
 
         // 行为负责属性变化规则；实体只校验并保存当前值。
@@ -42,6 +44,8 @@ namespace GameLogic
             EntityValidation.RequireFiniteNonNegative(speed, nameof(speed));
             MoveSpeed = speed;
         }
+
+        internal void SetIsolated(bool isolated) => IsIsolated = isolated;
 
         internal void InitializeFromConfig(int instanceId, Enemy config, BattleSide side, int cycle)
         {
@@ -72,6 +76,7 @@ namespace GameLogic
             RouteProgress = 0f;
             Configuration = null;
             Cycle = 0;
+            IsIsolated = false;
         }
     }
 }

@@ -39,7 +39,7 @@ namespace GameLogic.Tests
             var context = Context(first, new ChainBulletSnapshot(5, 1, 0.7f), p => points = p);
             new BulletBehaviorRegistry().Create("chain").OnHit(context);
             CollectionAssert.AreEqual(new[] { first, lowerId, third }, seen);
-            CollectionAssert.AreEqual(new[] { Vector3.zero, Vector3.right, Vector3.right * 2 }, points);
+            CollectionAssert.AreEqual(new[] { Vector3.left, Vector3.zero, Vector3.right, Vector3.right * 2 }, points);
             Assert.IsFalse(seen.Contains(upperId));
         }
 
@@ -79,7 +79,7 @@ namespace GameLogic.Tests
             };
             behavior.OnHit(context); behavior.OnHit(context);
             CollectionAssert.AreEqual(new[] { first, third }, seen);
-            CollectionAssert.AreEqual(new[] { Vector3.zero, Vector3.right, Vector3.right * 2 }, points);
+            CollectionAssert.AreEqual(new[] { Vector3.left, Vector3.zero, Vector3.right, Vector3.right * 2 }, points);
             _registry.TryGet(third, out var last); Assert.AreEqual(990, ((EnemyEntity)last).CurrentHp);
             _registry.TryGet(replacement, out var added); Assert.AreEqual(1000, ((EnemyEntity)added).CurrentHp);
         }
@@ -93,6 +93,20 @@ namespace GameLogic.Tests
             _registry.TryGet(second, out var b); Assert.AreEqual(1000, ((EnemyEntity)b).CurrentHp);
             new BulletBehaviorRegistry().Create("direct").OnHit(Context(first));
             Assert.AreEqual(960, ((EnemyEntity)a).CurrentHp);
+        }
+
+        [Test]
+        public void DirectHitKeepsPositionBeforeDeathAndPresentsOnlyOnce()
+        {
+            var first = Enemy(Vector3.right);
+            IReadOnlyList<Vector3> points = null; var effects = 0;
+            var context = Context(first, present: p => { points = p; effects++; });
+            _battle.Combat.TargetResolved += c => _registry.Remove(first, EntityRemovalReason.Manual, out _);
+            var behavior = new DirectBulletBehavior();
+            behavior.OnHit(context);
+            behavior.OnHit(context);
+            Assert.AreEqual(1, effects);
+            CollectionAssert.AreEqual(new[] { Vector3.left, Vector3.right }, points);
         }
 
         [Test]

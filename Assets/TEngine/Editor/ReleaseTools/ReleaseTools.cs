@@ -185,6 +185,8 @@ namespace TEngine
                 scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
                 scriptableBuildParameters.BuiltinShadersBundleName = GetBuiltinShaderBundleName("DefaultPackage");
                 scriptableBuildParameters.ReplaceAssetPathWithAddress = Settings.UpdateSetting.GetReplaceAssetPathWithAddress();
+                // Sprite 的图集依赖由 SBP 生成，需补入单资源加载所用的 YooAsset 清单。
+                scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
             }
 
             string outputRoot = config.OutputRoot;
@@ -241,6 +243,7 @@ namespace TEngine
                 scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
                 scriptableBuildParameters.BuiltinShadersBundleName = GetBuiltinShaderBundleName("DefaultPackage");
                 scriptableBuildParameters.ReplaceAssetPathWithAddress = Settings.UpdateSetting.GetReplaceAssetPathWithAddress();
+                scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
             }
 
             buildParameters.BuildOutputRoot = outputRoot;

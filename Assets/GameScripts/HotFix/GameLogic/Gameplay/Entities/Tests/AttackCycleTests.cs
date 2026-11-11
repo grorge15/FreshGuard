@@ -148,7 +148,7 @@ namespace GameLogic.Tests
                 var buff = tables.TbBuff.Get(pair.Item1);
                 Assert.AreEqual("attack_cycle", buff.BehaviorKey);
                 Assert.AreEqual(pair.Item2, buff.CountSkillId);
-                Assert.AreEqual(pair.Item1 == 2602 ? "replace_bullet" : "cast_skill", buff.CycleAction);
+                Assert.AreEqual(pair.Item1 == 2602 ? "replace_bullet" : pair.Item1 == 2604 ? "enhance_attack" : "cast_skill", buff.CycleAction);
                 for (var level = 1; level <= 5; level++)
                     Assert.AreEqual(pair.Item3, tables.TbSkillLevel.Get(pair.Item2 * 100 + level).AttackCycleCount);
             }

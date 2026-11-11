@@ -81,7 +81,7 @@ namespace GameLogic
                 _baseBackgroundColor = Color.clear;
                 _background.color = _baseBackgroundColor;
             }
-            _visual.Render(config?.RobotIcon, level, config != null && !hidden,
+            _visual.Render(config?.RobotIcon, config?.RobotPortrait, level, config != null && !hidden,
                 !content.IsPurchased && content.Offer != null && balance < content.Offer.Price);
             _quality.enabled = false;
             _price.enabled = config != null;

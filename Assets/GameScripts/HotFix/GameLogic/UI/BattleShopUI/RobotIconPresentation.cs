@@ -15,6 +15,7 @@ namespace GameLogic
         private Image _unaffordableOverlay;
         private CancellationTokenSource _loading;
         private string _location;
+        private string _portraitLocation;
         private bool _visible;
         private bool _unaffordable;
 
@@ -28,7 +29,7 @@ namespace GameLogic
             _frame.raycastTarget = false;
         }
 
-        public void Render(string location, int level, bool visible, bool unaffordable = false)
+        public void Render(string location, string portraitLocation, int level, bool visible, bool unaffordable = false)
         {
             _visible = visible && !string.IsNullOrEmpty(location);
             _unaffordable = unaffordable;
@@ -36,10 +37,12 @@ namespace GameLogic
             _background.color = RobotLevelStyle.ColorForLevel(level);
             _portrait.color = Color.white;
             _frame.color = RobotLevelStyle.FrameColorForLevel(visualLevel);
-            if (_location != location)
+            // 不同机器人可以共用底板；立绘地址变化也必须重新加载。
+            if (_location != location || _portraitLocation != portraitLocation)
             {
                 CancelLoad();
                 _location = location;
+                _portraitLocation = portraitLocation;
                 _background.sprite = null;
                 _portrait.sprite = null;
                 _frame.sprite = null;
@@ -48,8 +51,8 @@ namespace GameLogic
                     _loading = CancellationTokenSource.CreateLinkedTokenSource(
                         _background.gameObject.GetCancellationTokenOnDestroy());
                     _background.SetSprite(location, callback: _ => RefreshVisibility(), cancellationToken: _loading.Token);
-                    _portrait.SetSprite(RobotLevelStyle.PortraitForIcon(location), callback: _ => RefreshVisibility(),
-                        cancellationToken: _loading.Token);
+                    if (!string.IsNullOrEmpty(portraitLocation))
+                        _portrait.SetSprite(portraitLocation, callback: _ => RefreshVisibility(), cancellationToken: _loading.Token);
                     _frame.SetSprite(RobotLevelStyle.FrameForIcon(location), callback: _ => RefreshVisibility(),
                         cancellationToken: _loading.Token);
                 }
