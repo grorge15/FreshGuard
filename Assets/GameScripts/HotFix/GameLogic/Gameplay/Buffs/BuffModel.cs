@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace GameLogic
 {
-    public enum AttackCycleAction { None, ReplaceBullet, CastSkill, EnhanceAttack }
+    public enum AttackCycleAction { None, ReplaceBullet, CastSkill, EnhanceAttack, ReplaceSkill }
 
     public sealed class BuffModel
     {

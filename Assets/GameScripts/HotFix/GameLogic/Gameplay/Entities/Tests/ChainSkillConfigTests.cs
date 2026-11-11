@@ -18,9 +18,9 @@ namespace GameLogic.Tests
             var catalog = SkillConfigAdapter.FromTables(tables);
             Assert.AreEqual(16, tables.TbSkill.DataList.Count);
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count);
-            Assert.AreEqual(9, tables.TbBullet.DataList.Count);
+            Assert.AreEqual(8, tables.TbBullet.DataList.Count);
             Assert.AreEqual(7, tables.TbBuff.DataList.Count);
-            CollectionAssert.AreEquivalent(new[] { 1500, 1501, 1502, 1503, 1504, 1505, 1506, 1507, 1602, 1603, 1604, 1605, 1607 },
+            CollectionAssert.AreEquivalent(new[] { 1500, 1501, 1502, 1503, 1504, 1505, 1506, 1507, 1600, 1601, 1602, 1603, 1604, 1605, 1606, 1607 },
                 tables.TbSkill.DataList.Where(row => row.Enabled).Select(row => row.Id));
 
             foreach (var row in tables.TbSkill.DataList)
@@ -28,15 +28,15 @@ namespace GameLogic.Tests
             foreach (var row in tables.TbSkillLevel.DataList)
                 Assert.AreEqual(tables.TbSkill.Get(row.SkillId).Enabled,
                     catalog.TryGetLevel(row.SkillId, row.Level, out _), "等级记录 " + row.Id);
-            Assert.AreEqual(13, tables.TbSkill.DataList.Count(row => catalog.TryGet(row.Id, out _)));
-            Assert.AreEqual(65, tables.TbSkillLevel.DataList.Count(row => catalog.TryGetLevel(row.SkillId, row.Level, out _)));
+            Assert.AreEqual(16, tables.TbSkill.DataList.Count(row => catalog.TryGet(row.Id, out _)));
+            Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count(row => catalog.TryGetLevel(row.SkillId, row.Level, out _)));
             CollectionAssert.AreEquivalent(new[] { 3500, 3501, 3502, 3600, 3602, 3603, 3604, 3605 },
                 tables.TbBullet.DataList.Where(row => catalog.TryGetBullet(row.Id, out _)).Select(row => row.Id));
-            CollectionAssert.AreEquivalent(new[] { 2505, 2507, 2600, 2601, 2602, 2604 },
+            CollectionAssert.AreEquivalent(new[] { 2505, 2507, 2600, 2601, 2602, 2603, 2604 },
                 tables.TbBuff.DataList.Where(row => catalog.TryGetBuff(row.Id, out _)).Select(row => row.Id));
             Assert.AreEqual(BulletHitMode.AreaAtLanding, tables.TbBullet.Get(3604).HitMode);
             Assert.IsTrue(catalog.TryGetBullet(3604, out _), "榨汁机落地区域弹已启用。");
-            Assert.IsFalse(catalog.TryGet(1600, out _), "旧闪电链技能源数据保留，但不参与1605释放。");
+            Assert.IsTrue(catalog.TryGet(1600, out _), "第五次攻击使用独立闪电链技能。");
         }
 
         [Test]
@@ -54,7 +54,10 @@ namespace GameLogic.Tests
                 Assert.IsTrue(catalog.TryGetLevel(1605, level, out var values));
                 Assert.AreEqual(10 + level * 10, values.Parameters["damage"]);
                 Assert.AreEqual(5f, values.Parameters["attackCycleCount"]);
-                Assert.AreEqual(3600f, values.Parameters["cycleBulletId"]);
+                Assert.AreEqual(0f, values.Parameters["cycleBulletId"]);
+                Assert.IsTrue(catalog.TryGetLevel(1600, level, out values));
+                Assert.AreEqual(10 + level * 10, values.Parameters["damage"]);
+                Assert.AreEqual(.25f, values.Parameters["castWindup"]);
                 Assert.AreEqual(5f, values.Parameters["chainTargetCount"]);
                 Assert.AreEqual(0.9f, values.Parameters["chainRange"]);
                 Assert.AreEqual(0.7f, values.Parameters["chainDamageRatio"]);
@@ -75,9 +78,9 @@ namespace GameLogic.Tests
             Assert.IsTrue(catalog.TryGetBuff(2602, out var passive));
             Assert.AreEqual("attack_cycle", passive.BehaviorKey);
             Assert.AreEqual(1605, passive.CountSkillId);
-            Assert.AreEqual(AttackCycleAction.ReplaceBullet, passive.CycleAction);
+            Assert.AreEqual(AttackCycleAction.ReplaceSkill, passive.CycleAction);
             Assert.AreEqual(1, passive.MaxStacks);
-            Assert.AreEqual(0, tables.TbBuff.Get(2602).TriggerSkillId);
+            Assert.AreEqual(1600, tables.TbBuff.Get(2602).TriggerSkillId);
         }
 
         [Test]
@@ -114,6 +117,8 @@ namespace GameLogic.Tests
 
         [TestCase("AttackCycleCount", 0)]
         [TestCase("ChainTargetCount", 0)]
+        [TestCase("CastWindup", 0f)]
+        [TestCase("CastWindup", float.NaN)]
         [TestCase("ChainRange", 0f)]
         [TestCase("ChainRange", float.NaN)]
         [TestCase("ChainDamageRatio", 0f)]
@@ -124,16 +129,16 @@ namespace GameLogic.Tests
         public void InvalidEnabledCycleConfigurationFailsBeforeBattle(string field, object value)
         {
             var tables = LoadTables();
-            SetField(tables.TbSkillLevel.Get(160501), field, value);
+            SetField(tables.TbSkillLevel.Get(field == "AttackCycleCount" || field == "CycleBulletId" ? 160501 : 160001), field, value);
             Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
         }
 
         [Test]
-        public void ReplacementProjectileMustShareThePreparedNormalPrefab()
+        public void IndependentSkillCanPrepareItsOwnProjectilePrefab()
         {
             var tables = LoadTables();
-            SetField(tables.TbBullet.Get(3600), "Prefab", "UnexpectedPrefab");
-            Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
+            SetField(tables.TbBullet.Get(3600), "Prefab", "SeparateChainPrefab");
+            Assert.DoesNotThrow(() => SkillConfigAdapter.FromTables(tables));
         }
 
         [TestCase(3600)]
