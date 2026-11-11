@@ -395,6 +395,7 @@ namespace GameLogic
                         instance.SetActive(true);
                         var view = instance.GetComponent<EnemyView>();
                         view.Bind(context.Registry, instanceId);
+                        view.FaceMovement(points[1] - points[0]);
                         view.SetMoving(true);
                         _active.Add(instanceId, new MoveEntry { Group = group, View = view,
                             Points = points, CumulativeLengths = lengths });
@@ -437,6 +438,7 @@ namespace GameLogic
             var u = segmentLength <= 0f ? 0f : (progress - lengths[next - 1]) / segmentLength;
             entry.NextPoint = next;
             entry.View.transform.position = Vector3.Lerp(points[next - 1], points[next], u);
+            entry.View.FaceMovement(points[next] - points[next - 1]);
             enemy.TrySetRouteProgress(progress);
             SyncIsolationEffects();
             return true;
@@ -470,6 +472,7 @@ namespace GameLogic
                 if (enemy.IsIsolated) continue;
                 var distance = enemy.MoveSpeed * deltaTime;
                 var position = entry.View.transform.position;
+                var previousPosition = position;
                 var points = entry.Points;
                 while (entry.NextPoint < points.Length)
                 {
@@ -484,6 +487,8 @@ namespace GameLogic
                     distance = Mathf.Max(0f, distance - length);
                 }
                 entry.View.transform.position = position;
+                entry.View.FaceMovement(entry.NextPoint < points.Length
+                    ? points[entry.NextPoint] - position : position - previousPosition);
                 var lengths = entry.CumulativeLengths;
                 var progress = entry.NextPoint == points.Length ? lengths[lengths.Length - 1] :
                     lengths[entry.NextPoint] - Vector3.Distance(position, points[entry.NextPoint]);

@@ -11,7 +11,6 @@ namespace GameLogic
     [DisallowMultipleComponent]
     public sealed class RobotDragController : MonoBehaviour
     {
-        public const float LONG_PRESS_SECONDS = 0.2f;
         private BattleShopUI _ui;
         private BattleShopSceneController _host;
         private BattleShopContext _context;
@@ -20,7 +19,7 @@ namespace GameLogic
         private BoardCoordinate _grabbedCell;
         private int _pointerId;
         private Vector2 _position;
-        private float _pressedAt;
+        private bool _dragRequested;
         private int _generation;
         private CancellationTokenSource _gestureCancellation;
         public RobotDragPhase Phase { get; private set; }
@@ -48,7 +47,7 @@ namespace GameLogic
             _grabbedCell = grabbedCell;
             _pointerId = pointerId;
             _position = position;
-            _pressedAt = now;
+            _dragRequested = false;
             _gestureCancellation = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
             Phase = RobotDragPhase.Pressed;
             var generation = _generation;
@@ -70,8 +69,9 @@ namespace GameLogic
         public void Move(int pointerId, Vector2 position)
         {
             if (pointerId != _pointerId || Phase == RobotDragPhase.Idle || Phase == RobotDragPhase.Committing) return;
+            _dragRequested |= position != _position;
             _position = position;
-            if (Phase == RobotDragPhase.Dragging) UpdatePreview();
+            Advance(Time.unscaledTime);
         }
 
         public void Advance(float now)
@@ -79,7 +79,7 @@ namespace GameLogic
             if (Phase == RobotDragPhase.Idle) return;
             if (_host == null || !_host.CanInteractWithRobots || _context == null || _host.Context != _context || _context.IsEnded)
             { Cancel(); return; }
-            if (Phase == RobotDragPhase.Pressed && now - _pressedAt >= LONG_PRESS_SECONDS)
+            if (Phase == RobotDragPhase.Pressed && _dragRequested)
             {
                 var generation = _generation;
                 var context = _context;
@@ -123,8 +123,9 @@ namespace GameLogic
         {
             if (Phase == RobotDragPhase.Idle || Phase == RobotDragPhase.Committing || pointerId != _pointerId) return;
             if (_host == null || !_host.CanInteractWithRobots) { Cancel(); return; }
+            _dragRequested |= position != _position;
             _position = position;
-            // PointerUp可能先于本帧Update，按实际按住时长补做拿起判定。
+            // 快速拖动可能先收到松手，以最终位置补做拿起判定；原地轻点保持取消。
             if (Phase == RobotDragPhase.Pressed) Advance(Time.unscaledTime);
             if (Phase == RobotDragPhase.Idle || Phase == RobotDragPhase.Committing) return;
             if (Phase == RobotDragPhase.Pressed) { Cancel(); return; }
@@ -186,6 +187,7 @@ namespace GameLogic
             var context = _context;
             _session = null;
             _context = null;
+            _dragRequested = false;
             Phase = RobotDragPhase.Committing;
             cancellation?.Cancel();
             cancellation?.Dispose();

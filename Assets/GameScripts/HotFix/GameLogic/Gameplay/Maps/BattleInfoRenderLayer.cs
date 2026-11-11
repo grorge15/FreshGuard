@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace GameLogic
 {
@@ -15,6 +16,7 @@ namespace GameLogic
         private readonly float _depth;
         private readonly Dictionary<GameObject, int> _originalLayers = new Dictionary<GameObject, int>();
         private readonly Canvas _canvas;
+        private readonly GraphicRaycaster _raycaster;
         private readonly Camera _camera;
         private bool _disposed;
 
@@ -33,7 +35,8 @@ namespace GameLogic
             _camera = new GameObject("BattleInfoCamera", typeof(Camera)).GetComponent<Camera>();
             _camera.enabled = false;
             _camera.transform.SetParent(cameraParent, false);
-            _canvas = new GameObject("BattleInfoRenderCanvas", typeof(RectTransform), typeof(Canvas)).GetComponent<Canvas>();
+            _canvas = new GameObject("BattleInfoRenderCanvas", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster)).GetComponent<Canvas>();
+            _raycaster = _canvas.GetComponent<GraphicRaycaster>();
             _canvas.gameObject.layer = layer;
             _canvas.renderMode = RenderMode.WorldSpace;
             _canvas.worldCamera = _camera;
@@ -64,6 +67,7 @@ namespace GameLogic
             _camera.depth = _depth;
             var enabled = visible && _originalParent.gameObject.activeInHierarchy;
             _canvas.enabled = enabled;
+            _raycaster.enabled = enabled;
             _camera.enabled = enabled;
         }
 
@@ -73,6 +77,7 @@ namespace GameLogic
             _disposed = true;
             _camera.enabled = false;
             _canvas.enabled = false;
+            _raycaster.enabled = false;
             foreach (var pair in _originalLayers)
                 if (pair.Key != null) pair.Key.layer = pair.Value;
             if (_info != null && _originalParent != null)

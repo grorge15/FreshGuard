@@ -182,6 +182,7 @@ namespace TEngine
                 pipeline = new ScriptableBuildPipeline();
                 buildParameters = scriptableBuildParameters;
                 scriptableBuildParameters.CompressOption = config.CompressOption;
+                scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
                 scriptableBuildParameters.BuiltinShadersBundleName = GetBuiltinShaderBundleName("DefaultPackage");
                 scriptableBuildParameters.ReplaceAssetPathWithAddress = Settings.UpdateSetting.GetReplaceAssetPathWithAddress();
                 // Sprite 的图集依赖由 SBP 生成，需补入单资源加载所用的 YooAsset 清单。
@@ -239,6 +240,7 @@ namespace TEngine
                 pipeline = new ScriptableBuildPipeline();
                 buildParameters = scriptableBuildParameters;
                 scriptableBuildParameters.CompressOption = ECompressOption.LZ4;
+                scriptableBuildParameters.TrackSpriteAtlasDependencies = true;
                 scriptableBuildParameters.BuiltinShadersBundleName = GetBuiltinShaderBundleName("DefaultPackage");
                 scriptableBuildParameters.ReplaceAssetPathWithAddress = Settings.UpdateSetting.GetReplaceAssetPathWithAddress();
                 scriptableBuildParameters.TrackSpriteAtlasDependencies = true;

@@ -25,7 +25,8 @@ namespace TEngine
         public bool ClearBuildCache;
         public bool VerifyBuildingResult = true;
         public EBuildinFileCopyOption BuildinFileCopyOption = EBuildinFileCopyOption.ClearAndCopyAll;
-        public EFileNameStyle FileNameStyle = EFileNameStyle.BundleName_HashName;
+        // 使用哈希文件名，避免 Android 归档工具写坏包含中文的资源包文件名。
+        public EFileNameStyle FileNameStyle = EFileNameStyle.HashName;
 
         // 热更DLL设置
         public bool BuildHotFixDll = true;

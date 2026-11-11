@@ -267,6 +267,72 @@ namespace GameLogic.Tests
             Assert.Greater(renderer.sortingOrder, highOrder);
         }
 
+        [Test]
+        public void MovementFacingMirrorsArtworkWithoutMovingOrRotatingTheEnemy()
+        {
+            var renderer = CreateFacingView();
+            _root.transform.position = new Vector3(2f, 3f, 0f);
+            var position = _root.transform.position;
+            var footPosition = renderer.transform.localPosition;
+
+            Assert.AreEqual(true, Call("FaceMovement", Vector2.right));
+            Assert.IsTrue(renderer.flipX, "原素材朝左，向右行进时应镜像。");
+            Assert.AreEqual(position, _root.transform.position);
+            Assert.AreEqual(Quaternion.identity, _root.transform.rotation);
+            Assert.AreEqual(footPosition, renderer.transform.localPosition);
+            Assert.AreEqual(true, Call("FaceMovement", Vector2.left));
+            Assert.IsFalse(renderer.flipX);
+        }
+
+        [Test]
+        public void VerticalTravelAndDeathKeepFacingWhileReuseRestoresTheAuthoredPose()
+        {
+            var renderer = CreateFacingView();
+            Call("FaceMovement", Vector2.right);
+            Assert.AreEqual(false, Call("FaceMovement", Vector2.up));
+            Assert.AreEqual(false, Call("FaceMovement", new Vector2(0.03f, 1f)));
+            Assert.IsTrue(renderer.flipX, "纵向路段不应因节点随机偏移而反复翻转。");
+            Call("PlayHitFeedback", 0.12f);
+            Assert.IsTrue(renderer.flipX);
+
+            EntityRemovalSnapshot removal;
+            _registry.ApplyDamage(Property<int>("InstanceId"), int.MaxValue, out removal);
+            Assert.AreEqual(true, Call("PlayRemoval", removal));
+            Assert.AreEqual(false, Call("FaceMovement", Vector2.left));
+            Assert.IsTrue(renderer.flipX, "死亡应保持倒下前的朝向。");
+            Call("OnDeathAnimationComplete");
+            Assert.IsFalse(renderer.flipX, "回收时应恢复预制体朝向。");
+            var nextId = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), BattleSide.Player);
+            Call("Bind", _registry, nextId);
+            Assert.IsFalse(renderer.flipX);
+        }
+
+        [Test]
+        public void MovementFacingDoesNotChangeEnemiesThatHaveNotEnabledIt()
+        {
+            var renderer = CreateFacingView();
+            var serialized = new SerializedObject(_view);
+            serialized.FindProperty("_faceMovement").boolValue = false;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            Assert.AreEqual(false, Call("FaceMovement", Vector2.right));
+            Assert.IsFalse(renderer.flipX);
+        }
+
+        private SpriteRenderer CreateFacingView()
+        {
+            CreateView();
+            var visual = new GameObject("Visual");
+            visual.transform.SetParent(_root.transform, false);
+            var renderer = visual.AddComponent<SpriteRenderer>();
+            var serialized = new SerializedObject(_view);
+            serialized.FindProperty("_faceMovement").boolValue = true;
+            serialized.FindProperty("_spriteFacesRight").boolValue = false;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            var id = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), BattleSide.Player);
+            Call("Bind", _registry, id);
+            return renderer;
+        }
+
         private void CreateView()
         {
             var type = typeof(EnemyEntity).Assembly.GetType("GameLogic.EnemyView");

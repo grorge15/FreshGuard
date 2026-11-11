@@ -355,5 +355,5 @@ MonoBehaviour:
   _chainTemplate: {fileID: 221072016049893758}
   _sparkTemplate: {fileID: 5458432779964837684}
   _chainReferenceLength: 4
-  _chainThickness: 0.22
+  _chainThickness: 0.275
   Lifetime: 0.41666666
