@@ -34,13 +34,16 @@ namespace GameLogic
         public int Level { get; }
         public IReadOnlyDictionary<string, float> Parameters { get; }
         public IReadOnlyList<CombatBuffApplication> HitBuffs { get; }
+        public StaffConfig Staff { get; }
         public SkillLevelModel(int skillId, int level, IReadOnlyDictionary<string, float> parameters,
             IReadOnlyList<CombatBuffApplication> hitBuffs = null,
-            Func<IReadOnlyDictionary<string, float>, IReadOnlyList<CombatBuffApplication>> hitBuffFactory = null)
+            Func<IReadOnlyDictionary<string, float>, IReadOnlyList<CombatBuffApplication>> hitBuffFactory = null,
+            StaffConfig staff = null)
         {
             SkillId = skillId; Level = level; Parameters = BuffObj.Copy(parameters);
             HitBuffs = new List<CombatBuffApplication>(hitBuffs ?? Array.Empty<CombatBuffApplication>()).AsReadOnly();
             _hitBuffFactory = hitBuffFactory;
+            Staff = staff;
         }
         // 配置适配层负责参数绑定；施法钩子完成后才物化为不可变的命中数据。
         internal IReadOnlyList<CombatBuffApplication> CaptureHitBuffs(IReadOnlyDictionary<string, float> parameters)
@@ -82,6 +85,7 @@ namespace GameLogic
         private readonly Dictionary<int, BuffModel> _buffs = new Dictionary<int, BuffModel>();
         private readonly Dictionary<int, BulletModel> _bullets = new Dictionary<int, BulletModel>();
         public IEnumerable<BulletModel> Bullets => _bullets.Values;
+        public IEnumerable<SkillLevelModel> Levels => _levels.Values;
         public void Add(SkillModel model) => _skills.Add(model.Id, model);
         public void Add(SkillLevelModel model) => _levels.Add((model.SkillId, model.Level), model);
         public void Add(BuffModel model) => _buffs.Add(model.Id, model);

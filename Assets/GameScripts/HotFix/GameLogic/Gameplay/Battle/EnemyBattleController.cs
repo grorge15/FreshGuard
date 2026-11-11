@@ -82,6 +82,7 @@ namespace GameLogic
             internal Vector3[] Points;
             internal float[] CumulativeLengths;
             internal int NextPoint = 1;
+            internal BattleRouteGeometry Geometry;
         }
 
         private sealed class DeathEntry
@@ -293,10 +294,13 @@ namespace GameLogic
                     // 抵塔也是时间边界，不能由集合遍历顺序决定双方先败顺序。
                     next = Math.Min(next, _elapsed + NextArrivalDelay());
                     next = Math.Min(next, _elapsed + NextBuffDelay());
+                    next = Math.Min(next, _elapsed + (_staffs?.TimeUntilBoundary ?? float.PositiveInfinity));
                     next = Math.Max(_elapsed, next);
                     var step = (float)Math.Max(0d, next - _elapsed);
                     _elapsed = next;
+                    _staffs?.BeginStep(step);
                     MoveAll(step);
+                    _staffs?.EndStep();
                     AdvanceEnemyBuffs(step);
                     SyncIsolationEffects();
                     if (!IsRunning) return;
@@ -324,7 +328,12 @@ namespace GameLogic
                     remaining += Vector3.Distance(position, entry.Points[i]);
                     position = entry.Points[i];
                 }
-                if (remaining <= 0.00001d) return 0d;
+                if (remaining <= 0.00001d)
+                {
+                    // 真正被障碍卡在终点前时等待Staff边界，不能不断生成零时步。
+                    if (IsStaffBlockingArrival(entry, enemy)) continue;
+                    return 0d;
+                }
                 if (enemy.MoveSpeed > 0f) earliest = Math.Min(earliest, remaining / enemy.MoveSpeed);
             }
             return earliest;
@@ -450,6 +459,11 @@ namespace GameLogic
                     if (entry.View != null) Release(entry.View.gameObject);
                     // 表现意外被销毁时不能留下永远无法抵达的逻辑实体。
                     _context.Registry.Remove(id, EntityRemovalReason.Manual, out _);
+                    continue;
+                }
+                if (_staffs != null && _staffs.Count > 0)
+                {
+                    if (MoveWithStaffs(entry, enemy, deltaTime)) arrivals.Add(id);
                     continue;
                 }
                 entry.View.SetMoving(!enemy.IsIsolated);
@@ -686,6 +700,7 @@ namespace GameLogic
 
         public void Clear()
         {
+            _staffs?.Dispose(); _staffs = null;
             _generation++;
             ClearIsolation();
             _prepared = _preparing = _started = false;

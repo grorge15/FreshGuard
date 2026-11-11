@@ -15,6 +15,7 @@ namespace GameLogic
     public sealed class SkillCastContext
     {
         private readonly SkillLevelModel _level;
+        public StaffConfig Staff => _level.Staff;
         private readonly List<Action> _acceptanceCommits = new List<Action>();
         private readonly List<CombatBuffApplication> _additionalHitBuffs = new List<CombatBuffApplication>();
         public SkillCastRequest Request { get; }
@@ -52,6 +53,7 @@ namespace GameLogic
     }
     public sealed class SkillCastSnapshot
     {
+        public StaffConfig Staff { get; }
         public SkillOwnerRef Owner { get; }
         public int SkillId { get; }
         public int Level { get; }
@@ -68,6 +70,7 @@ namespace GameLogic
             Parameters = BuffObj.Copy(context.Parameters);
             BulletId = context.BulletId;
             HitBuffs = context.HitBuffs;
+            Staff = context.Staff;
         }
         public float Get(string key, float fallback = 0f) => Parameters.TryGetValue(key, out var value) ? value : fallback;
     }

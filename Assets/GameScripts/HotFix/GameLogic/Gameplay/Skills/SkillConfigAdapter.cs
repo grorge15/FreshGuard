@@ -91,7 +91,7 @@ namespace GameLogic
                     throw new InvalidOperationException("技能类型或目标规则无效：" + row.Id);
                 if (row.BulletId < 0 || (row.BulletId != 0 && !catalog.TryGetBullet(row.BulletId, out _)))
                     throw new InvalidOperationException("技能缺少弹丸配置：" + row.Id + "/" + row.BulletId);
-                if (row.TimelineKey.StartsWith("robot.", StringComparison.Ordinal) && row.BulletId == 0)
+                if (row.TimelineKey.StartsWith("robot.", StringComparison.Ordinal) && row.TimelineKey != "robot.roll" && row.BulletId == 0)
                     throw new InvalidOperationException("机器人投射物技能必须配置弹丸：" + row.Id);
                 catalog.Add(new SkillModel(row.Id, (SkillType)row.SkillType, row.TimelineKey,
                     row.MaxLevel, row.Cooldown, (SkillTargetRule)row.TargetRule, row.PassiveBuffIds, row.BulletId));
@@ -134,7 +134,10 @@ namespace GameLogic
                 };
                 catalog.Add(new SkillLevelModel(row.SkillId, row.Level, parameters,
                     CaptureHitBuffs(slowBuffId, poisonBuffId, isolationBuffId, row.SkillId, parameters),
-                    values => CaptureHitBuffs(slowBuffId, poisonBuffId, isolationBuffId, row.SkillId, values)));
+                    values => CaptureHitBuffs(slowBuffId, poisonBuffId, isolationBuffId, row.SkillId, values),
+                    model.TimelineKey == "robot.roll" ? new StaffConfig(row.StaffPrefab, row.StaffSpawnGap,
+                        row.StaffRollSpeed, row.StaffRollDistance, row.StaffWidth, row.StaffThickness,
+                        row.StaffAppearGrowTime, row.StaffAppearSettleTime) : null));
             }
             foreach (var row in tables.TbSkill.DataList)
             {
@@ -199,6 +202,9 @@ namespace GameLogic
 
         private static void ValidateRobotLevel(GameConfig.skill.SkillLevel row, SkillModel skill, SkillCatalog catalog)
         {
+            if (skill.TimelineKey == "robot.roll" && (skill.BulletId != 0 || skill.Type != SkillType.Robot ||
+                skill.TargetRule != SkillTargetRule.SameSideEnemy || row.Damage != 0 || row.PierceTargetCount != 0 || row.KnockbackDistance != 0))
+                throw new InvalidOperationException("Staff技能只召唤道路障碍，不使用弹丸、伤害或单次击退参数：" + row.Id);
             if (skill.TimelineKey == "robot.store" && (row.IsolateDuration <= 0f ||
                 skill.TargetRule != SkillTargetRule.SameSideEnemy || !catalog.TryGetBullet(skill.BulletId, out var store) ||
                 store.HitMode != BulletHitMode.LockedTarget || store.BehaviorKey != "direct"))

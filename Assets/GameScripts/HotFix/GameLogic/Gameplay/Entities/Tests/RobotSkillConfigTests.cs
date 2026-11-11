@@ -42,6 +42,13 @@ namespace GameLogic.Tests
                     continue;
                 }
                 Assert.IsTrue(catalog.TryGet(row.Id, out var skill));
+                if (skill.TimelineKey == "robot.roll")
+                {
+                    Assert.AreEqual(0, skill.BulletId);
+                    Assert.IsTrue(catalog.TryGetLevel(skill.Id, 1, out var level));
+                    Assert.IsNotNull(level.Staff);
+                    continue;
+                }
                 Assert.IsTrue(catalog.TryGetBullet(skill.BulletId, out var bullet));
                 if (row.Id == 1605)
                 {
@@ -78,8 +85,8 @@ namespace GameLogic.Tests
                     Assert.AreEqual(BulletFlightType.Parabolic, bullet.FlightType);
                     Assert.IsTrue(bullet.TrackTarget);
                     Assert.AreEqual(BulletHitMode.LockedTarget, bullet.HitMode);
-                    Assert.AreEqual(0.6f, bullet.FlightTime);
-                    Assert.AreEqual(1f, bullet.ArcHeight);
+                    Assert.AreEqual(row.Id == 1602 ? 0.45f : 0.6f, bullet.FlightTime);
+                    Assert.AreEqual(row.Id == 1602 ? 0.6f : 1f, bullet.ArcHeight);
                 }
             }
             Assert.IsNull(typeof(GameConfig.robot.Robot).GetField("BulletFlightTime"));

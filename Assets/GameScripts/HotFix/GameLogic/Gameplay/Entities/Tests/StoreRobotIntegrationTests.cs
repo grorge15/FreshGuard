@@ -109,12 +109,13 @@ namespace GameLogic.Tests
         {
             _f = new EnemyBattleControllerTests.Fixture(); var tables = _f.Tables;
             var profile = AssetDatabase.LoadAssetAtPath<DemoBattleProfile>("Assets/AssetRaw/Configs/DemoBattleProfile.asset");
-            Assert.AreEqual(703, profile.Robots.Last().RobotId);
-            Assert.IsTrue(profile.Robots.Last().Unlocked); Assert.AreEqual(5, profile.Robots.Last().ReferenceLevel);
+            var container = profile.Robots.Single(r => r.RobotId == 703);
+            Assert.IsTrue(container.Unlocked); Assert.AreEqual(5, container.ReferenceLevel);
             var candidates = profile.Robots.Where(r => r.Unlocked).Select(r => r.RobotId).ToArray();
             Assert.AreEqual(10, Array.IndexOf(candidates, 703));
             using (var context = new BattleShopContext(ShopRules.FromTables(tables), candidates, candidates, tables.TbRobot.Get,
-                new ContainerRandom(), isRobotEnabled: id => tables.TbSkill.Get(tables.TbRobot.Get(id).SkillId).Enabled))
+                new ContainerRandom((Array.IndexOf(candidates, 703) + .5) / candidates.Length),
+                isRobotEnabled: id => tables.TbSkill.Get(tables.TbRobot.Get(id).SkillId).Enabled))
             {
                 context.Battle.Configure(SkillConfigAdapter.FromTables(tables));
                 var offer = context.GetState(side).FindSlot(0).Offer;
@@ -171,7 +172,9 @@ namespace GameLogic.Tests
         }
         private sealed class ContainerRandom : IShopRandom
         {
-            public double NextDouble() => 0.999;
+            private readonly double _value;
+            public ContainerRandom(double value) { _value = value; }
+            public double NextDouble() => _value;
             public int NextInt(int maxExclusive) => maxExclusive - 1;
         }
     }

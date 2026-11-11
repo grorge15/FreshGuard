@@ -57,6 +57,8 @@ var name = item.Name;
 
 ## 技能与技能等级
 
+702擀面杖的1606保持普通攻击3500并携带2603，`attack_cycle/cast_skill`每5次接受后额外排队1601。1601使用`robot.roll`、`bulletId=0`，不再使用旧3601穿透弹或Damage/PierceTargetCount/KnockbackDistance；对应等级行新增`staffPrefab`、`staffSpawnGap`、`staffRollSpeed`、`staffRollDistance`、`staffWidth`、`staffThickness`、`staffAppearGrowTime`、`staffAppearSettleTime`。资源为StaffBullet，默认0.15净间隔、0.8滚速、1.2距离和宽度、0.2厚度，出现先0.2秒放大至1.1倍再0.1秒回落。Staff仅沿道路反向推动阻挡，不伤害、不吃击退承受比例，不向敌人添加Buff；相关导表使用`gen_code_bin_to_project_lazyload.bat`以保留现有Tables延迟加载和可替换表接口。
+
 `skill.xlsx` 保存技能基础定义：`id`、`skillType`（0普通攻击、1机器人技能、2战场技能、3敌人技能）、`timelineKey`、`maxLevel`、`cooldown`、`targetRule`、`passiveBuffIds` 和 `bulletId`。`bulletId=0` 表示不使用弹丸，非零值必须引用 `bullet.xlsx`。技能执行顺序由时间轴节点驱动，Buff 行为由代码注册。
 
 `skill_level.xlsx` 保存每一级数值：`id` 是独立记录ID，`skillId` 引用技能基础表，`level` 从1开始，`damage`、`slow` 和 `duration` 分别表示伤害、减速比例和持续秒数。运行时按 `(skillId, level)` 查询；同技能等级不可重复，必须完整配置1至 `maxLevel` 的所有等级。旧文件 `skilllevel.xlsx` 不再由表索引引用。

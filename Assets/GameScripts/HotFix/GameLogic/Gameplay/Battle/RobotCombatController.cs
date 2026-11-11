@@ -42,6 +42,7 @@ namespace GameLogic
         }
         private bool _prepared;
         private bool _disposed;
+        private readonly StaffBattleController _staffs;
 
         private sealed class Reserve
         {
@@ -85,6 +86,8 @@ namespace GameLogic
             _preparedRoot.gameObject.SetActive(false);
             _flightRoot = new GameObject("RobotBullets").transform;
             _flightRoot.SetParent(host.transform, false);
+            _staffs = new StaffBattleController(host, context, enemies, load);
+            _enemies.AttachStaffs(_staffs);
         }
 
         private static UniTask<GameObject> LoadAsync(string location, Transform parent, CancellationToken token)
@@ -135,6 +138,7 @@ namespace GameLogic
                     }
                 }
                 _context.Battle.Configure(catalog);
+                await _staffs.PrepareAsync(catalog, linked.Token);
             }
             _context.Battle.Timelines.RegisterAction("robot.bullet", new RobotBulletAction(this));
             _context.Battle.Timelines.RegisterAction("robot.burst.shot", new BurstBulletAction(this));
@@ -623,6 +627,7 @@ namespace GameLogic
             if (_disposed) return;
             _disposed = true; _prepared = false;
             _lifetime.Cancel();
+            _staffs.Dispose();
             foreach (var effect in _effects) Release(effect.Instance);
             _effects.Clear();
             _pendingEffects.Clear();

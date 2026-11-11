@@ -43,6 +43,14 @@ public sealed partial class SkillLevel : Luban.BeanBase
         AttackCycleCount = _buf.ReadInt();
         CycleBulletId = _buf.ReadInt();
         ChainTargetCount = _buf.ReadInt();
+        StaffPrefab = _buf.ReadString();
+        StaffSpawnGap = _buf.ReadFloat();
+        StaffRollSpeed = _buf.ReadFloat();
+        StaffRollDistance = _buf.ReadFloat();
+        StaffWidth = _buf.ReadFloat();
+        StaffThickness = _buf.ReadFloat();
+        StaffAppearGrowTime = _buf.ReadFloat();
+        StaffAppearSettleTime = _buf.ReadFloat();
     }
 
     public static SkillLevel DeserializeSkillLevel(ByteBuf _buf)
@@ -155,6 +163,38 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// 闪电链总人数，包含首名
     /// </summary>
     public readonly int ChainTargetCount;
+    /// <summary>
+    /// Staff预制体
+    /// </summary>
+    public readonly string StaffPrefab;
+    /// <summary>
+    /// 与最前方敌人净间隔
+    /// </summary>
+    public readonly float StaffSpawnGap;
+    /// <summary>
+    /// 沿道路反向滚动速度
+    /// </summary>
+    public readonly float StaffRollSpeed;
+    /// <summary>
+    /// 最大滚动距离
+    /// </summary>
+    public readonly float StaffRollDistance;
+    /// <summary>
+    /// 横向作用宽度
+    /// </summary>
+    public readonly float StaffWidth;
+    /// <summary>
+    /// 纵向作用厚度
+    /// </summary>
+    public readonly float StaffThickness;
+    /// <summary>
+    /// 从0放大到1.1倍时间
+    /// </summary>
+    public readonly float StaffAppearGrowTime;
+    /// <summary>
+    /// 从1.1回落到1倍时间
+    /// </summary>
+    public readonly float StaffAppearSettleTime;
    
     public const int __ID__ = -65736816;
     public override int GetTypeId() => __ID__;
@@ -193,6 +233,14 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "attackCycleCount:" + AttackCycleCount + ","
         + "cycleBulletId:" + CycleBulletId + ","
         + "chainTargetCount:" + ChainTargetCount + ","
+        + "staffPrefab:" + StaffPrefab + ","
+        + "staffSpawnGap:" + StaffSpawnGap + ","
+        + "staffRollSpeed:" + StaffRollSpeed + ","
+        + "staffRollDistance:" + StaffRollDistance + ","
+        + "staffWidth:" + StaffWidth + ","
+        + "staffThickness:" + StaffThickness + ","
+        + "staffAppearGrowTime:" + StaffAppearGrowTime + ","
+        + "staffAppearSettleTime:" + StaffAppearSettleTime + ","
         + "}";
     }
 }
