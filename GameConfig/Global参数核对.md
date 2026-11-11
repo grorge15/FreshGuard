@@ -57,11 +57,12 @@
 | 45 | Reserved45 | 空值且无调用 | 预留 | 无。保持空白，当前没有读取方。 |
 | 46 | Reserved46 | 空值且无调用 | 预留 | 无。保持空白，当前没有读取方。 |
 | 47 | Reserved47 | 空值且无调用 | 预留 | 无。保持空白，当前没有读取方。 |
-| 48 | CycleWave | 已读取且校验 | 已接入 | BattleWaveTimeline.FromTables → EnemyBattleController。当前敌人配置只有两个Cycle，波次表不能超过两个Cycle。 |
+| 48 | CycleWave | 已读取且校验 | 已接入 | BattleWaveTimeline.FromTables → EnemyBattleController。仅划分阶段，不再限制阶段数量或决定敌人血量。 |
 | 49 | RageReentryBlockSec | 无读取方，无重入保护 | 本次接入 | BallGlobalRules → PhysicalCollisionBall.SetBerserk / AdvanceComboTime / ProcessRobotCombo。保护期仍可碰撞和攻击，但不累计Combo；暂停不计时。0表示无保护期。 |
 | 50 | NormalSpeedMaxRate | 无读取方，无普通球加速机制 | 未接入 | PhysicalCollisionBall.EffectiveSpeed只有基础速度、地图倍率和拖拽减速。当前没有普通球加速或叠加速度系统，普通球使用Global2恒速，此上限没有应用对象。 |
 | 51 | StaminaMax | 已读取 | 已接入 | GameApp.CreatePlayerState → MainMenuPlayerState / MatchPlayerRecord.Restore。启动时读取。存档恢复也使用此上限；读取失败回退Demo默认值并告警。 |
 | 52 | StaminaRecoverIntervalMin | 已读取 | 已接入 | GameApp.CreatePlayerState → MainMenuPlayerState.Recover。启动时读取，保存时间用于离线恢复；读取失败回退5分钟并告警。 |
+| 53 | EnemyHpGrowthPerWave | 2026-11-11新增 | 已接入 | BattleWaveTimeline.FromTables按局读取，EnemyBattleController按所属波次传入BattleEntityRegistry计算。当前0.15；hp×[1+(波次−1)×value]，四舍五入为整数，跨阶段不重置，留场敌人不追补血量。 |
 
 ## 验证边界
 

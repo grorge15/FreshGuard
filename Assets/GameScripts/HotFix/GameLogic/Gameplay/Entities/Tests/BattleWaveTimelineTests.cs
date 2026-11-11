@@ -62,6 +62,7 @@ namespace GameLogic.Tests
 
         [Test]
         [TestCase("EnemyType", 4)]
+        [TestCase("Hp", 0)]
         [TestCase("EnemyKillSP", -1)]
         [TestCase("ControlResist", 1.1f)]
         [TestCase("KnockbackResist", -0.1f)]
@@ -83,6 +84,8 @@ namespace GameLogic.Tests
         [TestCase(20, 10)]
         [TestCase(21, 15)]
         [TestCase(30, 15)]
+        [TestCase(21, 10)]
+        [TestCase(35, 10)]
         public void ConfiguredLastWaveAndCycleSizeDetermineCompletion(int waveCount, int wavesPerCycle)
         {
             var plans = Enumerable.Range(1, waveCount).Select(w => WaveTestData.Plan(w, w)).ToArray();
@@ -98,14 +101,25 @@ namespace GameLogic.Tests
             Assert.AreEqual((waveCount - 1) / wavesPerCycle + 1, due[0].Group.Cycle);
         }
 
-        [Test]
-        public void MissingThirdCycleHealthIsRejectedInsteadOfReusingCycleTwo()
+        [TestCase(-0.15f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(float.MaxValue)]
+        public void InvalidHealthGrowthStopsPreparation(float growth)
         {
-            var plans = Enumerable.Range(1, 21).Select(w => WaveTestData.Plan(w, w)).ToArray();
-            var spawns = Enumerable.Range(1, 21).Select(w => WaveTestData.Spawn(w, w - 1, w, 2001, 1)).ToArray();
-            var error = Assert.Throws<ArgumentException>(() =>
-                BattleWaveTimeline.FromTables(WaveTestData.Tables(plans, spawns, 10)));
-            StringAssert.Contains("Cycle", error.Message);
+            var tables = WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1), WaveTestData.Plan(2, 2) },
+                new[] { WaveTestData.Spawn(1, 0, 1, 2001, 1), WaveTestData.Spawn(2, 1, 2, 2001, 1) });
+            typeof(GameConfig.globalcfg.Global).GetField("Value").SetValue(tables.TbGlobal.Get(53), growth);
+            Assert.Catch<ArgumentException>(() => BattleWaveTimeline.FromTables(tables));
+        }
+
+        [Test]
+        public void MissingHealthGrowthStopsPreparation()
+        {
+            var tables = WaveTestData.SingleWaveTables();
+            ((Dictionary<int, GameConfig.globalcfg.Global>)tables.TbGlobal.DataMap).Remove(53);
+            var error = Assert.Throws<ArgumentException>(() => BattleWaveTimeline.FromTables(tables));
+            StringAssert.Contains("Global 53", error.Message);
         }
 
         [Test]

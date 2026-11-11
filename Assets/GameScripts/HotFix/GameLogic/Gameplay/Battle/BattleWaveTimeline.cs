@@ -39,11 +39,15 @@ namespace GameLogic
         private double _lastCollected;
         public IReadOnlyList<Group> Groups { get; }
         public int CurrentWave { get; private set; } = 1;
+        public float EnemyHpGrowthPerWave { get; }
         public bool IsAllSpawnsCompleted => _groups.All(g => g.NextSpawnIndex == g.Rule.EnemyCount);
         public double NextEventTime => _groups.Min(g => g.NextTime);
 
-        private BattleWaveTimeline(Group[] groups, double[] waveStarts)
-        { _groups = groups; Groups = Array.AsReadOnly(groups); _waveStarts = waveStarts; }
+        private BattleWaveTimeline(Group[] groups, double[] waveStarts, float enemyHpGrowthPerWave)
+        {
+            _groups = groups; Groups = Array.AsReadOnly(groups); _waveStarts = waveStarts;
+            EnemyHpGrowthPerWave = enemyHpGrowthPerWave;
+        }
 
         public static BattleWaveTimeline FromTables(Tables tables)
         {
@@ -53,6 +57,11 @@ namespace GameLogic
                 (double)cycleValue > int.MaxValue || cycleValue != Math.Truncate(cycleValue))
                 throw new ArgumentException("Global 48 必须为每 Cycle 的正整数波数。");
             var wavesPerCycle = (int)cycleValue;
+            var growthConfig = tables.TbGlobal.GetOrDefault(53);
+            if (growthConfig == null)
+                throw new ArgumentException("缺少 Global 53：EnemyHpGrowthPerWave。");
+            var hpGrowthPerWave = growthConfig.Value;
+            EntityValidation.RequireFiniteNonNegative(hpGrowthPerWave, "Global53.EnemyHpGrowthPerWave");
             var plans = tables.TbWavePlan.DataList.OrderBy(p => p.Wave).ToArray();
             if (plans.Length == 0) throw new ArgumentException("WavePlan 没有波次方案。");
             var groups = new List<Group>();
@@ -64,7 +73,6 @@ namespace GameLogic
                 if (plan.Id <= 0 || plan.Wave != i + 1 || plan.EnemySpawnId == null || plan.EnemySpawnId.Length == 0)
                     throw new ArgumentException("WavePlan 波次须从1连续且至少引用一个生成组：" + plan.Id);
                 var cycle = (plan.Wave - 1) / wavesPerCycle + 1;
-                if (cycle > 2) throw new ArgumentException("敌人当前仅支持两个 Cycle，WavePlan：" + plan.Id);
                 var start = double.PositiveInfinity;
                 foreach (var id in plan.EnemySpawnId.OrderBy(id => id))
                 {
@@ -75,7 +83,11 @@ namespace GameLogic
                     if (range == null || range.Length != 2 || range[0] < 0 || range[1] <= range[0] || rule.EnemyCount <= 0)
                         throw new ArgumentException("WaveSpawn 窗口须满足0≤A<B且数量为正：" + id);
                     var enemy = tables.TbEnemy.GetOrDefault(rule.EnemyId);
-                    try { BattleEntityRegistry.ValidateEnemyConfig(enemy); }
+                    try
+                    {
+                        BattleEntityRegistry.ValidateEnemyConfig(enemy);
+                        BattleEntityRegistry.CalculateEnemyMaxHp(enemy.Hp, plan.Wave, hpGrowthPerWave);
+                    }
                     catch (ArgumentException error)
                     {
                         throw new ArgumentException("WaveSpawn " + id + " 的敌人配置无效：" + rule.EnemyId, error);
@@ -87,7 +99,7 @@ namespace GameLogic
                     throw new ArgumentException("WavePlan 的开始时点必须随波次递增：" + plan.Id);
                 starts[i] = start;
             }
-            return new BattleWaveTimeline(groups.ToArray(), starts);
+            return new BattleWaveTimeline(groups.ToArray(), starts, hpGrowthPerWave);
         }
 
         /// <summary>输出按时间和配置顺序排列的到期指令；相同时间重复调用不会重复出兵。</summary>

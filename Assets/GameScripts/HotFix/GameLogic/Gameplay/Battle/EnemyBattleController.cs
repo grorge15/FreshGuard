@@ -372,7 +372,8 @@ namespace GameLogic
                     var instanceId = 0;
                     try
                     {
-                        instanceId = context.Registry.CreateEnemyFromConfig(group.Config, group.Side, group.Schedule.Cycle);
+                        instanceId = context.Registry.CreateEnemyFromConfig(group.Config, group.Side,
+                            group.Schedule.Cycle, group.Schedule.Wave, _timeline.EnemyHpGrowthPerWave);
                         var parent = group.Side == BattleSide.Player ? _playerEnemyRoot : _opponentEnemyRoot;
                         var prefabScale = instance.transform.localScale;
                         instance.transform.SetParent(parent != null ? parent : transform, true);

@@ -18,6 +18,7 @@ namespace GameLogic
         public float RouteProgress { get; private set; }
         public Enemy Configuration { get; private set; }
         public int Cycle { get; private set; }
+        public int Wave { get; private set; }
         public bool IsAlive => !IsRemoved && CurrentHp > 0;
         public bool IsIsolated { get; private set; }
         public override bool CanCast => IsAlive;
@@ -29,6 +30,7 @@ namespace GameLogic
         {
             Configuration = null;
             Cycle = 0;
+            Wave = 0;
             InitializeIdentity(instanceId, configId, side);
             MaxHp = maxHp;
             CurrentHp = maxHp;
@@ -47,11 +49,13 @@ namespace GameLogic
 
         internal void SetIsolated(bool isolated) => IsIsolated = isolated;
 
-        internal void InitializeFromConfig(int instanceId, Enemy config, BattleSide side, int cycle)
+        internal void InitializeFromConfig(int instanceId, Enemy config, BattleSide side,
+            int cycle, int wave, int maxHp)
         {
-            Initialize(instanceId, config.Id, side, cycle == 1 ? config.HpC1 : config.HpC2, config.EnemySpeed);
+            Initialize(instanceId, config.Id, side, maxHp, config.EnemySpeed);
             Configuration = config;
             Cycle = cycle;
+            Wave = wave;
         }
 
         internal bool TrySetRouteProgress(float progress)
@@ -76,6 +80,7 @@ namespace GameLogic
             RouteProgress = 0f;
             Configuration = null;
             Cycle = 0;
+            Wave = 0;
             IsIsolated = false;
         }
     }

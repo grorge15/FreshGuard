@@ -270,14 +270,22 @@ namespace GameLogic.Tests
             Assert.IsFalse(controller.IsAllSpawnsCompleted, "前波仍有后续出兵，不能在切波时丢弃");
             Assert.IsTrue(f.Context.Registry.TryGet(oldId, out var old));
             Assert.AreEqual(93, ((EnemyEntity)old).CurrentHp);
+            Assert.AreEqual(100, ((EnemyEntity)old).MaxHp);
             Assert.That(((EnemyEntity)old).RouteProgress, Is.EqualTo(0.9f).Within(0.0001f));
             f.Advance(3f);
             Assert.AreEqual(5, f.Spawned(BattleSide.Player));
             Assert.IsTrue(controller.IsAllSpawnsCompleted);
+            foreach (var view in f.Views)
+            {
+                f.Context.Registry.TryGet(view.InstanceId, out var spawned);
+                var enemy = (EnemyEntity)spawned;
+                Assert.AreEqual(enemy.Wave == 1 ? 100 : 115, enemy.MaxHp,
+                    "前波延迟生成的敌人仍须使用所属波次血量");
+            }
         }
 
         [Test]
-        public void CycleTwoUsesNewHealthWithoutResettingEnemiesFromCycleOne()
+        public void WaveElevenContinuesLinearGrowthWithoutResettingExistingEnemies()
         {
             var plans = Enumerable.Range(1, 11).Select(w => WaveTestData.Plan(w, w)).ToArray();
             var groups = Enumerable.Range(1, 11).Select(w => WaveTestData.Spawn(w, w - 1, w, 2001, 1)).ToArray();
@@ -291,16 +299,41 @@ namespace GameLogic.Tests
             Assert.IsTrue(f.Context.Registry.TryGet(oldId, out var old));
             Assert.AreEqual(93, ((EnemyEntity)old).CurrentHp);
             Assert.AreEqual(1, ((EnemyEntity)old).Cycle);
+            Assert.AreEqual(1, ((EnemyEntity)old).Wave);
+            Assert.AreEqual(100, ((EnemyEntity)old).MaxHp);
             var latest = f.Views.Where(v => f.Side(v) == BattleSide.Player).OrderBy(v => v.InstanceId).Last();
             f.Context.Registry.TryGet(latest.InstanceId, out var entity);
-            Assert.AreEqual(220, ((EnemyEntity)entity).CurrentHp);
+            Assert.AreEqual(250, ((EnemyEntity)entity).CurrentHp);
             Assert.AreEqual(2, ((EnemyEntity)entity).Cycle);
+            Assert.AreEqual(11, ((EnemyEntity)entity).Wave);
             foreach (var view in f.Views) f.Context.Registry.Remove(view.InstanceId, EntityRemovalReason.Manual, out _);
             f.Advance(10f);
             Assert.IsTrue(controller.IsAllEnemiesCleared);
             Assert.IsTrue(f.Host.IsCombatRunning, "全部出完且清空不能自行触发终局");
             Assert.AreEqual(11, controller.CurrentWave);
             Assert.That(controller.ElapsedSeconds, Is.EqualTo(20d).Within(0.0001d));
+        }
+
+        [TestCase(0f, 100)]
+        [TestCase(0.3f, 130)]
+        public void BothSidesUseConfiguredGrowthSnapshot(float growth, int expectedHp)
+        {
+            var tables = WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1), WaveTestData.Plan(2, 2) },
+                new[] { WaveTestData.Spawn(1, 0, 1, 2001, 1), WaveTestData.Spawn(2, 1, 2, 2001, 1) });
+            var valueField = typeof(GameConfig.globalcfg.Global).GetField("Value");
+            valueField.SetValue(tables.TbGlobal.Get(53), growth);
+            _fixture = new Fixture(tables);
+            var f = _fixture;
+            f.Prepare();
+            valueField.SetValue(tables.TbGlobal.Get(53), 9f);
+            f.Start(); f.Advance(1f);
+            foreach (var side in new[] { BattleSide.Player, BattleSide.Opponent })
+            {
+                var latest = f.Views.Where(v => f.Side(v) == side).OrderBy(v => v.InstanceId).Last();
+                f.Context.Registry.TryGet(latest.InstanceId, out var entity);
+                Assert.AreEqual(2, ((EnemyEntity)entity).Wave);
+                Assert.AreEqual(expectedHp, ((EnemyEntity)entity).MaxHp);
+            }
         }
 
         [TestCase(2002, 2)]
