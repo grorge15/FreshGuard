@@ -14,6 +14,7 @@ namespace FreshGuard.Editor
             var path = data.AssetPath.Replace('\\', '/');
             if (path.StartsWith(ACTOR_ROOT + "Sprites/Enemy/Frame/", StringComparison.Ordinal) ||
                 path.StartsWith(ACTOR_ROOT + "Sprites/Bullets/", StringComparison.Ordinal) ||
+                path.StartsWith(ACTOR_ROOT + "Sprites/Robots/Frames/", StringComparison.Ordinal) ||
                 path.StartsWith(ACTOR_ROOT + "Animations/Effects/", StringComparison.Ordinal) ||
                 path.StartsWith(ACTOR_ROOT + "Animations/Enemy/", StringComparison.Ordinal) ||
                 path.StartsWith(ACTOR_ROOT + "Sprites/PhysicsSprites/", StringComparison.Ordinal))
