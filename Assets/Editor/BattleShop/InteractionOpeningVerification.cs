@@ -73,8 +73,8 @@ namespace FreshGuard.Editor
         {
             var node = Slot(ui, slot);
             ExecuteEvents.Execute(node, Pointer(Point(ui, node.transform)), ExecuteEvents.pointerDownHandler);
-            ui.Drag.Advance(Time.unscaledTime + 0.21f);
-            Require(ui.Drag.Phase == RobotDragPhase.Dragging, "交互开放后无法长按拿起商品。");
+            ExecuteEvents.Execute(node, Pointer(Point(ui, node.transform) + Vector2.right), ExecuteEvents.beginDragHandler);
+            Require(ui.Drag.Phase == RobotDragPhase.Dragging, "交互开放后移动商品未立即拿起。");
         }
         private static async UniTask Wait(Func<bool> condition, float seconds = 15f)
         {
@@ -131,7 +131,7 @@ namespace FreshGuard.Editor
                         var ui = host.ShopWindow;
                         var balance = host.Context.GetState(BattleSide.Player).EnergyCoins;
                         ui.PressSlot(0, -1, Point(ui, Slot(ui, 0).transform), Time.unscaledTime - 1f);
-                        ui.Drag.Advance(Time.unscaledTime);
+                        ui.Drag.Move(-1, Point(ui, Slot(ui, 0).transform) + Vector2.right);
                         Slot(ui, 0).transform.parent.parent.Find("m_btn_Refresh").GetComponent<Button>().onClick.Invoke();
                         Require(ui.Drag.Phase == RobotDragPhase.Idle && !host.Context.IsBusy &&
                             host.Context.GetState(BattleSide.Player).EnergyCoins == balance,
@@ -204,13 +204,13 @@ namespace FreshGuard.Editor
                 var view = UnityEngine.Object.FindObjectsOfType<RobotView>().First(v => v.InstanceId == id);
                 var hitPoint = (Vector2)host.Placement.SceneCamera.WorldToScreenPoint(board.GetCellWorldPosition(anchor.Value));
                 ExecuteEvents.Execute(view.gameObject, Pointer(hitPoint), ExecuteEvents.pointerDownHandler);
-                uiWindow.Drag.Advance(Time.unscaledTime + 0.21f);
+                ExecuteEvents.Execute(view.gameObject, Pointer(hitPoint + Vector2.right), ExecuteEvents.beginDragHandler);
                 Require(uiWindow.Drag.Phase == RobotDragPhase.Dragging, "开放后场上机器人不能拿起。");
                 uiWindow.Drag.Release(-1, new Vector2(-1000, -1000));
                 await Wait(() => uiWindow.Drag.Phase == RobotDragPhase.Idle);
                 Require(robot.Anchor.Equals(anchor) && board.Model.GetOccupant(anchor.Value) == robot.Definition.Id,
                     "非法落点没有回到原位置。");
-                checks.Add("真实玩家长按、完整形状中心预览、按价购买部署、非法回位");
+                checks.Add("真实玩家即时拖动、完整形状中心预览、按价购买部署、非法回位");
 
                 // 用实际场景调度入口确定性推进AI时间，检验开放和暂停都不会提前耗尽初始延迟。
                 var aiBefore = context.CreateOpponentAiSnapshot(host.OpponentGlass.GetComponentInParent<PlacementBoardView>().Model);

@@ -57,7 +57,7 @@ namespace FreshGuard.Editor
         {
             var node = Slot(ui, id);
             ExecuteEvents.Execute(node, Pointer(Point(node.transform)), ExecuteEvents.pointerDownHandler);
-            ui.Drag.Advance(Time.unscaledTime + 0.21f);
+            ExecuteEvents.Execute(node, Pointer(Point(node.transform) + Vector2.right), ExecuteEvents.beginDragHandler);
             Require(ui.Drag.Phase == RobotDragPhase.Dragging, "商品未进入有效拖拽。");
         }
 
@@ -88,7 +88,7 @@ namespace FreshGuard.Editor
             var checks = new List<string>();
             var failures = new List<string>();
             var host = UnityEngine.Object.FindObjectOfType<BattleShopSceneController>();
-            foreach (var test in new[] { "reward-cancel", "close-restart", "release-threshold", "reward-restart" })
+            foreach (var test in new[] { "reward-cancel", "close-restart", "release-before-move", "reward-restart" })
             {
                 try
                 {
@@ -98,7 +98,7 @@ namespace FreshGuard.Editor
                     var ui = host.ShopWindow;
                     var context = host.Context;
                     var state = context.GetState(BattleSide.Player);
-                    if (test == "release-threshold")
+                    if (test == "release-before-move")
                     {
                         var board = host.PlayerGlass.GetComponentInParent<PlacementBoardView>();
                         var offer = state.FindSlot(0).Offer;
@@ -111,11 +111,11 @@ namespace FreshGuard.Editor
                         foreach (var cell in shape.Cells)
                             board.Model.SetOpen(new BoardCoordinate(anchor.Column + cell.Column, anchor.Row + cell.Row), true);
                         var point = PlacementPoint(host.Placement.SceneCamera, board, anchor, shape);
-                        ui.PressSlot(0, -1, Point(Slot(ui, 0).transform), Time.unscaledTime - 0.21f);
+                        ui.PressSlot(0, -1, Point(Slot(ui, 0).transform), Time.unscaledTime);
                         ui.Drag.Release(-1, point);
                         await UniTask.WaitUntil(() => ui.Drag.Phase == RobotDragPhase.Idle).Timeout(TimeSpan.FromSeconds(15));
                         Require(board.Model.GetOccupant(anchor) != null && state.EnergyCoins == 20 - offer.Price,
-                            "超过长按阈值、Update前松手被误判为短按。");
+                            "快速拖动在移动事件前松手时未按最终位置提交。");
                     }
                     else
                     {
@@ -188,14 +188,14 @@ namespace FreshGuard.Editor
                 ExecuteEvents.Execute(slot, p, ExecuteEvents.pointerUpHandler);
                 Require(ui.Drag.Phase == RobotDragPhase.Idle && state.FindSlot(0).Offer == first, "短按未保留商品。");
                 PickSlot(ui, 0);
-                Require(state.EnergyCoins == 20 && context.IsBusy, "长按提前购买或没有交互锁。");
+                Require(state.EnergyCoins == 20 && context.IsBusy, "开始拖动时提前购买或没有交互锁。");
                 Require(context.TryRefresh(BattleSide.Player) == ShopOperationResult.Busy, "拖拽中刷新未拦截。");
                 Require(Mathf.Approximately(host.Bootstrap.PlayerBall.EffectiveSpeed, host.Bootstrap.PlayerBall.Speed * 0.7f) &&
                     Mathf.Approximately(host.Bootstrap.OpponentBall.EffectiveSpeed, host.Bootstrap.OpponentBall.Speed), "未正确按方减速。");
                 await Drop(ui, new Vector2(-1000, -1000));
                 Require(state.EnergyCoins == 20 && state.FindSlot(0).Offer == first && !context.IsBusy, "非法落点扣币或丢失商品。");
                 Require(Mathf.Approximately(host.Bootstrap.PlayerBall.EffectiveSpeed, host.Bootstrap.PlayerBall.Speed), "失败后未恢复球速。");
-                checks.Add("真实指针短按、长按、非法回位、交互锁与己方球速");
+                checks.Add("真实指针轻点、即时拖动、非法回位、交互锁与己方球速");
 
                 // 用玻璃系统真实碰撞打开内部测试区域，外围仍由模型禁止部署。
                 for (var column = 1; column < board.Model.Columns - 1; column++)
@@ -260,7 +260,7 @@ namespace FreshGuard.Editor
                 // 场上拿起，失败回位，再移动原实例。
                 var input = originalView.gameObject;
                 ExecuteEvents.Execute(input, Pointer(hitPoint), ExecuteEvents.pointerDownHandler);
-                ui.Drag.Advance(Time.unscaledTime + 0.21f);
+                ExecuteEvents.Execute(input, Pointer(hitPoint + Vector2.right), ExecuteEvents.beginDragHandler);
                 Require(target.IsDragging && board.Model.GetOccupant(anchor) == null, "场上拿起未释放占格。");
                 Require(originalView.GetComponentsInChildren<Collider2D>(true).All(c => !c.enabled), "场上拿起仍参与碰撞。");
                 ui.Drag.Move(-1, PlacementPoint(camera, board, new BoardCoordinate(2, 5), target.Definition));
@@ -270,7 +270,7 @@ namespace FreshGuard.Editor
                 Require(!target.IsDragging && board.Model.GetOccupant(anchor) == targetId.ToString() && View(targetId) == originalView,
                     "最终非法位置误用之前有效预览，或未原位恢复同实例。");
                 ExecuteEvents.Execute(input, Pointer(hitPoint), ExecuteEvents.pointerDownHandler);
-                ui.Drag.Advance(Time.unscaledTime + 0.21f);
+                ExecuteEvents.Execute(input, Pointer(hitPoint + Vector2.right), ExecuteEvents.beginDragHandler);
                 var movedAnchor = new BoardCoordinate(2, 5);
                 var movedPointer = new BoardCoordinate(movedAnchor.Column + lastCell.Column, movedAnchor.Row + lastCell.Row);
                 await ReleaseWithoutMove(ui, host, PlacementPoint(camera, board, movedAnchor, target.Definition), movedAnchor);
@@ -292,7 +292,7 @@ namespace FreshGuard.Editor
                 Require(second.Level == 2, "第二台机器人未升级到匹配等级。");
                 var secondView = View(secondId);
                 ExecuteEvents.Execute(secondView.gameObject, Pointer(camera.WorldToScreenPoint(board.GetCellWorldPosition(secondAnchor))), ExecuteEvents.pointerDownHandler);
-                ui.Drag.Advance(Time.unscaledTime + 0.21f);
+                ExecuteEvents.Execute(secondView.gameObject, Pointer((Vector2)camera.WorldToScreenPoint(board.GetCellWorldPosition(secondAnchor)) + Vector2.right), ExecuteEvents.beginDragHandler);
                 var mergeCoins = state.EnergyCoins;
                 await Drop(ui, camera.WorldToScreenPoint(board.GetCellWorldPosition(movedAnchor)));
                 Require(target.Level == 3 && target.Anchor.Equals(movedAnchor) && second.IsRemoved &&

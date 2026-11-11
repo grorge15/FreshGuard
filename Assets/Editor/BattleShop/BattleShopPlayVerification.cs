@@ -95,7 +95,7 @@ namespace FreshGuard.Editor
                 Action<int> cancelOnBegin = side => { if (robot.IsDragging) ui.Drag.Cancel(); };
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, cancelOnBegin);
                 bool began;
-                try { ui.Drag.Press(robot.InstanceId, -1, Vector2.zero, Time.unscaledTime); ui.Drag.Advance(Time.unscaledTime + 0.21f); began = ui.Drag.Phase != RobotDragPhase.Idle; }
+                try { ui.Drag.Press(robot.InstanceId, -1, Vector2.zero, Time.unscaledTime); ui.Drag.Move(-1, Vector2.right); began = ui.Drag.Phase != RobotDragPhase.Idle; }
                 finally { GameEvent.RemoveEventListener<int>(BattleShopEvents.Changed, cancelOnBegin); }
                 Require(!began && !context.IsBusy && ui.Drag.Phase == RobotDragPhase.Idle,
                     "交互通知内取消被Press覆盖。");

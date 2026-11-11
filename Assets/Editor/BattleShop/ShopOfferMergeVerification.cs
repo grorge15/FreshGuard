@@ -74,8 +74,8 @@ namespace FreshGuard.Editor
         {
             var node = Slot(ui, slot);
             ExecuteEvents.Execute(node, Pointer(Point(ui, node.transform)), ExecuteEvents.pointerDownHandler);
-            ui.Drag.Advance(Time.unscaledTime + 0.21f);
-            Require(ui.Drag.Phase == RobotDragPhase.Dragging, "长按商品没有进入拖拽。");
+            ExecuteEvents.Execute(node, Pointer(Point(ui, node.transform) + Vector2.right), ExecuteEvents.beginDragHandler);
+            Require(ui.Drag.Phase == RobotDragPhase.Dragging, "移动商品没有立即进入拖拽。");
         }
 
         private static async UniTask Drop(BattleShopUI ui, int sourceSlot, Vector2 point, bool move = true)
@@ -261,7 +261,7 @@ namespace FreshGuard.Editor
                     "商品向场上合成行为改变。");
                 var view = UnityEngine.Object.FindObjectsOfType<RobotView>().First(v => v.InstanceId == robot.InstanceId);
                 ExecuteEvents.Execute(view.gameObject, Pointer(boardHit), ExecuteEvents.pointerDownHandler);
-                ui.Drag.Advance(Time.unscaledTime + 0.21f);
+                ExecuteEvents.Execute(view.gameObject, Pointer(boardHit + Vector2.right), ExecuteEvents.beginDragHandler);
                 Require(ui.Drag.Phase == RobotDragPhase.Dragging, "场上机器人无法拿起。");
                 ui.Drag.Release(-1, new Vector2(-1000, -1000));
                 await UniTask.WaitUntil(() => ui.Drag.Phase == RobotDragPhase.Idle).Timeout(TimeSpan.FromSeconds(15));
