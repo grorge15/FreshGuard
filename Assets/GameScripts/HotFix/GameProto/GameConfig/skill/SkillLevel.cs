@@ -51,6 +51,7 @@ public sealed partial class SkillLevel : Luban.BeanBase
         StaffThickness = _buf.ReadFloat();
         StaffAppearGrowTime = _buf.ReadFloat();
         StaffAppearSettleTime = _buf.ReadFloat();
+        CastWindup = _buf.ReadFloat();
     }
 
     public static SkillLevel DeserializeSkillLevel(ByteBuf _buf)
@@ -195,6 +196,10 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// 从1.1回落到1倍时间
     /// </summary>
     public readonly float StaffAppearSettleTime;
+    /// <summary>
+    /// 施法前摇时间（秒）
+    /// </summary>
+    public readonly float CastWindup;
    
     public const int __ID__ = -65736816;
     public override int GetTypeId() => __ID__;
@@ -241,6 +246,7 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "staffThickness:" + StaffThickness + ","
         + "staffAppearGrowTime:" + StaffAppearGrowTime + ","
         + "staffAppearSettleTime:" + StaffAppearSettleTime + ","
+        + "castWindup:" + CastWindup + ","
         + "}";
     }
 }

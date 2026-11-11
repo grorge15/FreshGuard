@@ -14,12 +14,13 @@ namespace GameLogic
     }
     public sealed class SkillCastContext
     {
-        private readonly SkillLevelModel _level;
+        private SkillLevelModel _level;
         public StaffConfig Staff => _level.Staff;
         private readonly List<Action> _acceptanceCommits = new List<Action>();
         private readonly List<CombatBuffApplication> _additionalHitBuffs = new List<CombatBuffApplication>();
         public SkillCastRequest Request { get; }
-        public int Level { get; }
+        public int SkillId { get; private set; }
+        public int Level { get; private set; }
         public string TimelineKey { get; set; }
         public int BulletId { get; set; }
         public Dictionary<string, float> Parameters { get; } = new Dictionary<string, float>();
@@ -35,11 +36,20 @@ namespace GameLogic
         public bool IsCancelled { get; private set; }
         internal SkillCastContext(SkillCastRequest request, SkillObj skill, SkillLevelModel level)
         {
-            Request = request; Level = skill.Level; TimelineKey = skill.Model.TimelineKey; BulletId = skill.Model.BulletId;
+            Request = request; SkillId = skill.Model.Id; Level = skill.Level; TimelineKey = skill.Model.TimelineKey; BulletId = skill.Model.BulletId;
             _level = level;
             foreach (var pair in level.Parameters) Parameters.Add(pair.Key, pair.Value);
         }
         public void Cancel() => IsCancelled = true;
+        // 在当前OnCast内切换本次施法的配置；后续钩子看到新参数，原请求保留作触发身份。
+        internal void ReplaceSkill(SkillObj skill, SkillLevelModel level)
+        {
+            if (SkillId != Request.SkillId) { Cancel(); return; }
+            SkillId = skill.Model.Id; Level = skill.Level; _level = level;
+            TimelineKey = skill.Model.TimelineKey; BulletId = skill.Model.BulletId;
+            Parameters.Clear(); _additionalHitBuffs.Clear();
+            foreach (var pair in level.Parameters) Parameters.Add(pair.Key, pair.Value);
+        }
         public void AddHitBuff(CombatBuffApplication effect) =>
             _additionalHitBuffs.Add(effect ?? throw new ArgumentNullException(nameof(effect)));
         // 仅暂存本次同步施法的状态变化；不是Buff生命周期回调。
@@ -65,7 +75,7 @@ namespace GameLogic
         public IReadOnlyList<CombatBuffApplication> HitBuffs { get; }
         internal SkillCastSnapshot(SkillCastContext context)
         {
-            Owner = context.Request.Owner; SkillId = context.Request.SkillId; Target = context.Request.Target;
+            Owner = context.Request.Owner; SkillId = context.SkillId; Target = context.Request.Target;
             Level = context.Level; Trigger = context.Request.Trigger; TimelineKey = context.TimelineKey;
             Parameters = BuffObj.Copy(context.Parameters);
             BulletId = context.BulletId;
@@ -96,6 +106,11 @@ namespace GameLogic
                 failure = Validate(request, out var finalOwner, out var finalSkill, true);
                 if (failure != SkillCastFailure.None || !ReferenceEquals(skill, finalSkill) || !ReferenceEquals(owner, finalOwner))
                     return new SkillCastResult(failure == SkillCastFailure.None ? SkillCastFailure.InvalidOwner : failure);
+                var effectiveRequest = context.SkillId == request.SkillId ? request :
+                    new SkillCastRequest(request.Owner, context.SkillId, request.Trigger, request.Target, request.SourceBuffInstanceId);
+                failure = Validate(effectiveRequest, out _, out var effectiveSkill, true);
+                if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
+                if (effectiveSkill.Level != context.Level) return new SkillCastResult(SkillCastFailure.MissingLevel);
                 var snapshot = new SkillCastSnapshot(context);
                 if (!_battle.Timelines.TryPrepare(snapshot, out var timeline, out failure)) return new SkillCastResult(failure);
                 var started = false;
@@ -103,8 +118,13 @@ namespace GameLogic
                 {
                     failure = Validate(request, out _, out _, true);
                     if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
+                    failure = Validate(effectiveRequest, out _, out var checkedSkill, true);
+                    if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
+                    if (!ReferenceEquals(checkedSkill, effectiveSkill) || checkedSkill.Level != context.Level)
+                        return new SkillCastResult(SkillCastFailure.InvalidOwner);
                     if (commitContact != null && !commitContact()) return new SkillCastResult(SkillCastFailure.NotAllowed);
                     skill.CooldownRemaining = skill.Model.Cooldown;
+                    effectiveSkill.CooldownRemaining = effectiveSkill.Model.Cooldown;
                     context.CommitAcceptance();
                     started = true;
                     _battle.Timelines.Start(timeline);

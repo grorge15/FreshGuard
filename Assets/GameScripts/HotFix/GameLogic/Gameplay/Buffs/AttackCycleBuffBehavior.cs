@@ -40,7 +40,8 @@ namespace GameLogic
             if (context.Request.SkillId != model.CountSkillId || Pending) return;
             var required = PositiveInteger(context.Parameters, "attackCycleCount");
             var next = Math.Min(required, AttackCount + 1);
-            if (model.CycleAction == AttackCycleAction.ReplaceBullet || model.CycleAction == AttackCycleAction.EnhanceAttack)
+            if (model.CycleAction == AttackCycleAction.ReplaceBullet || model.CycleAction == AttackCycleAction.EnhanceAttack ||
+                model.CycleAction == AttackCycleAction.ReplaceSkill)
             {
                 if (next >= required)
                 {
@@ -53,9 +54,14 @@ namespace GameLogic
                             !owner.Skills.TryGet(model.TriggerSkillId, out var child) ||
                             !_battle.Catalog.TryGetLevel(child.Model.Id, child.Level, out var level))
                         { context.Cancel(); return; }
-                        context.BulletId = child.Model.BulletId;
-                        context.TimelineKey = child.Model.TimelineKey;
-                        foreach (var effect in level.CaptureHitBuffs(level.Parameters)) context.AddHitBuff(effect);
+                        if (model.CycleAction == AttackCycleAction.ReplaceSkill)
+                            context.ReplaceSkill(child, level);
+                        else
+                        {
+                            context.BulletId = child.Model.BulletId;
+                            context.TimelineKey = child.Model.TimelineKey;
+                            foreach (var effect in level.CaptureHitBuffs(level.Parameters)) context.AddHitBuff(effect);
+                        }
                     }
                 }
                 context.DeferUntilAccepted(() =>

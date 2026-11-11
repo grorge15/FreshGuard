@@ -56,6 +56,7 @@ namespace GameLogic
                 if (row.BehaviorKey == "attack_cycle")
                 {
                     cycleAction = row.CycleAction == "replace_bullet" ? AttackCycleAction.ReplaceBullet :
+                        row.CycleAction == "replace_skill" ? AttackCycleAction.ReplaceSkill :
                         row.CycleAction == "cast_skill" ? AttackCycleAction.CastSkill :
                         row.CycleAction == "enhance_attack" ? AttackCycleAction.EnhanceAttack : AttackCycleAction.None;
                     if (row.MaxStacks != 1 || row.TickInterval != 0f || row.CountSkillId <= 0 ||
@@ -128,7 +129,7 @@ namespace GameLogic
                     { "poisonInterval", row.PoisonInterval }, { "poisonMaxLayers", row.PoisonMaxLayers },
                     { "attackCycleCount", row.AttackCycleCount }, { "cycleBulletId", row.CycleBulletId },
                     { "chainTargetCount", row.ChainTargetCount }, { "chainRange", row.ChainRange },
-                    { "chainDamageRatio", row.ChainDamageRatio },
+                    { "chainDamageRatio", row.ChainDamageRatio }, { "castWindup", row.CastWindup },
                     { "dropCount", row.DropCount },
                     { "dropSpacing", row.DropSpacing }, { "splashRadius", row.SplashRadius }
                 };
@@ -151,6 +152,12 @@ namespace GameLogic
                         throw new InvalidOperationException("周期Buff的统计技能与安装技能不一致：" + id);
                     if (passive.TriggerSkillId > 0 && !catalog.TryGet(passive.TriggerSkillId, out _))
                         throw new InvalidOperationException("缺少启用的被动触发技能：" + passive.TriggerSkillId);
+                    if (passive.CycleAction == AttackCycleAction.ReplaceSkill)
+                    {
+                        catalog.TryGet(passive.TriggerSkillId, out var replacementSkill);
+                        if (replacementSkill.TargetRule != (SkillTargetRule)row.TargetRule || replacementSkill.MaxLevel < row.MaxLevel)
+                            throw new InvalidOperationException("替换技能需要兼容的目标规则与等级：" + passive.Id);
+                    }
                     if (passive.CycleAction == AttackCycleAction.EnhanceAttack)
                     {
                         catalog.TryGet(row.Id, out var primary);
@@ -234,20 +241,22 @@ namespace GameLogic
                 if (passive.CycleAction == AttackCycleAction.ReplaceBullet &&
                     (row.CycleBulletId <= 0 || !catalog.TryGetBullet(row.CycleBulletId, out _)))
                     throw new InvalidOperationException("攻击周期缺少替换弹丸：" + row.Id);
-                if (passive.CycleAction == AttackCycleAction.CastSkill && row.CycleBulletId != 0)
+                if ((passive.CycleAction == AttackCycleAction.CastSkill || passive.CycleAction == AttackCycleAction.ReplaceSkill) && row.CycleBulletId != 0)
                     throw new InvalidOperationException("释放子技能的周期不应配置替换弹丸：" + row.Id);
             }
             if ((row.CycleBulletId != 0 && catalog.TryGetBullet(row.CycleBulletId, out var replacement) &&
                 replacement.BehaviorKey == "chain") || row.ChainTargetCount != 0)
             {
-                if (row.AttackCycleCount < 1 || row.ChainTargetCount < 1 ||
+                var chainId = skill.TimelineKey == "robot.chain" ? skill.BulletId : row.CycleBulletId;
+                if (row.ChainTargetCount < 1 ||
                     !EntityValidation.IsFiniteNonNegative(row.ChainRange) || row.ChainRange <= 0f ||
                     !EntityValidation.IsFiniteNonNegative(row.ChainDamageRatio) || row.ChainDamageRatio <= 0f || row.ChainDamageRatio > 1f ||
-                    !catalog.TryGetBullet(row.CycleBulletId, out var chain) || chain.BehaviorKey != "chain" ||
-                    !catalog.TryGetBullet(skill.BulletId, out var normal) || normal.BehaviorKey != "direct" ||
-                    !string.Equals(chain.Prefab, normal.Prefab, StringComparison.Ordinal))
+                    !catalog.TryGetBullet(chainId, out var chain) || chain.BehaviorKey != "chain")
                     throw new InvalidOperationException("攻击循环参数或替换弹丸配置无效：" + row.Id);
             }
+            if (skill.TimelineKey == "robot.chain" && (row.ChainTargetCount < 1 ||
+                !EntityValidation.IsFiniteNonNegative(row.CastWindup) || row.CastWindup <= 0f))
+                throw new InvalidOperationException("闪电链需要有效人数与施法前摇：" + row.Id);
         }
 
         private static IReadOnlyList<CombatBuffApplication> CaptureSlowBuff(int buffId, IReadOnlyDictionary<string, float> parameters)

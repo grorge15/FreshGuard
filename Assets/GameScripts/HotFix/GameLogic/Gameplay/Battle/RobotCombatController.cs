@@ -48,6 +48,7 @@ namespace GameLogic
         {
             internal RobotEntity Robot;
             internal RobotView View;
+            internal RobotCastAnimationView CastAnimation;
             internal readonly Dictionary<(int SkillId, string Prefab), ProjectilePool> Pools = new Dictionary<(int, string), ProjectilePool>();
             internal CancellationTokenSource Cancellation;
         }
@@ -141,6 +142,8 @@ namespace GameLogic
                 await _staffs.PrepareAsync(catalog, linked.Token);
             }
             _context.Battle.Timelines.RegisterAction("robot.bullet", new RobotBulletAction(this));
+            _context.Battle.Timelines.RegisterAction("robot.cast.animation", new CastAnimationAction(this));
+            _context.Battle.Timelines.RegisterFactory("robot.chain", CreateChainTimeline);
             _context.Battle.Timelines.RegisterAction("robot.burst.shot", new BurstBulletAction(this));
             _context.Battle.Timelines.RegisterAction("robot.juice.drops", new JuiceBulletAction(this));
             _context.Battle.Timelines.Register(new TimelineModel("robot.juice", 0f,
@@ -173,7 +176,7 @@ namespace GameLogic
                 if (_reserves.TryGetValue(pair.Key, out var existing)) { existing.View = view; continue; }
                 if (robot.Location != RobotLocation.Board || !_context.Battle.Catalog.TryGet(robot.SkillId, out _)) continue;
                 robot.InitializeCombat(_context.BattleId);
-                var reserve = new Reserve { Robot = robot, View = view,
+                var reserve = new Reserve { Robot = robot, View = view, CastAnimation = view.GetComponent<RobotCastAnimationView>(),
                     Cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token) };
                 _reserves.Add(pair.Key, reserve);
                 PrepareSkillPools(reserve, robot.SkillId);
@@ -188,6 +191,7 @@ namespace GameLogic
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!IsRunning) return;
+            foreach (var reserve in _reserves.Values.ToArray()) reserve.CastAnimation?.Advance(deltaTime);
             // 先推进已有表现，本段命中新创建的闪电不额外消耗整段时间。
             foreach (var effect in _effects.ToArray())
             {
@@ -245,6 +249,35 @@ namespace GameLogic
             return _context.Battle.Skills.TryCast(new SkillCastRequest(robot.OwnerRef, robot.SkillId,
                 SkillTriggerSource.Contact, SkillTarget.Entity(robot.Side, target.Value, aimPoint)),
                 () => robot.TryConsumeAttackTrigger(robot.Configuration.MinTriggerInterval)).Accepted;
+        }
+
+        private sealed class CastAnimationAction : ISingleUseTimelineAction, IReleasableTimelineAction
+        {
+            private readonly RobotCombatController _controller;
+            internal CastAnimationAction(RobotCombatController controller) { _controller = controller; }
+            public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute) =>
+                TryPrepare(cast, node, out execute, out _);
+            public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute, out Action release)
+            {
+                execute = null; release = null;
+                if (!cast.Owner.EntityId.HasValue || !_controller._reserves.TryGetValue(cast.Owner.EntityId.Value, out var reserve) ||
+                    reserve.CastAnimation == null || !reserve.CastAnimation.IsPrepared) return false;
+                var view = reserve.CastAnimation;
+                execute = () => { if (view != null) view.Play(cast, cast.Get("castWindup")); };
+                release = () => { if (view != null) view.Stop(cast); };
+                return true;
+            }
+        }
+
+        private static TimelineModel CreateChainTimeline(SkillCastSnapshot cast)
+        {
+            var windup = cast.Get("castWindup");
+            if (!EntityValidation.IsFiniteNonNegative(windup) || windup <= 0f) return null;
+            return new TimelineModel(cast.TimelineKey, windup, new[]
+            {
+                new TimelineNode(0f, "robot.cast.animation"),
+                new TimelineNode(windup, "robot.bullet")
+            });
         }
 
         private sealed class RobotBulletAction : ISingleUseTimelineAction, IReleasableTimelineAction
