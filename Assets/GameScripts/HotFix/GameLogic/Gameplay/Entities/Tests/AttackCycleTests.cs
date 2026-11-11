@@ -12,12 +12,19 @@ namespace GameLogic.Tests
     public sealed class AttackCycleTests
     {
         [Test]
-        public void ReplacementUsesConfiguredSkillAndCountsAcceptanceBeforeTimeline()
+        public void CountingBuffContractDoesNotExposeSelectableCycleActions()
+        {
+            Assert.IsNull(typeof(GameConfig.buff.Buff).GetField("CycleAction"), "源表不再选择周期动作");
+            Assert.IsNull(typeof(BuffModel).GetProperty("CycleAction"));
+            Assert.IsNull(typeof(BuffModel).Assembly.GetType("GameLogic.AttackCycleAction"));
+        }
+
+        [Test]
+        public void CounterOnlyCountsConfiguredSkillAndQueuesAnIndependentChild()
         {
             using (var battle = new BattleRuntime(81))
             {
-                var catalog = Catalog(new BuffModel(91, "attack_cycle", countSkillId: 801,
-                    cycleAction: AttackCycleAction.ReplaceBullet));
+                var catalog = Catalog(new BuffModel(91, "attack_cycle", triggerSkillId: 802, countSkillId: 801));
                 catalog.Add(new SkillModel(899, SkillType.Robot, "test", 1, 0, SkillTargetRule.None));
                 catalog.Add(new SkillLevelModel(899, 1, new Dictionary<string, float>()));
                 battle.Configure(catalog);
@@ -30,7 +37,11 @@ namespace GameLogic.Tests
                 Assert.IsTrue(Cast(battle, robot, 899).Accepted);
                 Assert.AreEqual(1, counter.AttackCount);
                 Assert.IsTrue(Cast(battle, robot, 801).Accepted);
-                Assert.AreEqual(991, emitted.Casts.Last().BulletId);
+                Assert.AreEqual(801, emitted.Casts.Last().SkillId);
+                Assert.AreEqual(2, counter.AttackCount);
+                Assert.AreEqual(1, battle.TriggeredSkills.Count);
+                battle.TriggeredSkills.Process();
+                Assert.AreEqual(802, emitted.Casts.Last().SkillId);
                 Assert.AreEqual(0, counter.AttackCount);
                 Assert.AreEqual(990, Get(catalog, 801).BulletId, "不能修改共享技能配置");
             }
@@ -42,8 +53,8 @@ namespace GameLogic.Tests
             using (var battle = new BattleRuntime(82))
             {
                 var catalog = Catalog(
-                    new BuffModel(91, "attack_cycle", triggerSkillId: 802, countSkillId: 801, cycleAction: AttackCycleAction.CastSkill),
-                    new BuffModel(92, "attack_cycle", triggerSkillId: 802, countSkillId: 801, cycleAction: AttackCycleAction.CastSkill));
+                    new BuffModel(91, "attack_cycle", triggerSkillId: 802, countSkillId: 801),
+                    new BuffModel(92, "attack_cycle", triggerSkillId: 802, countSkillId: 801));
                 battle.Configure(catalog);
                 var action = Register(battle); var robot = Robot(battle);
                 Assert.IsTrue(Cast(battle, robot, 801).Accepted);
@@ -70,8 +81,8 @@ namespace GameLogic.Tests
             using (var battle = new BattleRuntime(83))
             {
                 battle.Configure(Catalog(
-                    new BuffModel(91, "attack_cycle", triggerSkillId: 802, countSkillId: 801, cycleAction: AttackCycleAction.CastSkill),
-                    new BuffModel(92, "attack_cycle", triggerSkillId: 802, countSkillId: 801, cycleAction: AttackCycleAction.CastSkill)));
+                    new BuffModel(91, "attack_cycle", triggerSkillId: 802, countSkillId: 801),
+                    new BuffModel(92, "attack_cycle", triggerSkillId: 802, countSkillId: 801)));
                 var action = Register(battle); var robot = Robot(battle);
                 Cast(battle, robot, 801); Cast(battle, robot, 801);
                 robot.Buffs.Remove(robot.Buffs.Items.Single(b => b.Model.Id == 91));
@@ -88,7 +99,7 @@ namespace GameLogic.Tests
             using (var battle = new BattleRuntime(85))
             {
                 battle.Configure(Catalog(new BuffModel(91, "attack_cycle", triggerSkillId: 802,
-                    countSkillId: 801, cycleAction: AttackCycleAction.CastSkill)));
+                    countSkillId: 801)));
                 Register(battle); var robot = Robot(battle);
                 Assert.AreEqual(SkillCastFailure.Cancelled, Cast(battle, robot, 802).Failure);
                 Assert.AreEqual(0, Counter(robot, 91).AttackCount);
@@ -101,7 +112,7 @@ namespace GameLogic.Tests
             using (var battle = new BattleRuntime(84))
             {
                 var catalog = Catalog(new BuffModel(91, "attack_cycle", triggerSkillId: 802,
-                    countSkillId: 801, cycleAction: AttackCycleAction.CastSkill), target: SkillTargetRule.SameSideEnemy);
+                    countSkillId: 801), target: SkillTargetRule.SameSideEnemy);
                 battle.Configure(catalog); var action = Register(battle); var robot = Robot(battle);
                 var enemy = battle.Registry.CreateEnemy(2001, BattleSide.Player, 100, 1);
                 var target = SkillTarget.Entity(BattleSide.Player, enemy, Vector3.right);
@@ -121,7 +132,7 @@ namespace GameLogic.Tests
             using (var battle = new BattleRuntime(86))
             {
                 battle.Configure(Catalog(new BuffModel(91, "attack_cycle", triggerSkillId: 802,
-                    countSkillId: 801, cycleAction: AttackCycleAction.CastSkill), target: SkillTargetRule.SameSideEnemy));
+                    countSkillId: 801), target: SkillTargetRule.SameSideEnemy));
                 var action = Register(battle); var robot = Robot(battle);
                 var enemy = battle.Registry.CreateEnemy(2001, BattleSide.Player, 100, 1);
                 var target = SkillTarget.Entity(BattleSide.Player, enemy);
@@ -148,7 +159,7 @@ namespace GameLogic.Tests
                 var buff = tables.TbBuff.Get(pair.Item1);
                 Assert.AreEqual("attack_cycle", buff.BehaviorKey);
                 Assert.AreEqual(pair.Item2, buff.CountSkillId);
-                Assert.AreEqual(pair.Item1 == 2602 ? "replace_skill" : pair.Item1 == 2604 ? "enhance_attack" : "cast_skill", buff.CycleAction);
+                Assert.Greater(buff.TriggerSkillId, 0);
                 for (var level = 1; level <= 5; level++)
                     Assert.AreEqual(pair.Item3, tables.TbSkillLevel.Get(pair.Item2 * 100 + level).AttackCycleCount);
             }
@@ -159,7 +170,6 @@ namespace GameLogic.Tests
 
         [TestCase("CountSkillId", 0)]
         [TestCase("CountSkillId", 1605)]
-        [TestCase("CycleAction", "unknown")]
         [TestCase("TriggerSkillId", 1603)]
         public void InvalidCycleConfigurationRejectsBeforeCombat(string field, object value)
         {
@@ -176,7 +186,7 @@ namespace GameLogic.Tests
             catalog.Add(first); if (second != null) catalog.Add(second);
             catalog.Add(new SkillModel(801, SkillType.Robot, "test", 1, 0, target,
                 second == null ? new[] { first.Id } : new[] { first.Id, second.Id }, 990));
-            catalog.Add(new SkillLevelModel(801, 1, new Dictionary<string, float> { { "attackCycleCount", 2 }, { "cycleBulletId", 991 } }));
+            catalog.Add(new SkillLevelModel(801, 1, new Dictionary<string, float> { { "attackCycleCount", 2 } }));
             catalog.Add(new SkillModel(802, SkillType.Robot, "test", 1, 0, target));
             catalog.Add(new SkillLevelModel(802, 1, new Dictionary<string, float>()));
             return catalog;

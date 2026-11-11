@@ -123,7 +123,7 @@ namespace GameLogic.Tests
             internal Fixture()
             {
                 var catalog = new SkillCatalog();
-                catalog.Add(new BuffModel(2601, "attack_cycle", triggerSkillId: 1604, countSkillId: 1603, cycleAction: AttackCycleAction.CastSkill));
+                catalog.Add(new BuffModel(2601, "attack_cycle", triggerSkillId: 1604, countSkillId: 1603));
                 catalog.Add(new SkillModel(1603, SkillType.NormalAttack, "test", 5, 0, SkillTargetRule.None, new[] { 2601 }));
                 catalog.Add(new SkillModel(1604, SkillType.Robot, "test", 5, 0, SkillTargetRule.SameSidePosition));
                 for (var i = 1; i <= 5; i++)

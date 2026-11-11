@@ -8,43 +8,45 @@ namespace GameLogic.Tests
     public sealed class ChainCycleTests
     {
         [Test]
-        public void ReplacedSkillOwnsItsTimelineLevelAndParametersWithoutSecondCast()
+        public void ChildSkillOwnsItsTimelineLevelAndParametersAfterFifthNormalAttack()
         {
-            using (var f = new Fixture(replaceSkill: true))
+            using (var f = new Fixture())
             {
-                for (var i = 0; i < 4; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
-                Assert.IsTrue(f.Cast(f.First).Accepted);
-                var fifth = f.Action.LastPrepared;
-                Assert.AreEqual(1600, fifth.SkillId);
-                Assert.AreEqual(3600, fifth.BulletId);
-                Assert.AreEqual(45, fifth.Get("damage"), "参数取子技能，不沿用普攻");
-                Assert.AreEqual(4, f.Action.Executed.Count);
+                for (var i = 0; i < 5; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
+                Assert.AreEqual(5, f.Action.Executed.Count);
+                Assert.AreEqual(1605, f.Action.Executed.Last().SkillId);
+                f.Battle.TriggeredSkills.Process();
+                var child = f.Action.LastPrepared;
+                Assert.AreEqual(1600, child.SkillId);
+                Assert.AreEqual(3600, child.BulletId);
+                Assert.AreEqual(45, child.Get("damage"));
                 Assert.AreEqual(SkillCastFailure.Busy, f.Cast(f.First).Failure);
                 Assert.IsTrue(f.First.TryUpgrade());
                 f.Battle.Timelines.Advance(.25f);
-                Assert.AreEqual(5, f.Action.Executed.Count);
-                Assert.AreEqual(1, fifth.Level);
-                Assert.AreEqual(45, fifth.Get("damage"));
+                Assert.AreEqual(6, f.Action.Executed.Count);
+                Assert.AreEqual(1, child.Level);
+                Assert.AreEqual(45, child.Get("damage"));
                 Assert.AreEqual(0, f.Counter(f.First).AttackCount);
             }
         }
 
         [Test]
-        public void ReplacementCooldownAndReservationFailureDoNotConsumeFifth()
+        public void ChildCooldownAndReservationFailureKeepFullChargeForRetry()
         {
-            using (var f = new Fixture(replaceSkill: true))
+            using (var f = new Fixture())
             {
-                for (var i = 0; i < 4; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
+                for (var i = 0; i < 5; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
                 Assert.IsTrue(f.First.Skills.TryGet(1600, out var child));
                 child.CooldownRemaining = 1;
-                Assert.AreEqual(SkillCastFailure.Cooldown, f.Cast(f.First).Failure);
-                Assert.AreEqual(4, f.Counter(f.First).AttackCount);
+                f.Battle.TriggeredSkills.Process();
+                Assert.AreEqual(5, f.Counter(f.First).AttackCount);
+                Assert.IsTrue(f.Counter(f.First).Pending);
                 child.CooldownRemaining = 0;
                 f.Action.Prepared = false;
-                Assert.AreEqual(SkillCastFailure.NotPrepared, f.Cast(f.First).Failure);
-                Assert.AreEqual(4, f.Counter(f.First).AttackCount);
+                f.Battle.TriggeredSkills.Process();
+                Assert.AreEqual(5, f.Counter(f.First).AttackCount);
                 f.Action.Prepared = true;
-                Assert.IsTrue(f.Cast(f.First).Accepted);
+                f.Battle.TriggeredSkills.Process();
                 f.Battle.Timelines.Advance(.25f);
                 Assert.AreEqual(1600, f.Action.Executed.Last().SkillId);
                 Assert.AreEqual(0, f.Counter(f.First).AttackCount);
@@ -57,8 +59,9 @@ namespace GameLogic.Tests
             using (var f = new Fixture())
             {
                 f.Action.Launch = cast => { };
-                for (var i = 0; i < 10; i++) Assert.IsTrue(f.Cast(f.First).Accepted);
-                CollectionAssert.AreEqual(new[] { 3605, 3605, 3605, 3605, 3600, 3605, 3605, 3605, 3605, 3600 },
+                for (var i = 0; i < 10; i++)
+                { Assert.IsTrue(f.Cast(f.First).Accepted); f.Battle.TriggeredSkills.Process(); f.Battle.Timelines.Advance(.25f); }
+                CollectionAssert.AreEqual(new[] { 3605, 3605, 3605, 3605, 3605, 3600, 3605, 3605, 3605, 3605, 3605, 3600 },
                     f.Action.Executed.Select(c => c.BulletId));
                 Assert.AreEqual(0, f.Counter(f.First).AttackCount);
             }
@@ -123,6 +126,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(4, original.AttackCount);
                 Assert.AreEqual(1, f.Counter(second).AttackCount);
                 Assert.IsTrue(f.Cast(f.First).Accepted);
+                f.Battle.TriggeredSkills.Process(); f.Battle.Timelines.Advance(.25f);
                 Assert.AreEqual(3600, f.Action.Executed.Last().BulletId);
                 Assert.IsTrue(f.Cast(second).Accepted);
                 Assert.AreEqual(3605, f.Action.Executed.Last().BulletId);
@@ -140,7 +144,8 @@ namespace GameLogic.Tests
                 Assert.IsTrue(f.First.TryUpgrade());
                 Assert.AreEqual(3, f.Counter(f.First).AttackCount);
                 Assert.IsTrue(f.Cast(f.First).Accepted);
-                Assert.AreEqual(3600, f.Action.Executed.Last().BulletId, "二级周期为4，应沿用之前已发射的三次");
+                f.Battle.TriggeredSkills.Process(); f.Battle.Timelines.Advance(.25f);
+                Assert.AreEqual(3600, f.Action.Executed.Last().BulletId, "二级周期为4，应沿用之前已接受的三次");
                 Assert.AreEqual(0, f.Counter(f.First).AttackCount);
             }
         }
@@ -191,18 +196,14 @@ namespace GameLogic.Tests
             internal readonly RobotEntity First;
             internal readonly LaunchAction Action = new LaunchAction();
             private readonly BuffModel _passive;
-            internal Fixture(bool delayed = false, bool replaceSkill = false)
+            internal Fixture(bool delayed = false)
             {
                 var catalog = new SkillCatalog();
-                _passive = new BuffModel(2602, "attack_cycle", triggerSkillId: replaceSkill ? 1600 : 0,
-                    countSkillId: 1605, cycleAction: replaceSkill ? AttackCycleAction.ReplaceSkill : AttackCycleAction.ReplaceBullet);
+                _passive = new BuffModel(2602, "attack_cycle", triggerSkillId: 1600, countSkillId: 1605);
                 catalog.Add(_passive);
-                if (replaceSkill)
-                {
-                    catalog.Add(new SkillModel(1600, SkillType.Robot, "chain", 5, 0, SkillTargetRule.None, bulletId: 3600));
-                    catalog.Add(new SkillLevelModel(1600, 1, new Dictionary<string, float> { { "damage", 45 } }));
-                    catalog.Add(new SkillLevelModel(1600, 2, new Dictionary<string, float> { { "damage", 65 } }));
-                }
+                catalog.Add(new SkillModel(1600, SkillType.Robot, "chain", 5, 0, SkillTargetRule.None, bulletId: 3600));
+                catalog.Add(new SkillLevelModel(1600, 1, new Dictionary<string, float> { { "damage", 45 } }));
+                catalog.Add(new SkillLevelModel(1600, 2, new Dictionary<string, float> { { "damage", 65 } }));
                 catalog.Add(new SkillModel(1605, SkillType.Robot, "test", 5, 0, SkillTargetRule.None,
                     new[] { 2602 }, 3605));
                 catalog.Add(new SkillLevelModel(1605, 1, Parameters(5, 20)));
@@ -216,7 +217,7 @@ namespace GameLogic.Tests
                 First = Robot();
             }
             private static Dictionary<string, float> Parameters(int cycle, int damage) =>
-                new Dictionary<string, float> { { "attackCycleCount", cycle }, { "cycleBulletId", 3600 }, { "damage", damage } };
+                new Dictionary<string, float> { { "attackCycleCount", cycle }, { "damage", damage } };
             internal RobotEntity Robot()
             {
                 var robot = Battle.Registry.CreateRobot(701, BattleSide.Player, 1, 1605);

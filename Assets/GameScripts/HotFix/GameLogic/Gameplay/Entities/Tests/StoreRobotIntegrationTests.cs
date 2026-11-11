@@ -18,25 +18,25 @@ namespace GameLogic.Tests
         [TearDown] public void Clear() { _combat?.Dispose(); _combat = null; _f?.Dispose(); _f = null; _views.Clear(); }
 
         [Test]
-        public void TwoCyclesEmitTenShotsAndOnlyFifthAndTenthCarryIsolation()
+        public void TwoCyclesKeepTenNormalShotsAndAddTwoIsolationShots()
         {
             Prepare(); var robot = AddRobot(); var ordinary = 0; var special = 0;
             for (var i = 0; i < 10; i++)
             {
                 var emitted = Shoot(robot);
-                Assert.AreEqual(1, emitted.Length, "每次攻击都只能发射一枚子弹");
+                Assert.AreEqual(i % 5 == 4 ? 2 : 1, emitted.Length);
                 ordinary += emitted.Count(s => s.Action.SkillId == 1607);
                 special += emitted.Count(s => s.Action.HitBuffs.Any(b => b.BuffId == 2600));
                 foreach (var shot in emitted)
                 {
-                    Assert.AreEqual(20, shot.Action.BaseDamage, "强化弹保留普通攻击伤害");
-                    Assert.AreEqual(i % 5 == 4, shot.Action.HitBuffs.Any(b => b.BuffId == 2600));
+                    Assert.AreEqual(shot.Action.SkillId == 1607 ? 20 : 0, shot.Action.BaseDamage);
+                    Assert.AreEqual(shot.Action.SkillId == 1602, shot.Action.HitBuffs.Any(b => b.BuffId == 2600));
                     Assert.AreEqual(0, shot.Elapsed);
                 }
             }
             Assert.AreEqual(10, ordinary); Assert.AreEqual(2, special);
             Assert.AreEqual(0, Counter(robot).AttackCount);
-            Assert.AreEqual(0, _f.Context.Battle.TriggeredSkills.Count, "强化普攻不排队额外发射");
+            Assert.AreEqual(0, _f.Context.Battle.TriggeredSkills.Count, "子技能已接受，待释放队列清空");
         }
 
         [Test]
@@ -63,7 +63,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void FifthProjectileKeepsAttackDamageAndFrozenIsolationAfterUpgrade()
+        public void AdditionalIsolationProjectileUsesChildDamageAndFrozenDurationAfterUpgrade()
         {
             Prepare(tables =>
             {
@@ -74,14 +74,14 @@ namespace GameLogic.Tests
             Assert.IsTrue(robot.TryUpgrade()); Assert.AreEqual(2, Counter(robot).AttackCount);
             Assert.IsTrue(robot.Skills.TryGet(1602, out var child)); Assert.AreEqual(2, child.Level);
             Shoot(robot); Shoot(robot);
-            var shot = Shoot(robot).Single();
+            var shot = Shoot(robot).Single(b => b.Action.SkillId == 1602);
             Assert.AreEqual(3, shot.Action.HitBuffs.Single(b => b.BuffId == 2600).Duration);
             var view = _f.PlayerView; _f.Context.Registry.TryGet(view.InstanceId, out var target);
             var enemy = (EnemyEntity)target; var hp = enemy.CurrentHp;
             robot.TryUpgrade();
             // 单独推进装盒弹，避免先前测试发出的普通弹改变受击目标。
             shot.Advance(0.45f);
-            Assert.AreEqual(hp - 30, enemy.CurrentHp); Assert.IsTrue(enemy.IsIsolated);
+            Assert.AreEqual(hp, enemy.CurrentHp); Assert.IsTrue(enemy.IsIsolated);
             Assert.AreEqual(3, enemy.Buffs.Items.Single(b => b.Model.Id == 2600).Remaining);
         }
 
@@ -95,8 +95,8 @@ namespace GameLogic.Tests
             Assert.IsFalse(_combat.TryAttackFromContact(_f.Context.BattleId, robot.Side, robot.InstanceId));
             Assert.AreEqual(4, Counter(robot).AttackCount); CollectionAssert.AreEquivalent(before, States());
             robot.Buffs.Remove(robot.Buffs.Items.Single(b => b.Model.Id == 999));
-            var fifth = Shoot(robot).Single();
-            Assert.AreEqual(20, fifth.Action.BaseDamage);
+            var fifth = Shoot(robot).Single(b => b.Action.SkillId == 1602);
+            Assert.AreEqual(0, fifth.Action.BaseDamage);
             Assert.AreEqual(2600, fifth.Action.HitBuffs.Single().BuffId);
             Assert.AreEqual(0, Counter(robot).AttackCount);
             Assert.IsEmpty(Shoot(robot).Single().Action.HitBuffs);
@@ -154,6 +154,7 @@ namespace GameLogic.Tests
         {
             _f.Context.Registry.AdvanceTime(1); var before = States();
             Assert.IsTrue(_combat.TryAttackFromContact(_f.Context.BattleId, robot.Side, robot.InstanceId));
+            _f.Context.Battle.TriggeredSkills.Process();
             return States().Except(before).ToArray();
         }
         private BulletState[] States() => _f.Root.GetComponentsInChildren<RobotBulletView>()
