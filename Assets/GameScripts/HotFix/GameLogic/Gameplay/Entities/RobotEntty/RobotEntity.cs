@@ -22,6 +22,7 @@ namespace GameLogic
         public float TriggerCooldownRemaining { get; private set; }
         public bool CanParticipate => !IsRemoved && Location == RobotLocation.Board && !IsDragging;
         public override bool CanCast => CanParticipate;
+        internal virtual bool UsesProjectileAttackCycle => false;
 
         protected internal RobotEntity(int instanceId, int configId, BattleSide side, int shapeId, int skillId,
             int level, int maxLevel)
@@ -82,8 +83,20 @@ namespace GameLogic
             ActionVersion++;
             Level++;
             Skills.SyncRobotLevel(Level);
+            if (UsesProjectileAttackCycle)
+                foreach (var buff in Buffs.Items)
+                    if (buff.Model.CountSkillId == SkillId && buff.Behavior is AttackCycleBuffBehavior cycle)
+                        cycle.Reset(Buffs, buff);
             TriggerCooldownRemaining = 0f;
             return true;
+        }
+
+        internal void NotifyAttackLaunched(SkillCastSnapshot cast)
+        {
+            if (!UsesProjectileAttackCycle || IsRemoved || !OwnerRef.Equals(cast.Owner) ||
+                cast.SkillId != SkillId || cast.Level != Level) return;
+            foreach (var buff in Buffs.Items)
+                if (buff.Behavior is AttackCycleBuffBehavior cycle) cycle.OnProjectileLaunched(Buffs, buff, cast);
         }
 
         internal bool TryConsumeAttackTrigger(float protectionSeconds)
