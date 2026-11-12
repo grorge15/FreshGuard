@@ -24,17 +24,23 @@ namespace GameLogic.Tests
         }
 
         [TestCase(2001, "SkeletonEnemy", 1, 100)]
-        [TestCase(2001, "SkeletonEnemy", 2, 220)]
+        [TestCase(2001, "SkeletonEnemy", 2, 115)]
+        [TestCase(2001, "SkeletonEnemy", 10, 235)]
+        [TestCase(2001, "SkeletonEnemy", 11, 250)]
+        [TestCase(2001, "SkeletonEnemy", 20, 385)]
+        [TestCase(2001, "SkeletonEnemy", 21, 400)]
         [TestCase(2002, "EliteSkeletonEnemy", 1, 350)]
-        [TestCase(2002, "EliteSkeletonEnemy", 2, 770)]
+        [TestCase(2002, "EliteSkeletonEnemy", 2, 403)]
         [TestCase(2003, "SkeletonBossEnemy", 1, 1800)]
-        [TestCase(2003, "SkeletonBossEnemy", 2, 3960)]
-        public void ConfigCreatesConcretePooledEnemyWithCycleHp(int configId, string expectedType, int cycle, int hp)
+        [TestCase(2003, "SkeletonBossEnemy", 20, 6930)]
+        public void ConfigCreatesConcretePooledEnemyWithWaveHp(int configId, string expectedType, int wave, int hp)
         {
             using (var registry = new BattleEntityRegistry())
             {
                 var config = _tables.TbEnemy.Get(configId);
-                var id = registry.CreateEnemyFromConfig(config, BattleSide.Opponent, cycle);
+                var cycle = (wave - 1) / 10 + 1;
+                var growth = _tables.TbGlobal.Get(53).Value;
+                var id = registry.CreateEnemyFromConfig(config, BattleSide.Opponent, cycle, wave, growth);
                 Entity entity;
                 Assert.IsTrue(registry.TryGet(id, out entity));
                 var enemy = (EnemyEntity)entity;
@@ -55,12 +61,13 @@ namespace GameLogic.Tests
                 Assert.AreEqual(usingCount - 1, PoolInfo(poolType).UsingMemoryCount);
                 Assert.IsFalse(registry.TryGet(id, out entity));
                 Assert.IsFalse(registry.Remove(id, EntityRemovalReason.Manual, out snapshot));
-                var reusedId = registry.CreateEnemyFromConfig(config, BattleSide.Player, cycle == 1 ? 2 : 1);
+                var reusedId = registry.CreateEnemyFromConfig(config, BattleSide.Player, 1, 1, growth);
                 Assert.IsTrue(registry.TryGet(reusedId, out entity));
                 var reused = (EnemyEntity)entity;
                 Assert.AreSame(config, reused.Configuration);
-                Assert.AreEqual(cycle == 1 ? 2 : 1, reused.Cycle);
-                Assert.AreEqual(reused.Cycle == 1 ? config.HpC1 : config.HpC2, reused.CurrentHp);
+                Assert.AreEqual(1, reused.Cycle);
+                Assert.AreEqual(1, reused.Wave);
+                Assert.AreEqual(config.Hp, reused.CurrentHp);
                 Assert.AreEqual(0f, reused.RouteProgress);
             }
         }
@@ -73,13 +80,31 @@ namespace GameLogic.Tests
                 var config = _tables.TbEnemy.Get(2001);
                 Assert.Throws<ArgumentNullException>(() => registry.CreateEnemyFromConfig(null, BattleSide.Player));
                 Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateEnemyFromConfig(config, BattleSide.Player, 0));
-                Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateEnemyFromConfig(config, BattleSide.Player, 3));
+                Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateEnemyFromConfig(config, BattleSide.Player, wave: 0));
+                foreach (var growth in new[] { -0.15f, float.NaN, float.PositiveInfinity, float.MaxValue })
+                    Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateEnemyFromConfig(
+                        config, BattleSide.Player, wave: 2, hpGrowthPerWave: growth));
                 Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateEnemyFromConfig(config, (BattleSide)99));
                 Assert.Throws<ArgumentException>(() => registry.CreateEnemyFromConfig(Config(9999), BattleSide.Player));
                 Assert.Throws<ArgumentOutOfRangeException>(() => registry.CreateEnemyFromConfig(Config(2001, float.NaN), BattleSide.Player));
                 Assert.AreEqual(1, registry.CreateEnemyFromConfig(config, BattleSide.Player));
                 registry.Dispose();
                 Assert.Throws<ObjectDisposedException>(() => registry.CreateEnemyFromConfig(config, BattleSide.Player));
+            }
+        }
+
+        [TestCase(2001, 0f, 20, 100)]
+        [TestCase(2001, 0.3f, 2, 130)]
+        [TestCase(2002, 0.35f, 2, 473)]
+        public void GrowthCanBeDisabledOrConfigured(int configId, float growth, int wave, int expectedHp)
+        {
+            using (var registry = new BattleEntityRegistry())
+            {
+                var id = registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(configId), BattleSide.Player,
+                    wave: wave, hpGrowthPerWave: growth);
+                registry.TryGet(id, out var entity);
+                Assert.AreEqual(expectedHp, ((EnemyEntity)entity).MaxHp);
+                Assert.AreEqual(wave, ((EnemyEntity)entity).Wave);
             }
         }
 
@@ -151,8 +176,9 @@ namespace GameLogic.Tests
         {
             var buffer = new ByteBuf();
             buffer.WriteInt(id); buffer.WriteString("Test"); buffer.WriteInt(1); buffer.WriteInt(1);
-            buffer.WriteString("SkeletonEnemy"); buffer.WriteInt(100); buffer.WriteInt(220); buffer.WriteFloat(speed);
+            buffer.WriteString("SkeletonEnemy"); buffer.WriteInt(100); buffer.WriteFloat(speed);
             buffer.WriteInt(1); buffer.WriteFloat(1f); buffer.WriteFloat(1f); buffer.WriteSize(0);
+            buffer.WriteFloat(0.3f);
             return new Enemy(buffer);
         }
 

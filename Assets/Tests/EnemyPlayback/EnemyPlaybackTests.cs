@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.IO;
+using System.Linq;
 using GameConfig;
 using Luban;
 using NUnit.Framework;
@@ -10,23 +11,31 @@ namespace GameLogic.Tests
 {
     public sealed class EnemyPlaybackTests
     {
-        [TestCase(2001)]
-        [TestCase(2002)]
-        [TestCase(2003)]
-        public void RuntimeLifecycleAndAnimationCompletionEvents(int configId)
+        [TestCase(2001, 1, 100)]
+        [TestCase(2002, 1, 350)]
+        [TestCase(2003, 1, 1800)]
+        [TestCase(2001, 11, 250)]
+        [TestCase(2002, 2, 403)]
+        [TestCase(2003, 20, 6930)]
+        public void RuntimeLifecycleAndAnimationCompletionEvents(int configId, int wave, int expectedHp)
         {
             Assert.IsTrue(Application.isPlaying, "此测试须使用 PlayMode 执行");
             var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
                 Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
             var config = tables.TbEnemy.Get(configId);
-            var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Enemy/Prefabs/" + config.EnemyPrefab + ".prefab"));
+            var prefabPath = AssetDatabase.FindAssets(config.EnemyPrefab + " t:Prefab")
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Single(path => Path.GetFileNameWithoutExtension(path) == config.EnemyPrefab);
+            var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath));
             using (var registry = new BattleEntityRegistry())
             {
                 try
                 {
                     var view = root.GetComponent<EnemyView>();
-                    var id = registry.CreateEnemyFromConfig(config, BattleSide.Player);
+                    var id = registry.CreateEnemyFromConfig(config, BattleSide.Player, (wave - 1) / 10 + 1,
+                        wave, tables.TbGlobal.Get(53).Value);
+                    registry.TryGet(id, out var entity);
+                    Assert.AreEqual(expectedHp, ((EnemyEntity)entity).CurrentHp);
                     view.Bind(registry, id);
                     var animator = root.GetComponent<Animator>();
                     animator.Update(0.3f);
@@ -43,7 +52,7 @@ namespace GameLogic.Tests
                     animator.Update(attackClip.length + 0.01f);
                     Assert.AreEqual("Move", view.AnimationState, "真实动画事件应恢复移动");
                     EntityRemovalSnapshot removal;
-                    registry.ApplyDamage(id, config.HpC1, out removal);
+                    registry.ApplyDamage(id, expectedHp, out removal);
                     Assert.IsTrue(view.PlayRemoval(removal));
                     var completions = 0;
                     view.RemovalAnimationCompleted += _ => completions++;

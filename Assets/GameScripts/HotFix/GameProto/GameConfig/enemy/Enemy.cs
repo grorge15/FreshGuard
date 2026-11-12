@@ -12,6 +12,9 @@ using Luban;
 
 namespace GameConfig.enemy
 {
+/// <summary>
+/// 敌人配置
+/// </summary>
 public sealed partial class Enemy : Luban.BeanBase
 {
     public Enemy(ByteBuf _buf) 
@@ -21,8 +24,7 @@ public sealed partial class Enemy : Luban.BeanBase
         EnemyType = _buf.ReadInt();
         EnemyKillSP = _buf.ReadInt();
         EnemyPrefab = _buf.ReadString();
-        HpC1 = _buf.ReadInt();
-        HpC2 = _buf.ReadInt();
+        Hp = _buf.ReadInt();
         EnemySpeed = _buf.ReadFloat();
         LeakDamage = _buf.ReadInt();
         ControlResist = _buf.ReadFloat();
@@ -57,13 +59,9 @@ public sealed partial class Enemy : Luban.BeanBase
     /// </summary>
     public readonly string EnemyPrefab;
     /// <summary>
-    /// Cycle1基础生命（1~10波）
+    /// 基础生命；按所属波次叠加Global53的生命成长
     /// </summary>
-    public readonly int HpC1;
-    /// <summary>
-    /// Cycle2基础生命（11~20波）
-    /// </summary>
-    public readonly int HpC2;
+    public readonly int Hp;
     /// <summary>
     /// 基础移动速度
     /// </summary>
@@ -104,8 +102,7 @@ public sealed partial class Enemy : Luban.BeanBase
         + "enemyType:" + EnemyType + ","
         + "enemyKillSP:" + EnemyKillSP + ","
         + "enemyPrefab:" + EnemyPrefab + ","
-        + "hpC1:" + HpC1 + ","
-        + "hpC2:" + HpC2 + ","
+        + "hp:" + Hp + ","
         + "enemySpeed:" + EnemySpeed + ","
         + "leakDamage:" + LeakDamage + ","
         + "controlResist:" + ControlResist + ","

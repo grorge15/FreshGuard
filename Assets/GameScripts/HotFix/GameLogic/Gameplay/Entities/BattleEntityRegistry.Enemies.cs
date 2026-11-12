@@ -6,12 +6,14 @@ namespace GameLogic
 {
     public sealed partial class BattleEntityRegistry
     {
-        public int CreateEnemyFromConfig(Enemy config, BattleSide side, int cycle = 1)
+        public int CreateEnemyFromConfig(Enemy config, BattleSide side, int cycle = 1,
+            int wave = 1, float hpGrowthPerWave = 0f)
         {
             ThrowIfDisposed();
             ValidateEnemyConfig(config);
             EntityValidation.RequireSide(side);
-            if (cycle != 1 && cycle != 2) throw new ArgumentOutOfRangeException(nameof(cycle));
+            if (cycle < 1) throw new ArgumentOutOfRangeException(nameof(cycle));
+            var maxHp = CalculateEnemyMaxHp(config.Hp, wave, hpGrowthPerWave);
             var instanceId = ReserveInstanceId();
             EnemyEntity enemy;
             switch (config.Id)
@@ -23,7 +25,7 @@ namespace GameLogic
             }
             try
             {
-                enemy.InitializeFromConfig(instanceId, config, side, cycle);
+                enemy.InitializeFromConfig(instanceId, config, side, cycle, wave, maxHp);
                 AddEntity(instanceId, enemy);
             }
             catch
@@ -38,8 +40,7 @@ namespace GameLogic
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             EntityValidation.RequirePositive(config.Id, nameof(config.Id));
-            EntityValidation.RequirePositive(config.HpC1, nameof(config.HpC1));
-            EntityValidation.RequirePositive(config.HpC2, nameof(config.HpC2));
+            EntityValidation.RequirePositive(config.Hp, nameof(config.Hp));
             EntityValidation.RequireFiniteNonNegative(config.EnemySpeed, nameof(config.EnemySpeed));
             EntityValidation.RequireFiniteNonNegative(config.HitRadius, nameof(config.HitRadius));
             if (config.EnemyType < 1 || config.EnemyType > 3) throw new ArgumentOutOfRangeException(nameof(config.EnemyType));
@@ -51,6 +52,19 @@ namespace GameLogic
             if (config.Id != SkeletonEnemy.CONFIG_ID && config.Id != EliteSkeletonEnemy.CONFIG_ID &&
                 config.Id != SkeletonBossEnemy.CONFIG_ID)
                 throw new ArgumentException("未注册对应敌人实体类型：" + config.Id, nameof(config));
+        }
+
+        internal static int CalculateEnemyMaxHp(int baseHp, int wave, float hpGrowthPerWave)
+        {
+            EntityValidation.RequirePositive(baseHp, nameof(baseHp));
+            EntityValidation.RequirePositive(wave, nameof(wave));
+            EntityValidation.RequireFiniteNonNegative(hpGrowthPerWave, nameof(hpGrowthPerWave));
+            if (wave == 1 || hpGrowthPerWave == 0f) return baseHp;
+            if (baseHp * (1d + (wave - 1d) * hpGrowthPerWave) > int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(hpGrowthPerWave), "敌人生命值超出整数范围。");
+            // 使用十进制计算，避免浮点误差改变 .5 的四舍五入结果。
+            var hp = baseHp * (1m + (wave - 1m) * (decimal)hpGrowthPerWave);
+            return checked((int)Math.Round(hp, 0, MidpointRounding.AwayFromZero));
         }
 
         private static void RequireRatio(float value, string name)
