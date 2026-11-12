@@ -57,6 +57,16 @@ namespace GameLogic
         public Camera GetSceneCamera(BattleSide side) => !_hasScreenViews ? _sceneCamera :
             side == BattleSide.Player ? _playerViewCamera : side == BattleSide.Opponent ? _opponentViewCamera : null;
 
+        public float GetScreenCellHeight(BattleSide side)
+        {
+            var board = side == BattleSide.Player ? _playerBoard : side == BattleSide.Opponent ? _enemyBoard : null;
+            var camera = GetSceneCamera(side);
+            if (board == null || camera == null) return 0f;
+            var bottom = camera.WorldToScreenPoint(board.transform.position);
+            var top = camera.WorldToScreenPoint(board.transform.TransformPoint(Vector3.up * board.CellSize));
+            return Mathf.Abs(top.y - bottom.y);
+        }
+
         public void SetScreenViews(Camera playerCamera, Rect playerRect, Camera opponentCamera, Rect opponentRect)
         {
             SetScreenInputRect(Rect.MinMaxRect(Mathf.Min(playerRect.xMin, opponentRect.xMin), playerRect.yMin,

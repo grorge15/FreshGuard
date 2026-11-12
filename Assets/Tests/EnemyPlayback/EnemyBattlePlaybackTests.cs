@@ -162,8 +162,16 @@ namespace GameLogic.Tests
                 var contact = RectTransformUtility.WorldToScreenPoint(camera,
                     ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
                 var center = RectTransformUtility.WorldToScreenPoint(camera, ghost.TransformPoint(ghost.rect.center));
-                Assert.That(Vector2.Distance(eventData.position, contact), Is.LessThan(1f));
+                var board = host.PlayerGlass.GetComponentInParent<PlacementBoardView>();
+                var boardCamera = host.Placement.GetSceneCamera(BattleSide.Player);
+                var expectedLift = Mathf.Abs(boardCamera.WorldToScreenPoint(board.GetCellWorldPosition(new BoardCoordinate(0, 2))).y -
+                    boardCamera.WorldToScreenPoint(board.GetCellWorldPosition(new BoardCoordinate(0, 0))).y);
+                Assert.Greater(expectedLift, 0f);
+                Assert.That(contact.x, Is.EqualTo(eventData.position.x).Within(1f));
+                Assert.That(contact.y - eventData.position.y, Is.EqualTo(expectedLift).Within(1f),
+                    "图标底边在原有触点上方额外抬高两格地块。");
                 Assert.Greater(center.y, contact.y);
+                var dragOffset = center - eventData.position;
                 host.SendMessage("LateUpdate");
                 yield return null;
                 Assert.AreEqual(shopPosition, shopRect.anchoredPosition);
@@ -178,7 +186,6 @@ namespace GameLogic.Tests
                 var sourceOffer = state.FindSlot(sourceSlot).Offer;
                 Assert.AreEqual(ShopOperationResult.Success, context.GetDragContent(BattleSide.Player,
                     context.ActiveInteraction.Source, out var config, out var level, out var shape));
-                var board = host.PlayerGlass.GetComponentInParent<PlacementBoardView>();
                 var anchor = default(BoardCoordinate);
                 var foundAnchor = false;
                 for (var column = 1; column < board.Model.Columns - shape.Width && !foundAnchor; column++)
@@ -214,7 +221,7 @@ namespace GameLogic.Tests
                 Assert.IsTrue(board.Model.Evaluate(anchor, shape).IsValid);
                 var target = (Vector2)host.Placement.GetSceneCamera(BattleSide.Player).WorldToScreenPoint(
                     board.transform.TransformPoint(board.GetCellLocalPosition(anchor) + (Vector3)((min + max) * 0.5f * board.CellSize)));
-                var releasePointer = target - (center - contact);
+                var releasePointer = target - dragOffset;
                 var coins = state.EnergyCoins;
                 // 松手位置可以比最后一条移动事件更新；按图标中心提交同一个格子。
                 shop.Drag.Release(-1, releasePointer);
@@ -234,7 +241,7 @@ namespace GameLogic.Tests
                 var secondOffer = state.FindSlot(second.SlotId).Offer;
                 shop.PressSlot(second.SlotId, -1, secondPoint, Time.unscaledTime);
                 shop.Drag.Move(-1, secondPoint + Vector2.right);
-                shop.Drag.Release(-1, secondPoint - (center - contact));
+                shop.Drag.Release(-1, secondPoint - dragOffset);
                 Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
                 Assert.AreSame(secondOffer, state.FindSlot(second.SlotId).Offer);
                 Assert.AreEqual(1, pulses.Count, "商品放回原位不算购买，不能震动。");
