@@ -3,13 +3,14 @@ using UnityEngine;
 
 namespace GameLogic
 {
-    /// <summary>反弹加速金色短尾、墙体火花与玻璃水滴；暂停时保留当前画面。</summary>
+    /// <summary>反弹加速短尾、普通撞击与暴走星芒；暂停时保留当前画面。</summary>
     [DisallowMultipleComponent]
     public sealed class BallImpactFeedback : MonoBehaviour
     {
         internal const int MaximumBursts = 16;
         internal const float GlassDuration = 0.20f;
         internal const float GlassHighlightDuration = 0.065f;
+        internal const float BerserkDuration = 0.28f;
         private const float FirstDropletDelay = 0.008f;
         private const int DropletCurveSamples = 8;
         private const float WallDuration = 0.24f;
@@ -25,6 +26,13 @@ namespace GameLogic
         private static readonly Color DropletGold = new Color32(244, 187, 64, 255);
         private static readonly Color DropletAmber = new Color32(193, 133, 36, 255);
         private static readonly Color DropletHighlight = new Color32(255, 232, 162, 255);
+        private static readonly Color BerserkGold = new Color32(255, 190, 34, 255);
+        private static readonly Color BerserkHot = new Color32(255, 248, 199, 255);
+        private static readonly Color BerserkOrange = new Color32(255, 127, 33, 255);
+        private static readonly Color BerserkPink = new Color32(255, 73, 149, 255);
+        private static readonly Color[] BerserkColors = { BerserkGold, BerserkOrange, BerserkPink,
+            new Color32(165, 107, 255, 255), new Color32(99, 239, 246, 255) };
+        private static readonly float[] BerserkRayLengths = { 57, 44, 59, 42, 53, 45, 55, 39 };
         private static readonly float[] WallAngles = { 164, 128, 53, 17 };
         private static readonly float[] WallLengths = { 13, 10, 14, 11 };
         private static readonly float[] WallDotAngles = { 147, 92, 25 };
@@ -44,7 +52,7 @@ namespace GameLogic
         {
             public Vector2 Point, Normal;
             public float Started, Unit;
-            public bool Glass;
+            public bool Glass, Berserk;
             public Vector2 DropletScales, DropletAngles;
             public float SecondDropletDelay;
         }
@@ -102,14 +110,20 @@ namespace GameLogic
 
         internal void PlayGlass(Vector2 point, Vector2 normal) => Play(point, normal, true);
         internal void PlayWall(Vector2 point, Vector2 normal) => Play(point, normal, false);
+        internal void PlayRobot(Vector2 point, Vector2 normal, bool enteringBerserk = false)
+        {
+            if (_ball != null && _ball.IsBerserk) Play(point, normal, false, enteringBerserk);
+        }
 
-        private void Play(Vector2 point, Vector2 normal, bool glass)
+        private void Play(Vector2 point, Vector2 normal, bool glass, bool enteringBerserk = false)
         {
             if (!IsReady || !_moving || !_ball.IsLaunched) return;
             if (_bursts.Count == MaximumBursts) _bursts.RemoveAt(0);
+            // 50 Combo触发瞬间保留原尺寸；后续机器人、墙体及玻璃碰撞缩小一半。
+            var scale = _ball.IsBerserk && !enteringBerserk ? 0.5f : 1f;
             var burst = new Burst { Point = point, Normal = normal.sqrMagnitude > 0.0001f ? normal.normalized : Vector2.up,
-                Started = _clock, Unit = _ball.WorldRadius / 14f, Glass = glass };
-            if (glass)
+                Started = _clock, Unit = _ball.WorldRadius / 14f * scale, Glass = glass, Berserk = _ball.IsBerserk };
+            if (glass && !burst.Berserk)
             {
                 // Cosmetic variations must not consume Unity's shared gameplay random stream.
                 var seed = unchecked((uint)GetInstanceID() * 747796405u + ++_glassSequence * 2891336453u);
@@ -139,7 +153,8 @@ namespace GameLogic
             if (!IsReady || !_moving) return;
             _clock += Mathf.Max(0f, deltaTime);
             for (var i = _bursts.Count - 1; i >= 0; i--)
-                if (_clock - _bursts[i].Started >= (_bursts[i].Glass ? GlassDuration : WallDuration)) _bursts.RemoveAt(i);
+                if (_clock - _bursts[i].Started >= (_bursts[i].Berserk ? BerserkDuration :
+                    _bursts[i].Glass ? GlassDuration : WallDuration)) _bursts.RemoveAt(i);
             var acceleration = _ball.BounceAccelerationProgress;
             if (!_berserk && acceleration > 0f)
             {
@@ -239,6 +254,7 @@ namespace GameLogic
 
         private void DrawBurst(Burst burst, float age)
         {
+            if (burst.Berserk) { DrawBerserkBurst(burst, age); return; }
             if (burst.Glass) { DrawGlassBurst(burst, age); return; }
             var duration = WallDuration;
             const float hold = 0.065f;
@@ -275,6 +291,100 @@ namespace GameLogic
                 Dot(burst.Point, 1.4f * u, WithAlpha(SparkHot, core));
             }
             if (age < 0.085f) Dot(burst.Point, 14f * u, WithAlpha(Gold, 0.52f * (1f - age / 0.085f)), true);
+        }
+
+        private static float EaseOut(float progress) => 1f - Mathf.Pow(1f - Mathf.Clamp01(progress), 3f);
+
+        private void DrawBerserkBurst(Burst burst, float age)
+        {
+            var progress = Mathf.Clamp01(age / BerserkDuration);
+            var expansion = EaseOut(progress);
+            var opacity = Mathf.Pow(1f - progress, 1.2f);
+            var growth = EaseOut(age / 0.065f);
+            // 与示意一致：以18像素球半径为尺度，星芒最大约为球直径的3倍。
+            var unit = burst.Unit * (14f / 18f);
+            Dot(burst.Point, (29f + expansion * 18f) * unit, WithAlpha(BerserkOrange, opacity * 0.38f), true);
+            DrawBerserkRing(burst.Point, (9f + expansion * 37f) * unit,
+                (3f * (1f - progress) + 0.8f) * unit, WithAlpha(BerserkPink, opacity * 0.65f));
+            for (var i = 0; i < BerserkRayLengths.Length; i++)
+            {
+                var angle = i * Mathf.PI / 4f + 0.12f;
+                DrawBerserkShard(burst.Point, angle, (6f + expansion * 15f) * unit,
+                    BerserkRayLengths[i] * growth * (1f - progress * 0.35f) * unit,
+                    (i % 2 == 0 ? 8f : 5f) * unit, WithAlpha(i % 2 == 0 ? BerserkGold : BerserkPink, opacity));
+                DrawBerserkShard(burst.Point, angle, (4f + expansion * 8f) * unit,
+                    BerserkRayLengths[i] * 0.57f * growth * unit, 2.6f * unit, WithAlpha(BerserkHot, opacity));
+            }
+            for (var i = 0; i < 9; i++)
+            {
+                var angle = i * 2.399f + 0.7f;
+                DrawBerserkShard(burst.Point, angle, (16f + expansion * (37f + i % 3 * 7f)) * unit,
+                    (8f * (1f - progress) + 3f) * unit, 2.5f * unit,
+                    WithAlpha(BerserkColors[i % BerserkColors.Length], opacity * 0.9f));
+            }
+            DrawBerserkCore(burst.Point, 21f * growth * (1f - progress * 0.65f) * unit, WithAlpha(BerserkHot, opacity));
+        }
+
+        private void DrawBerserkRing(Vector2 center, float radius, float width, Color color)
+        {
+            const int segments = 40;
+            var inner = Mathf.Max(0f, radius - width * 0.5f);
+            var outer = radius + width * 0.5f;
+            for (var i = 0; i < segments; i++)
+            {
+                var a = RadialDirection(i * Mathf.PI * 2f / segments);
+                var b = RadialDirection((i + 1) * Mathf.PI * 2f / segments);
+                _impacts.Quad(Local(center + a * inner), Local(center + a * outer),
+                    Local(center + b * outer), Local(center + b * inner), color, color);
+            }
+        }
+
+        private void DrawBerserkShard(Vector2 point, float angle, float distance, float length, float width, Color color)
+        {
+            const int samples = 8;
+            var direction = RadialDirection(angle);
+            var side = new Vector2(-direction.y, direction.x);
+            var center = point + direction * distance;
+            var start = new Vector2(-length * 0.52f, 0f);
+            var end = new Vector2(length * 0.55f, 0f);
+            for (var half = -1; half <= 1; half += 2)
+            {
+                var control = new Vector2(-length * 0.18f, width * half);
+                var previous = start;
+                for (var i = 1; i <= samples; i++)
+                {
+                    var next = Quadratic(start, control, end, (float)i / samples);
+                    _impacts.Triangle(Local(center), Local(center + direction * previous.x + side * previous.y),
+                        Local(center + direction * next.x + side * next.y), color);
+                    previous = next;
+                }
+            }
+        }
+
+        private void DrawBerserkCore(Vector2 point, float radius, Color color)
+        {
+            const int samples = 6;
+            for (var quarter = 0; quarter < 4; quarter++)
+            {
+                var start = RadialDirection(quarter * Mathf.PI * 0.5f) * radius;
+                var end = RadialDirection((quarter + 1) * Mathf.PI * 0.5f) * radius;
+                var control = (start + end) * 0.12f;
+                var previous = start;
+                for (var i = 1; i <= samples; i++)
+                {
+                    var next = Quadratic(start, control, end, (float)i / samples);
+                    _impacts.Triangle(Local(point), Local(point + previous), Local(point + next), color);
+                    previous = next;
+                }
+            }
+        }
+
+        private static Vector2 RadialDirection(float angle) => new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+
+        private static Vector2 Quadratic(Vector2 a, Vector2 b, Vector2 c, float t)
+        {
+            var remaining = 1f - t;
+            return remaining * remaining * a + 2f * remaining * t * b + t * t * c;
         }
 
         private void DrawGlassBurst(Burst burst, float age)
