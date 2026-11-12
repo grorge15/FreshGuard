@@ -19,7 +19,7 @@ namespace GameLogic.Tests
         public void SetUp()
         {
             _root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab"));
+                "Assets/AssetRaw/Actor/Prefabs/PhysicsPrefabs/PhysicalCollisionBall.prefab"));
             _ball = _root.GetComponent<PhysicalCollisionBall>();
             if (_root.GetComponent<BallImpactFeedback>() == null)
                 typeof(PhysicalCollisionBall).GetMethod("Awake", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(_ball, null);
@@ -105,6 +105,161 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, _feedback.ActiveBurstCount);
             Assert.AreEqual(0, _feedback.TrailPointCount);
             Assert.IsFalse(_root.GetComponentsInChildren<MeshRenderer>().Any(renderer => renderer.enabled));
+        }
+
+        [Test]
+        public void RobotStarRequiresBerserkAndRemainsAtContactThroughMotionAndPause()
+        {
+            var point = new Vector2(0.35f, 0.28f);
+            _feedback.PlayRobot(point, Vector2.left);
+            Assert.AreEqual(0, _feedback.ActiveBurstCount, "普通球接触机器人不能播放暴走星芒。");
+            _ball.SetBerserk(true);
+            var velocity = _ball.GetComponent<Rigidbody2D>().velocity;
+            var scale = _ball.transform.localScale;
+            _feedback.PlayRobot(point, Vector2.left);
+            _feedback.Advance(0.08f);
+            var node = _root.transform.Find("GoldenBallImpacts");
+            var mesh = node.GetComponent<MeshFilter>().sharedMesh;
+            var world = mesh.vertices.Select(node.TransformPoint).ToArray();
+            Assert.Greater(world.Length, 0);
+            Assert.IsTrue(mesh.colors32.Any(color => color.r > 240 && color.b > 100 && color.g < 100), "应包含示意中的粉色星芒。");
+            Assert.IsTrue(mesh.colors32.Any(color => color.r > 240 && color.g > 230 && color.b > 180), "应保留亮色内芯。");
+            Assert.IsTrue(world.All(vertex => Vector2.Distance(vertex, point) < _ball.WorldRadius * 4.1f));
+            _ball.transform.position += Vector3.right * 3f;
+            _feedback.Advance(0f);
+            var movedWorld = mesh.vertices.Select(node.TransformPoint).ToArray();
+            for (var i = 0; i < world.Length; i++)
+                Assert.Less(Vector3.Distance(world[i], movedWorld[i]), 0.00001f, "球离开后，星芒应留在世界接触点。");
+            var vertices = mesh.vertices;
+            var colors = mesh.colors32;
+            _ball.SetFrozen(true);
+            _feedback.Advance(10f);
+            CollectionAssert.AreEqual(vertices, mesh.vertices);
+            CollectionAssert.AreEqual(colors, mesh.colors32);
+            Assert.AreEqual(1, _feedback.ActiveBurstCount);
+            _ball.SetFrozen(false);
+            _feedback.Advance(BallImpactFeedback.BerserkDuration - 0.08f + 0.01f);
+            Assert.AreEqual(0, _feedback.ActiveBurstCount);
+            Assert.IsFalse(node.GetComponent<MeshRenderer>().enabled);
+            Assert.AreEqual(velocity, _ball.GetComponent<Rigidbody2D>().velocity);
+            Assert.AreEqual(scale, _ball.transform.localScale);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void BerserkWallAndGlassUseStarWithoutConsumingGameplayRandom(bool glass)
+        {
+            var saved = Random.state;
+            try
+            {
+                _ball.SetBerserk(true);
+                Random.InitState(97031);
+                var before = Random.state;
+                if (glass) _feedback.PlayGlass(Vector2.zero, Vector2.up);
+                else _feedback.PlayWall(Vector2.zero, Vector2.up);
+                _feedback.Advance(0.08f);
+                var mesh = _root.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh;
+                Assert.IsTrue(mesh.colors32.Any(color => color.b > color.r && color.b > color.g), "应有紫色碎光。");
+                var after = Random.value;
+                Random.state = before;
+                Assert.AreEqual(Random.value, after);
+                _feedback.Advance(0.17f);
+                Assert.AreEqual(1, _feedback.ActiveBurstCount, "暴走星芒不能沿用普通墙体或玻璃的较短寿命。");
+                _feedback.Advance(0.04f);
+                Assert.AreEqual(0, _feedback.ActiveBurstCount);
+            }
+            finally { Random.state = saved; }
+        }
+
+        [Test]
+        public void DenseBerserkStarsReuseMeshesAndStopReleasesAllBursts()
+        {
+            _ball.SetBerserk(true);
+            for (var i = 0; i < 100; i++) _feedback.PlayRobot(Vector2.right * i * 0.001f, Vector2.up);
+            _feedback.Advance(0.08f);
+            Assert.AreEqual(BallImpactFeedback.MaximumBursts, _feedback.ActiveBurstCount);
+            Assert.AreEqual(2, _root.GetComponentsInChildren<MeshFilter>(true).Length);
+            var mesh = _root.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh;
+            Assert.Less(mesh.vertexCount, ushort.MaxValue, "密集暴走碰撞也必须保持在移动端16位网格索引范围内。");
+            Assert.IsTrue(mesh.vertices.All(vertex => !float.IsNaN(vertex.x) && !float.IsNaN(vertex.y) &&
+                !float.IsInfinity(vertex.x) && !float.IsInfinity(vertex.y)));
+            _ball.Stop();
+            Assert.AreEqual(0, _feedback.ActiveBurstCount);
+            Assert.AreEqual(0, mesh.vertexCount);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void FiftiethContactPlaysOneStarAndBerserkStayPulsesRespectPause(bool triggerBeforeBounce)
+        {
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(Path.Combine(Application.dataPath,
+                "AssetRaw/Configs/bytes", name + ".bytes"))));
+            Assert.AreEqual(50, tables.TbGlobal.Get(10).Value);
+            var popups = new GameObject("BerserkStarTestPopups");
+            var robot = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/AssetRaw/Actor/Prefabs/Robots/RobotCannon.prefab"));
+            try
+            {
+                using (var registry = new BattleEntityRegistry())
+                {
+                    var view = robot.GetComponent<RobotView>();
+                    var entity = registry.CreateRobotFromConfig(tables.TbRobot.Get(view.ConfigId), BattleSide.Player);
+                    entity.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
+                    view.Bind(registry, entity.InstanceId);
+                    _ball.Stop();
+                    _ball.ConfigureFromTables(tables);
+                    _ball.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+                    _ball.BindCombo(registry, popups.transform);
+                    _ball.ComboThresholdReached += ball => ball.SetBerserk(true);
+                    _ball.LaunchAt(Vector2.one * 5f, 45f);
+                    Physics2D.SyncTransforms();
+                    var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                    var step = typeof(PhysicalCollisionBall).GetMethod("FixedUpdate", flags);
+                    var contact = typeof(PhysicalCollisionBall).GetMethod("ProcessRobotContact", flags);
+                    var point = new Vector2(0.13f, 0.24f);
+                    var args = new object[] { view, view.GetPhysicalCollider(), true, point, Vector2.up };
+                    for (var i = 0; i < 49; i++)
+                    {
+                        step.Invoke(_ball, null);
+                        contact.Invoke(_ball, args);
+                    }
+                    Assert.AreEqual(49, _ball.ComboCount);
+                    Assert.AreEqual(0, _feedback.ActiveBurstCount);
+                    step.Invoke(_ball, null);
+                    if (triggerBeforeBounce)
+                    {
+                        args[2] = false;
+                        contact.Invoke(_ball, args);
+                        args[2] = true;
+                    }
+                    contact.Invoke(_ball, args);
+                    Assert.IsTrue(_ball.IsBerserk);
+                    Assert.AreEqual(1, _feedback.ActiveBurstCount, "达到50 Combo的那次接触就要绽放。");
+                    var impacts = _root.transform.Find("GoldenBallImpacts");
+                    var mesh = impacts.GetComponent<MeshFilter>().sharedMesh;
+                    var activation = mesh.vertices.Select(impacts.TransformPoint).ToArray();
+                    var activationRadius = activation.Max(vertex => Vector2.Distance(vertex, point));
+                    contact.Invoke(_ball, args);
+                    Assert.AreEqual(1, _feedback.ActiveBurstCount, "同一接触的重复回调不能叠加星芒。");
+                    typeof(PhysicalCollisionBall).GetMethod("AdvanceContactTime", flags).Invoke(_ball,
+                        new object[] { tables.TbGlobal.Get(16).Value + 0.01f });
+                    _ball.SetFrozen(true);
+                    contact.Invoke(_ball, args);
+                    Assert.AreEqual(1, _feedback.ActiveBurstCount);
+                    _ball.SetFrozen(false);
+                    contact.Invoke(_ball, args);
+                    Assert.AreEqual(2, _feedback.ActiveBurstCount, "持续接触按有效攻击间隔播放下一次星芒。");
+                    var combined = mesh.vertices.Select(impacts.TransformPoint).ToArray();
+                    Assert.AreEqual(activation.Length * 2, combined.Length);
+                    CollectionAssert.AreEqual(activation, combined.Take(activation.Length).ToArray(),
+                        "后续小星芒不能改变50 Combo那次已播放的大星芒。");
+                    var followupRadius = combined.Skip(activation.Length).Max(vertex => Vector2.Distance(vertex, point));
+                    Assert.AreEqual(activationRadius * 0.5f, followupRadius, 0.00001f,
+                        "暴走后续碰撞的特效尺寸应为触发瞬间的一半。");
+                    _ball.Stop();
+                }
+            }
+            finally { Object.DestroyImmediate(robot); Object.DestroyImmediate(popups); }
         }
 
         [Test]
@@ -230,7 +385,7 @@ namespace GameLogic.Tests
                 var entity = registry.CreateRobotFromConfig(config, BattleSide.Player);
                 entity.TrySetLocation(RobotLocation.Board, new BoardCoordinate(1, 1));
                 var robot = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
-                    "Assets/AssetRaw/Actor/Robots/Prefabs/" + config.RobotPrefab + ".prefab"));
+                    "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab"));
                 try
                 {
                     var view = robot.GetComponent<RobotView>();

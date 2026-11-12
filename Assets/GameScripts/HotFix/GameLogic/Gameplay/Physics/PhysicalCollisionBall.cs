@@ -852,7 +852,13 @@ namespace GameLogic
                 }
                 var robot = collision.collider.GetComponentInParent<RobotView>();
                 if (bounced && robot == null) ResetComboCount();
-                if (robot != null) ProcessRobotCombo(robot, collision.collider, bounced);
+                if (robot != null)
+                {
+                    var contact = collision.contactCount > 0 ? collision.GetContact(0) : default;
+                    ProcessRobotContact(robot, collision.collider, bounced,
+                        bounced ? (Vector2?)impactPoint : collision.contactCount > 0 ? contact.point : (Vector2?)null,
+                        bounced ? (Vector2?)impactNormal : collision.contactCount > 0 ? contact.normal : (Vector2?)null);
+                }
                 if (bounced && glass != null) ApplyGlassCollision(glass, impactPoint, impactNormal);
                 else if (bounced && robot == null && collision.collider.GetComponentInParent<PhysicalCollisionBoundary>() != null)
                 {
@@ -893,6 +899,9 @@ namespace GameLogic
         private bool IsContactRunning => _comboRegistry != null && _launched && !_frozen && _runningGate != null && _runningGate();
 
         private void ProcessRobotCombo(RobotView view, Collider2D collider, bool bounced)
+            => ProcessRobotContact(view, collider, bounced, null, null);
+
+        private void ProcessRobotContact(RobotView view, Collider2D collider, bool bounced, Vector2? point, Vector2? normal)
         {
             if (!IsContactRunning || collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy ||
                 view == null || collider != view.GetPhysicalCollider() ||
@@ -903,8 +912,11 @@ namespace GameLogic
                 _robotContacts.Add(robot.InstanceId, contact);
             }
             if (_protectedContacts.ContainsKey(robot.InstanceId)) return;
+            var berserkBeforeContact = IsBerserk;
+            var interaction = false;
             if (!contact.AttackHandled || IsBerserk && _rules != null && contact.StayElapsed >= _rules.RageStayInterval)
             {
+                interaction = true;
                 // 只提示首次接触；暴走持续接触的攻击脉冲不重复播放碰撞声。
                 if (!contact.AttackHandled) GameSoundService.PlayForSide(GameSound.RobotHit, Side);
                 contact.AttackHandled = true;
@@ -915,10 +927,23 @@ namespace GameLogic
                 // A contact notification can synchronously settle and dispose the battle.
                 if (!IsContactRunning) return;
             }
-            if (IsBerserk) { contact.Counted = true; return; }
-            if (!IsComboRunning || !bounced || contact.Counted || !_robotHitsThisStep.Add(robot.InstanceId)) return;
-            contact.Counted = true;
-            AddRobotCombo(view, collider);
+            if (IsBerserk) contact.Counted = true;
+            else if (IsComboRunning && bounced && !contact.Counted && _robotHitsThisStep.Add(robot.InstanceId))
+            {
+                contact.Counted = true;
+                AddRobotCombo(view, collider);
+            }
+            // 先结算Combo，确保恰好进入暴走的那次接触也能绽放；持续接触仅随有效攻击脉冲播放。
+            if (!IsBerserk || !IsContactRunning || (!interaction && berserkBeforeContact) ||
+                _impactFeedback == null || collider == null) return;
+            if (!point.HasValue)
+            {
+                var distance = _collider.Distance(collider);
+                if (!distance.isValid) return;
+                point = distance.pointB;
+                normal = (Vector2)_collider.bounds.center - point.Value;
+            }
+            _impactFeedback.PlayRobot(point.Value, normal ?? Vector2.up, enteringBerserk: !berserkBeforeContact);
         }
 
         /// <summary>连续碰撞本局有效机器人才累计Combo；撞墙、玻璃或非机器人端点立即中断连击。</summary>
