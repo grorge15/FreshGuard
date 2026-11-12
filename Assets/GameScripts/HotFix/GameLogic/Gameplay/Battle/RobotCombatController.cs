@@ -49,6 +49,7 @@ namespace GameLogic
             internal RobotEntity Robot;
             internal RobotView View;
             internal RobotCastAnimationView CastAnimation;
+            internal RobotChargeAnimationView ChargeAnimation;
             internal readonly Dictionary<(int SkillId, string Prefab), ProjectilePool> Pools = new Dictionary<(int, string), ProjectilePool>();
             internal CancellationTokenSource Cancellation;
         }
@@ -177,8 +178,10 @@ namespace GameLogic
                 if (robot.Location != RobotLocation.Board || !_context.Battle.Catalog.TryGet(robot.SkillId, out _)) continue;
                 robot.InitializeCombat(_context.BattleId);
                 var reserve = new Reserve { Robot = robot, View = view, CastAnimation = view.GetComponent<RobotCastAnimationView>(),
+                    ChargeAnimation = view.GetComponent<RobotChargeAnimationView>(),
                     Cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token) };
                 _reserves.Add(pair.Key, reserve);
+                reserve.ChargeAnimation?.Bind(_context.Battle, robot, reserve.CastAnimation);
                 PrepareSkillPools(reserve, robot.SkillId);
                 if (_context.Battle.Catalog.TryGet(robot.SkillId, out var primary))
                     foreach (var id in primary.PassiveBuffIds)
@@ -191,7 +194,11 @@ namespace GameLogic
         {
             EntityValidation.RequireFiniteNonNegative(deltaTime, nameof(deltaTime));
             if (!IsRunning) return;
-            foreach (var reserve in _reserves.Values.ToArray()) reserve.CastAnimation?.Advance(deltaTime);
+            foreach (var reserve in _reserves.Values.ToArray())
+            {
+                reserve.CastAnimation?.Advance(deltaTime);
+                reserve.ChargeAnimation?.Advance(deltaTime);
+            }
             // 先推进已有表现，本段命中新创建的闪电不额外消耗整段时间。
             foreach (var effect in _effects.ToArray())
             {
@@ -234,6 +241,7 @@ namespace GameLogic
             var fired = TryFire(robot);
             robot.TickCombat(fired);
             if (IsRunning) _context.Battle.TriggeredSkills.Process();
+            if (OwnsBattle && _reserves.TryGetValue(robotId, out var reserve)) reserve.ChargeAnimation?.Refresh();
             return fired;
         }
 
@@ -263,7 +271,12 @@ namespace GameLogic
                 if (!cast.Owner.EntityId.HasValue || !_controller._reserves.TryGetValue(cast.Owner.EntityId.Value, out var reserve) ||
                     reserve.CastAnimation == null || !reserve.CastAnimation.IsPrepared) return false;
                 var view = reserve.CastAnimation;
-                execute = () => { if (view != null) view.Play(cast, cast.Get("castWindup")); };
+                execute = () =>
+                {
+                    if (view == null) return;
+                    reserve.ChargeAnimation?.Suspend();
+                    view.Play(cast, cast.Get("castWindup"));
+                };
                 release = () => { if (view != null) view.Stop(cast); };
                 return true;
             }
@@ -518,7 +531,9 @@ namespace GameLogic
                             (IProjectileWorld)_bulletWorld, chain, positions => PlayHitEffect(model.HitEffectPrefab, cast.Owner.Side, positions))));
                     Launch(reserve, instance, state);
                     launched = true;
-                    // 次数已在施法接受时提交；激活表现不会再次计数。
+                    // 登记真实弹丸后才计数；同次散射只在首颗登记时提交一次。
+                    if (i == 0) reserve.Robot.NotifyAttackLaunched(cast);
+                    reserve.ChargeAnimation?.Refresh();
                     if (OwnsBattle && !state.IsResolved && instance != null) instance.SetActive(true);
                 }
                 finally { if (!launched) ReturnPrepared(sourceId, cast.SkillId, model.Prefab, instance); }
@@ -646,6 +661,7 @@ namespace GameLogic
             if (!_reserves.TryGetValue(id, out var reserve)) return;
             _reserves.Remove(id);
             _context.Battle.Timelines.Cancel(reserve.Robot.OwnerRef);
+            reserve.ChargeAnimation?.Clear();
             reserve.Robot.ClearCombat();
             reserve.Cancellation.Cancel(); reserve.Cancellation.Dispose();
             foreach (var pool in reserve.Pools.Values) while (pool.Ready.Count > 0) Release(pool.Ready.Dequeue());

@@ -79,9 +79,12 @@ namespace GameLogic
             _preparing.Add(request.Owner);
             try
             {
+                var robot = owner as RobotEntity;
+                var actionVersion = robot?.ActionVersion;
                 var context = new SkillCastContext(request, skill, level);
                 owner.Buffs.OnCast(context);
-                if (context.IsCancelled) return new SkillCastResult(SkillCastFailure.Cancelled);
+                if (context.IsCancelled || (robot != null && robot.ActionVersion != actionVersion))
+                    return new SkillCastResult(SkillCastFailure.Cancelled);
                 failure = Validate(request, out var finalOwner, out var finalSkill, true);
                 if (failure != SkillCastFailure.None || !ReferenceEquals(skill, finalSkill) || !ReferenceEquals(owner, finalOwner))
                     return new SkillCastResult(failure == SkillCastFailure.None ? SkillCastFailure.InvalidOwner : failure);
@@ -92,9 +95,16 @@ namespace GameLogic
                 {
                     failure = Validate(request, out _, out _, true);
                     if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
+                    if (robot != null && robot.ActionVersion != actionVersion)
+                        return new SkillCastResult(SkillCastFailure.Cancelled);
                     if (commitContact != null && !commitContact()) return new SkillCastResult(SkillCastFailure.NotAllowed);
                     skill.CooldownRemaining = skill.Model.Cooldown;
                     context.CommitAcceptance();
+                    // 接受回调也可能升级或移除机器人，旧动作不得再启动。
+                    if (_battle.IsDisposed || !_battle.TryResolveOwner(request.Owner, out var committedOwner) ||
+                        !ReferenceEquals(owner, committedOwner) ||
+                        (robot != null && robot.ActionVersion != actionVersion))
+                        return new SkillCastResult(SkillCastFailure.Cancelled);
                     started = true;
                     _battle.Timelines.Start(timeline);
                     return new SkillCastResult(SkillCastFailure.None);

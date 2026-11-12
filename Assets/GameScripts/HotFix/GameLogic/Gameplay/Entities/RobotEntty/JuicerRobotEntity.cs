@@ -6,6 +6,7 @@ namespace GameLogic
     public sealed class JuicerRobotEntity : RobotEntity
     {
         public const int CONFIG_ID = 704;
+        internal override bool UsesProjectileAttackCycle => true;
 
         internal JuicerRobotEntity(int instanceId, Robot config, BattleSide side, int level, int maxLevel)
             : base(instanceId, config, side, level, maxLevel) { }

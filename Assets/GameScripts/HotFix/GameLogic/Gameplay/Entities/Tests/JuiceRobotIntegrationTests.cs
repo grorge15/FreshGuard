@@ -49,18 +49,18 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void MissingChildInstancesKeepThreeJuiceAndRetryOncePreparationCompletes()
+        public void MissingChildInstancesKeepEveryShotAndRetryOncePreparationCompletes()
         {
             Prepare(); _holdFirstChild = true; var robot = AddRobot();
             for (var i = 0; i < 5; i++) Assert.AreEqual(1, Shoot(robot).Length);
-            Assert.IsTrue(Counter(robot).Pending); Assert.AreEqual(3, Counter(robot).AttackCount);
+            Assert.IsTrue(Counter(robot).Pending); Assert.AreEqual(5, Counter(robot).AttackCount);
             Assert.AreEqual(1, _f.Context.Battle.TriggeredSkills.Count);
             Assert.IsNotNull(_pending);
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/bullets/JuiceBullet.prefab");
             _pending.TrySetResult(UnityEngine.Object.Instantiate(prefab, _pendingParent));
             _combat.AdvanceAttacks(0);
             Assert.AreEqual(5, States().Count(s => s.Action.SkillId == 1604));
-            Assert.AreEqual(0, Counter(robot).AttackCount);
+            Assert.AreEqual(2, Counter(robot).AttackCount);
             _combat.AdvanceAttacks(0);
             Assert.AreEqual(5, States().Count(s => s.Action.SkillId == 1604));
         }
