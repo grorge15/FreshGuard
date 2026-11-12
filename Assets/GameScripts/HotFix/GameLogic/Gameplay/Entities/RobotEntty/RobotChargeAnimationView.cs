@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace GameLogic
 {
-    /// <summary>只读取周期被动的次数；由战斗时钟循环采样当前段，不驱动发射。</summary>
+    /// <summary>只读取周期被动的次数；每次推进一段并停在段末，零次保持初始帧，不驱动发射。</summary>
     [DisallowMultipleComponent]
     public sealed class RobotChargeAnimationView : MonoBehaviour
     {
@@ -49,20 +49,35 @@ namespace GameLogic
                 { cycle = candidate; break; }
             if (cycle == null) { Hide(); return; }
             var required = (int)count;
-            var stage = cycle.AttackCount % required;
-            if (stage != _stage || _level != _robot.Level || _required != required)
+            // 0 是未播放；第 1 次才播放第 1 段，满次数仍保留最后一段。
+            var stage = cycle.AttackCount > 0 ? (cycle.AttackCount - 1) % required + 1 : 0;
+            var configurationChanged = _level != _robot.Level || _required != required;
+            if (_castAnimation != null && _castAnimation.IsPlaying)
+            {
+                // 施法动画接管表现，结束后按最新次数恢复，不能补播上一轮的蓄力。
+                _stage = stage; _level = _robot.Level; _required = required; _elapsed = 0d;
+                Hide(); return;
+            }
+            // 子技能会立即消费次数；先播完已经开始的最后一段，再回到初始帧。
+            // 升级、配置变化则立即重置，不沿用旧进度。
+            var completingCycle = !configurationChanged && stage == 0 && _stage == required;
+            if (configurationChanged || (stage != _stage && !completingCycle))
             { _stage = stage; _level = _robot.Level; _required = required; _elapsed = 0d; }
-            if (_castAnimation != null && _castAnimation.IsPlaying) { Hide(); return; }
 
-            // 按完整帧划分，避免同一边界帧在相邻阶段反复出现。
             var frames = Math.Max(1, Mathf.RoundToInt(clip.length * clip.frameRate));
-            var start = (int)((long)frames * stage / required);
-            var end = (int)((long)frames * (stage + 1) / required);
-            var segmentFrames = Math.Max(1, end - start);
-            var duration = Math.Min(segmentFrames / (double)clip.frameRate,
-                _robot.Configuration.MinTriggerInterval * 0.9d);
-            _elapsed = (_elapsed + deltaTime) % duration;
-            var frame = Math.Min(frames - 1, start + Math.Min(segmentFrames - 1, (int)(_elapsed / duration * segmentFrames)));
+            var frame = 0;
+            if (_stage > 0)
+            {
+                // 相邻段共享边界姿态：次数不变时夹在段末，不再取余循环。
+                var start = (int)((long)(frames - 1) * (_stage - 1) / required);
+                var end = (int)((long)(frames - 1) * _stage / required);
+                var duration = Math.Min(Math.Max(1, end - start) / (double)clip.frameRate,
+                    _robot.Configuration.MinTriggerInterval * 0.9d);
+                _elapsed = Math.Min(duration, _elapsed + deltaTime);
+                frame = start + (int)(_elapsed / duration * (end - start));
+                if (completingCycle && _elapsed >= duration)
+                { _stage = 0; _elapsed = 0d; frame = 0; }
+            }
             _animation.Sample(frame / clip.frameRate);
             _renderer.enabled = true;
             if (_portraitRenderer != null) _portraitRenderer.enabled = false;
