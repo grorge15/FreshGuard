@@ -167,6 +167,7 @@ GameObject:
   - component: {fileID: 8876909292311440485}
   - component: {fileID: 1349328828623810605}
   - component: {fileID: 6376505959297342540}
+  - component: {fileID: 585301846854887544}
   - component: {fileID: 1786338310872302486}
   m_Layer: 5
   m_Name: m_text_PreparationCountdown
@@ -237,6 +238,20 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: 3
+--- !u!114 &585301846854887544
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2050330529038849508}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae65774b7b3dd2e4890479dfab50e1c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _topColor: {r: 1, g: 0.972549, b: 0.76862746, a: 1}
+  _bottomColor: {r: 1, g: 0.5921569, b: 0.15294118, a: 1}
 --- !u!114 &1786338310872302486
 MonoBehaviour:
   m_ObjectHideFlags: 0
