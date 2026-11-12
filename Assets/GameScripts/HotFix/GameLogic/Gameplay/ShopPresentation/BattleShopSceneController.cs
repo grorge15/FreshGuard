@@ -167,6 +167,7 @@ namespace GameLogic
                     (side, id) => _enemies != null ? _enemies.GetRewardOrigin(side, id) : null);
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
                 GameEvent.AddEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
+                GameEvent.AddEventListener<long, BattleSide>(BattleShopEvents.MergeSucceeded, OnMergeSucceeded);
                 _listening = true;
                 var context = Context;
                 var popupRoot = new GameObject("ComboPopups");
@@ -627,9 +628,13 @@ namespace GameLogic
             GameObject view;
             if (_views.TryGetValue(snapshot.TargetInstanceId, out view) && view != null)
                 view.GetComponent<RobotView>()?.PlayMergeFeedback(sourcePosition, snapshot.PreviousLevel, snapshot.Level);
-            // 买入合成由购买成功统一轻震，避免与原有合成震动叠加。
-            if (snapshot.Side == BattleSide.Player && snapshot.Source.Kind == RobotDragSourceKind.OwnedRobot)
-                HapticFeedbackService.PlayMergePulse();
+        }
+
+        private void OnMergeSucceeded(long battleId, BattleSide side)
+        {
+            if (side != BattleSide.Player || Context == null || Context.BattleId != battleId ||
+                Context.IsEnded || Context.IsEndRequested) return;
+            HapticFeedbackService.PlayMergePulse();
         }
 
         public void EndBattle()
@@ -716,6 +721,7 @@ namespace GameLogic
                 _listening = false;
                 GameEvent.RemoveEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
                 GameEvent.RemoveEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
+                GameEvent.RemoveEventListener<long, BattleSide>(BattleShopEvents.MergeSucceeded, OnMergeSucceeded);
             }
             rewards?.Dispose();
             var combat = _combat;

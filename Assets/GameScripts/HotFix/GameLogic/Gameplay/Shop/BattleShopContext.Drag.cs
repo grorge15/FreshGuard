@@ -187,6 +187,7 @@ namespace GameLogic
                 targetSlot.Offer = merged;
                 _nextOfferId++;
                 CompleteInteraction();
+                GameEvent.Send<long, BattleSide>(BattleShopEvents.MergeSucceeded, BattleId, session.Side);
                 Notify(session.Side);
                 return ShopOperationResult.Success;
             }
@@ -253,8 +254,9 @@ namespace GameLogic
                 CompleteInteraction();
                 var snapshot = new RobotMergeSnapshot(BattleId, session.InteractionId, session.Side, session.Source,
                     targetInstanceId, previousLevel, target.Level);
-                // 两种通知均在最终状态后发出；通知期间拒绝重入，终局推迟到finally。
+                // 所有通知均在最终状态后发出；通知期间拒绝重入，终局推迟到finally。
                 GameEvent.Send<RobotMergeSnapshot>(BattleShopEvents.Merged, snapshot);
+                GameEvent.Send<long, BattleSide>(BattleShopEvents.MergeSucceeded, BattleId, session.Side);
                 Notify(session.Side);
                 return ShopOperationResult.Success;
             }

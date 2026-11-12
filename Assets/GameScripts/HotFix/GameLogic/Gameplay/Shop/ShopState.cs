@@ -33,6 +33,7 @@ namespace GameLogic
     {
         public const int Changed = 0x53484F50;
         public const int Merged = 0x53484F51;
+        public const int MergeSucceeded = 0x53484F52;
     }
 
     public sealed class ShopOffer

@@ -23,6 +23,8 @@ namespace GameLogic
 
         public static void PlayBerserkStartPulse() => PlayLightPulse(25, 60, 0.48f);
 
+        public static void PlayMergePulse() => PlayLightPulse(35, 90, 0.55f);
+
         public static SlotRefreshHaptic BeginSlotRefresh()
         {
             _slotRefresh?.Dispose();
@@ -72,7 +74,7 @@ namespace GameLogic
         }
 
 #if UNITY_EDITOR
-        // 编辑器验证真实购买与暴走事件，不调用设备马达。
+        // 编辑器验证真实购买、合并与暴走事件，不调用设备马达。
         internal static System.Action<int, int> LightPulseOverride { get; set; }
         internal static System.Action RefreshStopOverride { get; set; }
 #endif
@@ -137,34 +139,5 @@ namespace GameLogic
 #endif
         }
 
-        public static void PlayMergePulse()
-        {
-            if (!Enabled || !Application.isMobilePlatform || !SystemInfo.supportsVibration) return;
-            _slotRefresh?.PauseForPulse(35);
-#if UNITY_ANDROID && !UNITY_EDITOR
-            try
-            {
-                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-                using (var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
-                using (var vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator"))
-                using (var version = new AndroidJavaClass("android.os.Build$VERSION"))
-                {
-                    if (version.GetStatic<int>("SDK_INT") >= 26)
-                    {
-                        using (var effectClass = new AndroidJavaClass("android.os.VibrationEffect"))
-                        using (var effect = effectClass.CallStatic<AndroidJavaObject>("createOneShot", 35L, 90))
-                            vibrator.Call("vibrate", effect);
-                    }
-                    else vibrator.Call("vibrate", 35L);
-                }
-                return;
-            }
-            catch (System.Exception exception)
-            {
-                Debug.LogWarning("Merge haptic failed; using the system vibration fallback: " + exception.Message);
-            }
-#endif
-            Handheld.Vibrate();
-        }
     }
 }

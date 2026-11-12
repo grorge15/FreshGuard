@@ -143,6 +143,7 @@ namespace GameLogic
             var host = _host;
             var result = ShopOperationResult.InvalidPlacement;
             var purchasing = false;
+            var merging = false;
             try
             {
                 if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
@@ -159,7 +160,10 @@ namespace GameLogic
                     int targetId;
                     BoardPlacementTarget target;
                     if (host.Placement.TryGetDragOccupant(out targetId))
+                    {
+                        merging = true;
                         result = context.TryCommitMerge(session.InteractionId, targetId);
+                    }
                     else if (host.Placement.TryGetDragTarget(out target))
                         result = await host.DeployDragAsync(session, target, cancellationToken);
                 }
@@ -171,7 +175,8 @@ namespace GameLogic
                 if (result == ShopOperationResult.Success && purchasing && host != null && host.Context == context && !context.IsEnded)
                 {
                     GameSoundService.Play(GameSound.Purchase);
-                    HapticFeedbackService.PlayPurchasePulse();
+                    // 买入合成由合并成功事件播放一次反馈，避免购买轻震覆盖合并轻震。
+                    if (!merging) HapticFeedbackService.PlayPurchasePulse();
                 }
                 if (generation == _generation)
                 {
