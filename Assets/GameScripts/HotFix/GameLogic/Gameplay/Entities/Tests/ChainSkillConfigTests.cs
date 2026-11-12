@@ -19,7 +19,8 @@ namespace GameLogic.Tests
             Assert.AreEqual(16, tables.TbSkill.DataList.Count);
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count);
             Assert.AreEqual(8, tables.TbBullet.DataList.Count);
-            Assert.AreEqual(7, tables.TbBuff.DataList.Count);
+            Assert.AreEqual(14, tables.TbBuff.DataList.Count);
+            Assert.AreEqual(7, tables.TbBuff.DataList.Count(row => row.IsShopItem));
             CollectionAssert.AreEquivalent(new[] { 1500, 1501, 1502, 1503, 1504, 1505, 1506, 1507, 1600, 1601, 1602, 1603, 1604, 1605, 1606, 1607 },
                 tables.TbSkill.DataList.Where(row => row.Enabled).Select(row => row.Id));
 
@@ -172,6 +173,39 @@ namespace GameLogic.Tests
             Assert.IsFalse(catalog.TryGet(1604, out _));
             Assert.IsFalse(catalog.TryGetBullet(3604, out _));
             Assert.IsFalse(catalog.TryGetBuff(2601, out _));
+        }
+
+        [TestCase(2505)]
+        [TestCase(2507)]
+        [TestCase(2600)]
+        [TestCase(2601)]
+        [TestCase(2602)]
+        [TestCase(2603)]
+        [TestCase(2604)]
+        public void BuffMaxLevelDoesNotRaiseRuntimeStacksOrClampRobotSkillLevels(int buffId)
+        {
+            var tables = LoadTables();
+            SetField(tables.TbBuff.Get(buffId), "MaxLevel", 3);
+
+            var catalog = SkillConfigAdapter.FromTables(tables);
+
+            Assert.IsTrue(catalog.TryGetBuff(buffId, out var buff));
+            Assert.AreEqual(1, buff.MaxStacks);
+            Assert.IsTrue(catalog.TryGet(1505, out var frost));
+            Assert.AreEqual(5, frost.MaxLevel);
+            Assert.IsTrue(catalog.TryGetLevel(1505, 5, out var level));
+            Assert.AreEqual(0.4f, level.Parameters["slow"]);
+            Assert.AreEqual(3f, level.Parameters["duration"]);
+        }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void NonPositiveRequiredBuffMaxLevelFailsBeforeBattle(int maxLevel)
+        {
+            var tables = LoadTables();
+            SetField(tables.TbBuff.Get(2505), "MaxLevel", maxLevel);
+
+            Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
         }
 
         private static Tables LoadTables() => new Tables(name => new ByteBuf(File.ReadAllBytes(

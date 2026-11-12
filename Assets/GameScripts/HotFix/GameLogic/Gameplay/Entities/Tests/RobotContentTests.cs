@@ -117,8 +117,11 @@ namespace GameLogic.Tests
                 "Assets/Editor/AssetBundleCollector/AssetBundleCollectorSetting.asset");
             Assert.IsNotNull(settings);
             var assets = settings.BeginCollect("DefaultPackage", true, false).CollectAssets;
-            Assert.AreEqual(12, _tables.TbRobot.DataList.Count, "源表保留尚未启用的机器人。");
-            Assert.AreEqual(11, _tables.TbRobot.DataList.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
+            var robots = _tables.TbRobot.DataList.Where(row => row.EntityType == "Robot").ToArray();
+            Assert.AreEqual(12, robots.Length, "特殊地块不属于机器人资源检查范围。");
+            CollectionAssert.AreEqual(new[] { 5001 }, _tables.TbRobot.DataList
+                .Where(row => row.EntityType == "EffectTile").Select(row => row.Id));
+            Assert.AreEqual(12, robots.Count(row => _tables.TbSkill.Get(row.SkillId).Enabled));
             Assert.AreEqual(28, _tables.TbRobotShape.DataList.Count);
             foreach (var id in new[] { 501, 502, 503, 504, 505, 601, 602, 603, 701, 702, 703, 704 })
             {

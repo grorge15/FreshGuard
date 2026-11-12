@@ -7,6 +7,9 @@ namespace GameLogic
 {
     public static class SkillConfigAdapter
     {
+        // 配置等级与实例叠层分别处理，升级不能增加同一实例的叠层上限。
+        private const int RuntimeBuffMaxStacks = 1;
+
         public static SkillCatalog FromTables(Tables tables)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -49,17 +52,19 @@ namespace GameLogic
                 if (!requiredBuffs.Contains(row.Id) && !(needsSlow && row.BehaviorKey == "slow") &&
                     !(needsPoison && row.BehaviorKey == "poison") &&
                     !(needsIsolation && row.BehaviorKey == "store_isolation")) continue;
+                if (row.MaxLevel < 1)
+                    throw new InvalidOperationException("Buff最高等级至少为1：" + row.Id);
                 if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "attack_cycle" && row.BehaviorKey != "store_isolation")
                     throw new InvalidOperationException("启用技能引用了未知Buff行为：" + row.Id + "/" + row.BehaviorKey);
                 if (row.BehaviorKey == "attack_cycle" &&
-                    (row.MaxStacks != 1 || row.TickInterval != 0f || row.CountSkillId <= 0 ||
+                    (row.TickInterval != 0f || row.CountSkillId <= 0 ||
                      !enabledSkills.Contains(row.CountSkillId) || row.TriggerSkillId <= 0 || row.TriggerSkillId == row.CountSkillId))
                     throw new InvalidOperationException("攻击计数Buff参数无效：" + row.Id);
-                catalog.Add(new BuffModel(row.Id, row.BehaviorKey, row.MaxStacks, row.Priority, row.TickInterval,
+                catalog.Add(new BuffModel(row.Id, row.BehaviorKey, RuntimeBuffMaxStacks, row.Priority, row.TickInterval,
                     row.TriggerSkillId, row.CountSkillId, row.EffectPrefab));
                 if (row.BehaviorKey == "store_isolation")
                 {
-                    if (isolationBuffId != 0 || row.MaxStacks != 1 || row.TickInterval != 0f || string.IsNullOrWhiteSpace(row.EffectPrefab))
+                    if (isolationBuffId != 0 || row.TickInterval != 0f || string.IsNullOrWhiteSpace(row.EffectPrefab))
                         throw new InvalidOperationException("装盒需要唯一Buff、单实例、独立持续时间与表现资源。");
                     isolationBuffId = row.Id;
                 }
@@ -70,7 +75,7 @@ namespace GameLogic
                 }
                 if (row.BehaviorKey == "poison")
                 {
-                    if (poisonBuffId != 0 || row.MaxStacks != 1 || row.TickInterval != 0f)
+                    if (poisonBuffId != 0 || row.TickInterval != 0f)
                         throw new InvalidOperationException("中毒必须对应唯一Buff、单实例单层且使用实例间隔。");
                     poisonBuffId = row.Id;
                 }

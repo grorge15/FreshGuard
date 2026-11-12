@@ -4,7 +4,6 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Luban;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -59,15 +58,14 @@ namespace GameLogic.Tests
                 "Assets/AssetRaw/Actor/Prefabs/Robots/" + config.RobotPrefab + ".prefab"), _f.Root.transform);
             var view = instance.GetComponent<RobotView>();
             var original = view.ConfigId;
-            var data = new ByteBuf();
             // 使用不同型号检验共享资源路径；701已有专属Prefab，同ID会走原配置快速路径。
-            data.WriteInt(config.Id + 10000); data.WriteString(config.RobotName); data.WriteInt(config.QualityId);
-            data.WriteString(differentResource ? config.RobotPrefab + "_other" : config.RobotPrefab);
-            data.WriteString(config.RobotIcon); data.WriteInt(differentResource ? config.ShapeId : config.ShapeId + 1);
-            data.WriteInt(config.SkillId); data.WriteFloat(config.MinTriggerInterval);
-            data.WriteInt(config.AttackDamage); data.WriteInt(config.DamagePerLevel);
-            data.WriteString(config.RobotPortrait);
-            var incompatible = new GameConfig.robot.Robot(data);
+            var incompatible = (GameConfig.robot.Robot)typeof(object)
+                .GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(config, null);
+            typeof(GameConfig.robot.Robot).GetField(nameof(config.Id)).SetValue(incompatible, config.Id + 10000);
+            typeof(GameConfig.robot.Robot).GetField(nameof(config.RobotPrefab)).SetValue(incompatible,
+                differentResource ? config.RobotPrefab + "_other" : config.RobotPrefab);
+            typeof(GameConfig.robot.Robot).GetField(nameof(config.ShapeId)).SetValue(incompatible,
+                differentResource ? config.ShapeId : config.ShapeId + 1);
             Assert.IsFalse(view.TryUseConfiguration(incompatible, _f.Tables));
             Assert.AreEqual(original, view.ConfigId);
             Assert.AreEqual(0, view.InstanceId);

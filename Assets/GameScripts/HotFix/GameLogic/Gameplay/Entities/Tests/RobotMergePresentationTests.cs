@@ -213,7 +213,8 @@ namespace GameLogic.Tests
                     Assert.IsNull(icon.transform.Find("m_rect_LevelStars"));
                     using (var visual = new RobotIconPresentation(icon))
                     {
-                        foreach (var config in tables.TbRobot.DataList.Where(row => tables.TbSkill.Get(row.SkillId).Enabled))
+                        foreach (var config in tables.TbRobot.DataList.Where(row =>
+                            row.EntityType == "Robot" && tables.TbSkill.Get(row.SkillId).Enabled))
                         {
                             // 验证已完成加载后的真实刷新路径；本测试不启动游戏资源下载器。
                             icon.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png");

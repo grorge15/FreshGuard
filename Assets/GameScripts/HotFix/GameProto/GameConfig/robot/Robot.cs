@@ -12,6 +12,9 @@ using Luban;
 
 namespace GameConfig.robot
 {
+/// <summary>
+/// Sheet1机器人；Sheet2特殊地块；通过entityType筛选
+/// </summary>
 public sealed partial class Robot : Luban.BeanBase
 {
     public Robot(ByteBuf _buf) 
@@ -28,6 +31,22 @@ public sealed partial class Robot : Luban.BeanBase
         AttackDamage = _buf.ReadInt();
         DamagePerLevel = _buf.ReadInt();
         RobotPortrait = _buf.ReadString();
+        EntityType = _buf.ReadString();
+        TileDescription = _buf.ReadString();
+        TileCanRobotCover = _buf.ReadBool();
+        TileEffectKey = _buf.ReadString();
+        TileSpeedBonusRate = _buf.ReadFloat();
+        TileEndCondition = _buf.ReadString();
+        TileStackRule = _buf.ReadString();
+        TileEnabled = _buf.ReadBool();
+        TileDurationSeconds = _buf.ReadFloat();
+        TileTargetType = _buf.ReadString();
+        TileSpeedStackRule = _buf.ReadString();
+        TileLifetimeEndCondition = _buf.ReadString();
+        TileSpawnLocation = _buf.ReadString();
+        TileWidth = _buf.ReadInt();
+        TileHeight = _buf.ReadInt();
+        TilePassThroughBall = _buf.ReadBool();
     }
 
     public static Robot DeserializeRobot(ByteBuf _buf)
@@ -80,6 +99,70 @@ public sealed partial class Robot : Luban.BeanBase
     /// 机器人立绘资源名（独立于底板）
     /// </summary>
     public readonly string RobotPortrait;
+    /// <summary>
+    /// Robot=机器人；EffectTile=特殊地块。普通机器人枚举必须过滤Robot，地块走独立生成和触发逻辑。
+    /// </summary>
+    public readonly string EntityType;
+    /// <summary>
+    /// 先说明效果，再说明地块规则
+    /// </summary>
+    public readonly string TileDescription;
+    /// <summary>
+    /// false=禁止机器人部署在该格
+    /// </summary>
+    public readonly bool TileCanRobotCover;
+    /// <summary>
+    /// ball_speed_bonus=给经过的具体小球增加球速
+    /// </summary>
+    public readonly string TileEffectKey;
+    /// <summary>
+    /// 加速比例0.25=提高25%；不在等级表重复保存
+    /// </summary>
+    public readonly float TileSpeedBonusRate;
+    /// <summary>
+    /// Duration=球上增益按秒结束，碰撞不提前清除
+    /// </summary>
+    public readonly string TileEndCondition;
+    /// <summary>
+    /// Refresh=同一颗球重复经过刷新4秒，不重复叠加25%
+    /// </summary>
+    public readonly string TileStackRule;
+    /// <summary>
+    /// 资源与行为未接入，当前false
+    /// </summary>
+    public readonly bool TileEnabled;
+    /// <summary>
+    /// 球上加速持续4秒，与地块寿命分开
+    /// </summary>
+    public readonly float TileDurationSeconds;
+    /// <summary>
+    /// NormalBall=仅普通球，不影响暴走球
+    /// </summary>
+    public readonly string TileTargetType;
+    /// <summary>
+    /// Additive=与启动器和Combo加速相加；与重复经过Refresh不同
+    /// </summary>
+    public readonly string TileSpeedStackRule;
+    /// <summary>
+    /// BattleEnd=地块存在至本局结束；球上4秒增益结束不删除地块
+    /// </summary>
+    public readonly string TileLifetimeEndCondition;
+    /// <summary>
+    /// BrokenGlassCell=打碎玻璃的原坐标，生成一次，不抽候选
+    /// </summary>
+    public readonly string TileSpawnLocation;
+    /// <summary>
+    /// 棋盘占格宽度1
+    /// </summary>
+    public readonly int TileWidth;
+    /// <summary>
+    /// 棋盘占格高度1
+    /// </summary>
+    public readonly int TileHeight;
+    /// <summary>
+    /// true=小球可穿过，不产生实体反弹
+    /// </summary>
+    public readonly bool TilePassThroughBall;
    
     public const int __ID__ = 1376639430;
     public override int GetTypeId() => __ID__;
@@ -103,6 +186,22 @@ public sealed partial class Robot : Luban.BeanBase
         + "attackDamage:" + AttackDamage + ","
         + "damagePerLevel:" + DamagePerLevel + ","
         + "robotPortrait:" + RobotPortrait + ","
+        + "entityType:" + EntityType + ","
+        + "tileDescription:" + TileDescription + ","
+        + "tileCanRobotCover:" + TileCanRobotCover + ","
+        + "tileEffectKey:" + TileEffectKey + ","
+        + "tileSpeedBonusRate:" + TileSpeedBonusRate + ","
+        + "tileEndCondition:" + TileEndCondition + ","
+        + "tileStackRule:" + TileStackRule + ","
+        + "tileEnabled:" + TileEnabled + ","
+        + "tileDurationSeconds:" + TileDurationSeconds + ","
+        + "tileTargetType:" + TileTargetType + ","
+        + "tileSpeedStackRule:" + TileSpeedStackRule + ","
+        + "tileLifetimeEndCondition:" + TileLifetimeEndCondition + ","
+        + "tileSpawnLocation:" + TileSpawnLocation + ","
+        + "tileWidth:" + TileWidth + ","
+        + "tileHeight:" + TileHeight + ","
+        + "tilePassThroughBall:" + TilePassThroughBall + ","
         + "}";
     }
 }

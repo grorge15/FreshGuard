@@ -12,18 +12,49 @@ using Luban;
 
 namespace GameConfig.buff
 {
+/// <summary>
+/// Sheet1战斗Buff及商店战斗增益；Sheet2购买即时奖励；grantType区分持有/即时，isShopItem只标识商品
+/// </summary>
 public sealed partial class Buff : Luban.BeanBase
 {
     public Buff(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
         BehaviorKey = _buf.ReadString();
-        MaxStacks = _buf.ReadInt();
+        MaxLevel = _buf.ReadInt();
         Priority = _buf.ReadInt();
         TickInterval = _buf.ReadFloat();
         TriggerSkillId = _buf.ReadInt();
         CountSkillId = _buf.ReadInt();
         EffectPrefab = _buf.ReadString();
+        IsShopItem = _buf.ReadBool();
+        Name = _buf.ReadString();
+        Icon = _buf.ReadString();
+        Quality = _buf.ReadInt();
+        Enabled = _buf.ReadBool();
+        ActivationType = _buf.ReadString();
+        GrantType = _buf.ReadString();
+        OccupiesAssistSlot = _buf.ReadBool();
+        TargetType = _buf.ReadString();
+        DailyPurchaseLimit = _buf.ReadInt();
+        {int __n0 = _buf.ReadSize(); LevelIds = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); LevelIds[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); Prices = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); Prices[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); Descriptions = new string[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { string __e0;__e0 = _buf.ReadString(); Descriptions[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); EffectTileIds = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); EffectTileIds[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); SpeedBonusRates = new float[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { float __e0;__e0 = _buf.ReadFloat(); SpeedBonusRates[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); DamageBonusRates = new float[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { float __e0;__e0 = _buf.ReadFloat(); DamageBonusRates[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); DurationSeconds = new float[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { float __e0;__e0 = _buf.ReadFloat(); DurationSeconds[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); ComboSteps = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); ComboSteps[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); ComboBonusCaps = new float[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { float __e0;__e0 = _buf.ReadFloat(); ComboBonusCaps[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); ResetOnComboClear = new bool[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { bool __e0;__e0 = _buf.ReadBool(); ResetOnComboClear[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); AffectsSkillDamage = new bool[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { bool __e0;__e0 = _buf.ReadBool(); AffectsSkillDamage[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); AffectsDotDamage = new bool[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { bool __e0;__e0 = _buf.ReadBool(); AffectsDotDamage[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); GlassDurabilityPerHit = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); GlassDurabilityPerHit[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); ExtraBerserkBallCount = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); ExtraBerserkBallCount[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); StaminaAmount = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); StaminaAmount[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); AllowStaminaOverflow = new bool[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { bool __e0;__e0 = _buf.ReadBool(); AllowStaminaOverflow[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); SpeedStackRules = new string[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { string __e0;__e0 = _buf.ReadString(); SpeedStackRules[__index0] = __e0;}}
+        {int __n0 = _buf.ReadSize(); EndConditions = new string[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { string __e0;__e0 = _buf.ReadString(); EndConditions[__index0] = __e0;}}
     }
 
     public static Buff DeserializeBuff(ByteBuf _buf)
@@ -40,9 +71,9 @@ public sealed partial class Buff : Luban.BeanBase
     /// </summary>
     public readonly string BehaviorKey;
     /// <summary>
-    /// maxStacks
+    /// 统一最高效果等级：原技能Buff填1，效果数值仍读取skill_level；商店HeldBuff填可升级上限并按等级读数组；InstantReward填1表示奖励模板。此字段不控制运行时实例叠加。
     /// </summary>
-    public readonly int MaxStacks;
+    public readonly int MaxLevel;
     /// <summary>
     /// priority
     /// </summary>
@@ -63,6 +94,118 @@ public sealed partial class Buff : Luban.BeanBase
     /// Buff持续表现资源名，非表现Buff留空
     /// </summary>
     public readonly string EffectPrefab;
+    /// <summary>
+    /// 是否为商店可售商品。true同时包括Sheet1战斗增益与Sheet2即时奖励；不用于区分是否参与战斗。
+    /// </summary>
+    public readonly bool IsShopItem;
+    /// <summary>
+    /// 商店道具名称；原有战斗Buff未补填名称。
+    /// </summary>
+    public readonly string Name;
+    /// <summary>
+    /// 商店图标资源名，不带.png；不是Prefab资源。
+    /// </summary>
+    public readonly string Icon;
+    /// <summary>
+    /// 商店品质ID：2绿、3蓝、4紫、5橙；沿用当前Excel，不调整平衡数值。
+    /// </summary>
+    public readonly int Quality;
+    /// <summary>
+    /// 商店商品是否启用。当前7个商品沿用false，待业务和资源接入后开启；原战斗Buff保持已有值。
+    /// </summary>
+    public readonly bool Enabled;
+    /// <summary>
+    /// BattleStart开局；ColoredGlassBreak对应玻璃破碎；OnPurchase购买成功。
+    /// </summary>
+    public readonly string ActivationType;
+    /// <summary>
+    /// HeldBuff=持有型战斗增益，放Sheet1并进入助力快照；InstantReward=购买即时奖励，放Sheet2且不进战斗。原技能Buff留空，仍按技能引用触发。
+    /// </summary>
+    public readonly string GrantType;
+    /// <summary>
+    /// 是否占助力持有槽，与棋盘占格不同；体力补给false。
+    /// </summary>
+    public readonly bool OccupiesAssistSlot;
+    /// <summary>
+    /// NormalBall普通球；RobotDamage机器人伤害；BerserkBall暴走球；PlayerStamina体力。
+    /// </summary>
+    public readonly string TargetType;
+    /// <summary>
+    /// 0表示无额外每日限购，仍遵守每店最多成功购买1件的规则。
+    /// </summary>
+    public readonly int DailyPurchaseLimit;
+    /// <summary>
+    /// 原层级记录ID，按1/2/3级排列；用于追溯，不是新表主键。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly int[] LevelIds;
+    /// <summary>
+    /// 各级售价，按1/2/3级排列。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly int[] Prices;
+    /// <summary>
+    /// 各级说明，按1/2/3级排列；文字不能代替行为实现。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly string[] Descriptions;
+    /// <summary>
+    /// 各级生成的地块ID，按等级排列；非0时读取robot.TbRobot，对应记录必须entityType=EffectTile。0表示本级不生成地块。
+    /// </summary>
+    public readonly int[] EffectTileIds;
+    /// <summary>
+    /// 开局加速比例或Combo每档球速增量；加速带球速读取tileSpeedBonusRate。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly float[] SpeedBonusRates;
+    /// <summary>
+    /// Combo每档伤害增量；0.1表示10%。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly float[] DamageBonusRates;
+    /// <summary>
+    /// 各级效果持续秒数；0须结合endConditions解释，不统一表示立即结束。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly float[] DurationSeconds;
+    /// <summary>
+    /// 每多少Combo增加一档；当前两个Combo均为10。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly int[] ComboSteps;
+    /// <summary>
+    /// 各级本项加成上限：0.3|0.6|0.9，不是普通球最终速度上限。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly float[] ComboBonusCaps;
+    /// <summary>
+    /// Combo清零时清除本项加成，不删除助力或降低等级。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly bool[] ResetOnComboClear;
+    /// <summary>
+    /// Combo增伤是否包括技能伤害。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly bool[] AffectsSkillDamage;
+    /// <summary>
+    /// Combo增伤是否包括持续伤害，不改变持续伤害触发链规则。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly bool[] AffectsDotDamage;
+    /// <summary>
+    /// 普通球每次有效命中玻璃的总扣耐久，不是额外扣除量。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly int[] GlassDurabilityPerHit;
+    /// <summary>
+    /// 每次暴走额外生成球数，随本次暴走结束清理。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly int[] ExtraBerserkBallCount;
+    /// <summary>
+    /// 购买成功立即增加的玩家体力。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly int[] StaminaAmount;
+    /// <summary>
+    /// 是否允许体力超过上限。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly bool[] AllowStaminaOverflow;
+    /// <summary>
+    /// Additive表示与其他助力球速加成相加；不使用时为空数组。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly string[] SpeedStackRules;
+    /// <summary>
+    /// Duration计时；ComboClear清零；BattleEnd终局；BerserkEnd暴走结束；Immediate立即完成。 数组用|分隔；读取索引=等级-1。
+    /// </summary>
+    public readonly string[] EndConditions;
    
     public const int __ID__ = 9300270;
     public override int GetTypeId() => __ID__;
@@ -76,12 +219,40 @@ public sealed partial class Buff : Luban.BeanBase
         return "{ "
         + "id:" + Id + ","
         + "behaviorKey:" + BehaviorKey + ","
-        + "maxStacks:" + MaxStacks + ","
+        + "maxLevel:" + MaxLevel + ","
         + "priority:" + Priority + ","
         + "tickInterval:" + TickInterval + ","
         + "triggerSkillId:" + TriggerSkillId + ","
         + "countSkillId:" + CountSkillId + ","
         + "effectPrefab:" + EffectPrefab + ","
+        + "isShopItem:" + IsShopItem + ","
+        + "name:" + Name + ","
+        + "icon:" + Icon + ","
+        + "quality:" + Quality + ","
+        + "enabled:" + Enabled + ","
+        + "activationType:" + ActivationType + ","
+        + "grantType:" + GrantType + ","
+        + "occupiesAssistSlot:" + OccupiesAssistSlot + ","
+        + "targetType:" + TargetType + ","
+        + "dailyPurchaseLimit:" + DailyPurchaseLimit + ","
+        + "levelIds:" + Luban.StringUtil.CollectionToString(LevelIds) + ","
+        + "prices:" + Luban.StringUtil.CollectionToString(Prices) + ","
+        + "descriptions:" + Luban.StringUtil.CollectionToString(Descriptions) + ","
+        + "effectTileIds:" + Luban.StringUtil.CollectionToString(EffectTileIds) + ","
+        + "speedBonusRates:" + Luban.StringUtil.CollectionToString(SpeedBonusRates) + ","
+        + "damageBonusRates:" + Luban.StringUtil.CollectionToString(DamageBonusRates) + ","
+        + "durationSeconds:" + Luban.StringUtil.CollectionToString(DurationSeconds) + ","
+        + "comboSteps:" + Luban.StringUtil.CollectionToString(ComboSteps) + ","
+        + "comboBonusCaps:" + Luban.StringUtil.CollectionToString(ComboBonusCaps) + ","
+        + "resetOnComboClear:" + Luban.StringUtil.CollectionToString(ResetOnComboClear) + ","
+        + "affectsSkillDamage:" + Luban.StringUtil.CollectionToString(AffectsSkillDamage) + ","
+        + "affectsDotDamage:" + Luban.StringUtil.CollectionToString(AffectsDotDamage) + ","
+        + "glassDurabilityPerHit:" + Luban.StringUtil.CollectionToString(GlassDurabilityPerHit) + ","
+        + "extraBerserkBallCount:" + Luban.StringUtil.CollectionToString(ExtraBerserkBallCount) + ","
+        + "staminaAmount:" + Luban.StringUtil.CollectionToString(StaminaAmount) + ","
+        + "allowStaminaOverflow:" + Luban.StringUtil.CollectionToString(AllowStaminaOverflow) + ","
+        + "speedStackRules:" + Luban.StringUtil.CollectionToString(SpeedStackRules) + ","
+        + "endConditions:" + Luban.StringUtil.CollectionToString(EndConditions) + ","
         + "}";
     }
 }
