@@ -19,6 +19,7 @@ namespace GameLogic
         private BoardCoordinate _grabbedCell;
         private int _pointerId;
         private Vector2 _position;
+        private Vector2 _targetPosition;
         private bool _dragRequested;
         private int _generation;
         private CancellationTokenSource _gestureCancellation;
@@ -106,10 +107,10 @@ namespace GameLogic
 
         private void UpdatePreview()
         {
-            _ui.MoveGhost(_position);
-            _host.Placement.UpdateDrag(_position);
-            _ui.UpdateOfferMergeCandidates(_source, _position);
-            var overShop = _ui.IsOverShop(_position);
+            _targetPosition = _ui.MoveGhost(_position);
+            _host.Placement.UpdateDrag(_targetPosition);
+            _ui.UpdateOfferMergeCandidates(_source, _targetPosition);
+            var overShop = _ui.IsOverShop(_targetPosition);
             if (overShop) _host.ClearMergeCandidates();
             else _host.UpdateMergeCandidates(_source);
 
@@ -146,9 +147,9 @@ namespace GameLogic
             {
                 if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
                 int shopSlot;
-                if (_ui.IsOverShop(_position))
+                if (_ui.IsOverShop(_targetPosition))
                 {
-                    int? targetSlot = _ui.TryGetShopSlot(_position, out shopSlot) ? (int?)shopSlot : null;
+                    int? targetSlot = _ui.TryGetShopSlot(_targetPosition, out shopSlot) ? (int?)shopSlot : null;
                     if (targetSlot.HasValue)
                         foreach (var slot in context.GetState(BattleSide.Player).Slots)
                             if (slot.SlotId == targetSlot.Value && slot.Offer != null && !slot.IsPurchased) purchasing = true;

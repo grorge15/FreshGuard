@@ -195,6 +195,50 @@ namespace GameLogic.Tests
             }
         }
 
+        [TestCase(false, 0.7f)]
+        [TestCase(false, 1.3f)]
+        [TestCase(true, 0.8f)]
+        [TestCase(true, 1.5f)]
+        public void DragGhostKeepsPointerAtBottomCenterUnderCanvasAndParentScaling(bool cameraSpace, float scale)
+        {
+            var root = new GameObject("DragGhostCanvas", typeof(RectTransform), typeof(Canvas));
+            var cameraObject = new GameObject("DragGhostCamera", typeof(Camera));
+            try
+            {
+                var canvas = root.GetComponent<Canvas>();
+                var camera = cameraSpace ? cameraObject.GetComponent<Camera>() : null;
+                canvas.renderMode = cameraSpace ? RenderMode.ScreenSpaceCamera : RenderMode.ScreenSpaceOverlay;
+                canvas.worldCamera = camera;
+                var parent = new GameObject("ScaledPanel", typeof(RectTransform)).GetComponent<RectTransform>();
+                parent.SetParent(root.transform, false);
+                parent.sizeDelta = new Vector2(700, 500);
+                parent.pivot = new Vector2(0.25f, 0.7f);
+                parent.localScale = new Vector3(scale, scale * 0.9f, 1f);
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                    "Assets/AssetRaw/Actor/Prefabs/UIPrefabs/Shop/RobotDragGhost.prefab");
+                var instance = Object.Instantiate(prefab, parent);
+                instance.transform.localScale = new Vector3(0.9f, 1.2f, 1f);
+                var widget = new RobotDragGhostWidget();
+                Assert.IsTrue(widget.Create(new MainCombatUI(), instance));
+                Canvas.ForceUpdateCanvases();
+                var icon = instance.transform.Find("m_img_RobotIcon").GetComponent<RectTransform>();
+                foreach (var pointer in new[] { new Vector2(Screen.width * 0.4f, Screen.height * 0.5f),
+                    new Vector2(Screen.width * 0.4f + 37f, Screen.height * 0.5f - 53f) })
+                {
+                    var target = widget.Move(pointer, camera);
+                    var bottom = RectTransformUtility.WorldToScreenPoint(camera,
+                        icon.TransformPoint(new Vector3(icon.rect.center.x, icon.rect.yMin, 0)));
+                    var center = RectTransformUtility.WorldToScreenPoint(camera, icon.TransformPoint(icon.rect.center));
+                    Assert.That(Vector2.Distance(pointer, bottom), Is.LessThan(0.1f));
+                    Assert.That(center.x, Is.EqualTo(pointer.x).Within(0.1f));
+                    Assert.Greater(center.y, pointer.y);
+                    Assert.That(Vector2.Distance(target, center), Is.LessThan(0.1f),
+                        "落格和合成使用图标中心，不能使用下方触点。");
+                }
+            }
+            finally { Object.DestroyImmediate(root); Object.DestroyImmediate(cameraObject); }
+        }
+
         [TestCase("BattleShopUI")]
         [TestCase("ShopRobotItem")]
         [TestCase("RobotDragGhost")]
