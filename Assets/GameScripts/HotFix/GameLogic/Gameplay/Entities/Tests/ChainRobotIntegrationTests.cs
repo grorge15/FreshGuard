@@ -243,7 +243,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void RejectedCastDoesNotCountButAcceptedCastCountsBeforeAttackHookCancellation()
+        public void RejectedCastAndAttackHookCancellationDoNotCountBeforeLaunch()
         {
             Prepare(); var robot = AddRobot();
             _views[robot.InstanceId].SetActive(false);
@@ -254,10 +254,10 @@ namespace GameLogic.Tests
                 behavior: new Hooks { Attack = () => _f.Context.Battle.Timelines.Cancel(robot.OwnerRef) });
             Assert.IsTrue(Contact(robot));
             Assert.AreEqual(0, _combat.LiveBulletCount);
-            Assert.AreEqual(1, Counter(robot).AttackCount);
+            Assert.AreEqual(0, Counter(robot).AttackCount);
             robot.Buffs.Remove(robot.Buffs.Items.Single(b => b.Model.Id == 404));
             Assert.AreEqual(3605, Shoot(robot).Launcher.Model.Id);
-            Assert.AreEqual(2, Counter(robot).AttackCount);
+            Assert.AreEqual(1, Counter(robot).AttackCount);
         }
 
         [Test]
@@ -278,7 +278,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void UpgradeKeepsProgressAndInFlightChainDamageAndParametersStayFrozen()
+        public void UpgradeResetsProgressAndInFlightChainDamageAndParametersStayFrozen()
         {
             Prepare(); var robot = AddRobot();
             SkillCastContext mutable = null;
@@ -287,8 +287,9 @@ namespace GameLogic.Tests
             for (var i = 0; i < 3; i++) Shoot(robot).Cancel();
             Assert.AreEqual(3, Counter(robot).AttackCount);
             Assert.IsTrue(robot.TryUpgrade());
-            Assert.AreEqual(3, Counter(robot).AttackCount);
-            var fourth = Shoot(robot); Assert.AreEqual(30, fourth.Action.BaseDamage); fourth.Cancel();
+            Assert.AreEqual(0, Counter(robot).AttackCount);
+            for (var i = 0; i < 4; i++)
+            { var normal = Shoot(robot); Assert.AreEqual(30, normal.Action.BaseDamage); normal.Cancel(); }
             var chain = Shoot(robot);
             Assert.AreEqual(3600, chain.Launcher.Model.Id);
             Assert.AreEqual(30, chain.Action.BaseDamage);

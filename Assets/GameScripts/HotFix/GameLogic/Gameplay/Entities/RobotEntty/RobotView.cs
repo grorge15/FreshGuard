@@ -146,6 +146,7 @@ namespace GameLogic
                 cell.enabled = visible && !useIcon;
                 cell.color = color;
             }
+            GetComponent<RobotChargeAnimationView>()?.SetVisible(visible && useIcon);
         }
 
         public void SetBerserkTrigger(bool enabled)

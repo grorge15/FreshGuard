@@ -12,6 +12,7 @@ namespace GameLogic
         [SerializeField] private bool _loop;
         private SpriteRenderer _renderer;
         public float Duration => _clip != null ? _clip.length : 0f;
+        public AnimationClip Clip => _clip;
 
         public void Sample(float elapsed)
             => SampleClip(_clip, elapsed, _loop);
