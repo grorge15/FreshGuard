@@ -15,7 +15,7 @@ namespace GameLogic.Tests
                 "Assets/Editor/AssetBundleCollector/AssetBundleCollectorSetting.asset");
             var assets = setting.BeginCollect("DefaultPackage", true, false).CollectAssets;
             Assert.AreEqual(assets.Count, assets.Select(a => a.Address).Distinct().Count());
-            var prefabs = new[] { "SkeletonEnemy", "EliteSkeletonEnemy", "SkeletonBossEnemy" };
+            var prefabs = new[] { "SpinachEnemy", "ExpiredCanEnemy", "GhostOnionEnemy", "AppleEnemy" };
             foreach (var name in prefabs)
             {
                 var prefab = assets.Single(a => Path.GetFileName(a.AssetInfo.AssetPath) == name + ".prefab");

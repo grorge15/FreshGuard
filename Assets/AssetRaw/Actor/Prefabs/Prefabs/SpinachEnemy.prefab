@@ -96,7 +96,7 @@ GameObject:
   - component: {fileID: 3071641310927353390}
   - component: {fileID: 7308785516867187897}
   m_Layer: 0
-  m_Name: SkeletonEnemy
+  m_Name: SpinachEnemy
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

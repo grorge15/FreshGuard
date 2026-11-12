@@ -147,12 +147,15 @@ namespace GameLogic.Tests
                     " canvas=" + canvas.renderMode + " camera=" + camera + " raycaster=" + window.GraphicRaycaster.enabled +
                     " slot=" + ((RectTransform)slot).rect + " hits=" + string.Join(",", hits.ConvertAll(hit => hit.gameObject.name)));
                 ExecuteEvents.Execute(slot.gameObject, eventData, ExecuteEvents.pointerDownHandler);
-                // 使用框架真实递归 Update 推进长按，不能手动调用 Drag.Advance 替代。
-                deadline = Time.realtimeSinceStartup + 2f;
-                while (shop.Drag.Phase == RobotDragPhase.Pressed && Time.realtimeSinceStartup < deadline) yield return null;
+                eventData.position = pointer + Vector2.right;
+                ExecuteEvents.Execute(slot.gameObject, eventData, ExecuteEvents.beginDragHandler);
                 Assert.AreEqual(RobotDragPhase.Dragging, shop.Drag.Phase);
-                var ghost = shop.transform.Find("m_item_DragGhost");
-                Assert.That(Vector2.Distance(pointer, RectTransformUtility.WorldToScreenPoint(camera, ghost.position)), Is.LessThan(1f));
+                var ghost = shop.transform.Find("m_item_DragGhost/m_img_RobotIcon").GetComponent<RectTransform>();
+                var contact = RectTransformUtility.WorldToScreenPoint(camera,
+                    ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
+                var center = RectTransformUtility.WorldToScreenPoint(camera, ghost.TransformPoint(ghost.rect.center));
+                Assert.That(Vector2.Distance(eventData.position, contact), Is.LessThan(1f));
+                Assert.Greater(center.y, contact.y);
                 host.SendMessage("LateUpdate");
                 yield return null;
                 Assert.AreEqual(shopPosition, shopRect.anchoredPosition);
@@ -161,6 +164,66 @@ namespace GameLogic.Tests
                 Assert.AreEqual(infoPosition, infoRect.anchoredPosition);
                 Assert.AreEqual(infoSize, infoRect.sizeDelta);
                 Assert.AreEqual(infoScale, infoRect.localScale);
+                var context = host.Context;
+                var state = context.GetState(BattleSide.Player);
+                var sourceSlot = ((ShopRobotItemWidget)items[0]).SlotId;
+                var sourceOffer = state.FindSlot(sourceSlot).Offer;
+                Assert.AreEqual(ShopOperationResult.Success, context.GetDragContent(BattleSide.Player,
+                    context.ActiveInteraction.Source, out var config, out var level, out var shape));
+                var board = host.PlayerGlass.GetComponentInParent<PlacementBoardView>();
+                var anchor = default(BoardCoordinate);
+                var foundAnchor = false;
+                for (var column = 1; column < board.Model.Columns - shape.Width && !foundAnchor; column++)
+                    for (var row = 1; row < board.Model.Rows - shape.Height && !foundAnchor; row++)
+                    {
+                        var candidate = new BoardCoordinate(column, row);
+                        var allowed = true;
+                        foreach (var cell in shape.Cells)
+                        {
+                            var coordinate = new BoardCoordinate(column + cell.Column, row + cell.Row);
+                            if (board.Model.IsOccupied(coordinate) || (board.Model.IsTerrainMap &&
+                                board.Model.GetBaseTerrain(coordinate) != BaseTerrainType.Empty)) allowed = false;
+                        }
+                        if (allowed) { anchor = candidate; foundAnchor = true; }
+                    }
+                Assert.IsTrue(foundAnchor, "测试地图需要一处能容纳商品的非路径区域。");
+                var min = new Vector2(int.MaxValue, int.MaxValue);
+                var max = new Vector2(int.MinValue, int.MinValue);
+                foreach (var cell in shape.Cells)
+                {
+                    var coordinate = new BoardCoordinate(anchor.Column + cell.Column, anchor.Row + cell.Row);
+                    // 分层地图必须通过玻璃破碎开放格子，SetOpen 不能清除障碍。
+                    while (host.PlayerGlass.TryGetView(coordinate, out var glass))
+                    {
+                        context.Registry.AdvanceTime(1f);
+                        Assert.AreNotEqual(GlassCollisionResult.Ignored,
+                            host.PlayerGlass.ApplyCollision(glass, host.Bootstrap.PlayerBall));
+                    }
+                    if (!board.Model.IsTerrainMap) board.Model.SetOpen(coordinate, true);
+                    min = Vector2.Min(min, new Vector2(cell.Column, cell.Row));
+                    max = Vector2.Max(max, new Vector2(cell.Column, cell.Row));
+                }
+                Assert.IsTrue(board.Model.Evaluate(anchor, shape).IsValid);
+                var target = (Vector2)host.Placement.GetSceneCamera(BattleSide.Player).WorldToScreenPoint(
+                    board.transform.TransformPoint(board.GetCellLocalPosition(anchor) + (Vector3)((min + max) * 0.5f * board.CellSize)));
+                var releasePointer = target - (center - contact);
+                var coins = state.EnergyCoins;
+                // 松手位置可以比最后一条移动事件更新；按图标中心提交同一个格子。
+                shop.Drag.Release(-1, releasePointer);
+                deadline = Time.realtimeSinceStartup + 15f;
+                while (shop.Drag.Phase != RobotDragPhase.Idle && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
+                Assert.IsTrue(int.TryParse(board.Model.GetOccupant(anchor), out var instanceId),
+                    "松手后机器人应部署到图标中心对应的格子。");
+                Assert.IsTrue(context.Registry.TryGet(instanceId, out var placed));
+                Assert.AreEqual(anchor, ((RobotEntity)placed).Anchor);
+                Assert.AreEqual(coins - sourceOffer.Price, state.EnergyCoins);
+                Assert.IsNull(state.FindSlot(sourceSlot).Offer);
+                var second = (ShopRobotItemWidget)items[1];
+                var secondPoint = RectTransformUtility.WorldToScreenPoint(camera, second.transform.position);
+                shop.PressSlot(second.SlotId, -1, secondPoint, Time.unscaledTime);
+                shop.Drag.Move(-1, secondPoint + Vector2.right);
+                Assert.AreEqual(RobotDragPhase.Dragging, shop.Drag.Phase);
                 window.Visible = false;
                 Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
                 Assert.IsFalse(host.Context.IsBusy);

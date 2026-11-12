@@ -174,7 +174,7 @@ namespace GameLogic
             }
         }
         public void ShowGhost(string icon, string portrait, int level, Vector2 position) { _ghost.Show(icon, portrait, level, position, EventCamera); }
-        public void MoveGhost(Vector2 position) { _ghost?.Move(position, EventCamera); }
+        public Vector2 MoveGhost(Vector2 position) => _ghost != null ? _ghost.Move(position, EventCamera) : position;
         public void HideGhost() { if (_ghost != null && _ghost.gameObject != null) _ghost.Visible = false; }
         public void ShowFailure(ShopOperationResult result)
         {

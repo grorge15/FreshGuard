@@ -134,6 +134,9 @@ namespace GameLogic.Tests
             Assert.AreEqual(20, timeline.CurrentWave);
             Assert.AreEqual(4, due.Count(c => c.Group.Config.EnemyType == 2));
             Assert.AreEqual(2, due.Count(c => c.Group.Config.EnemyType == 3));
+            Assert.AreEqual(86, due.Count(c => c.Group.Config.Id == 2004));
+            CollectionAssert.AreEquivalent(new[] { 2, 4, 6, 8, 12, 14, 16, 18 },
+                timeline.Groups.Where(g => g.Config.Id == 2004).Select(g => g.Wave));
             Assert.IsTrue(due.Where(c => c.Group.Wave <= 10).All(c => c.Group.Cycle == 1));
             Assert.IsTrue(due.Where(c => c.Group.Wave > 10).All(c => c.Group.Cycle == 2));
         }
