@@ -142,7 +142,7 @@ namespace GameLogic
             var session = _session;
             var host = _host;
             var result = ShopOperationResult.InvalidPlacement;
-            var purchasing = _source.Kind == RobotDragSourceKind.ShopOffer;
+            var purchasing = false;
             try
             {
                 if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
@@ -150,13 +150,12 @@ namespace GameLogic
                 if (_ui.IsOverShop(_targetPosition))
                 {
                     int? targetSlot = _ui.TryGetShopSlot(_targetPosition, out shopSlot) ? (int?)shopSlot : null;
-                    if (targetSlot.HasValue)
-                        foreach (var slot in context.GetState(BattleSide.Player).Slots)
-                            if (slot.SlotId == targetSlot.Value && slot.Offer != null && !slot.IsPurchased) purchasing = true;
                     result = context.TryCommitShopDrop(session.InteractionId, targetSlot);
                 }
                 else
                 {
+                    // 商品放回或店内免费合成不算购买；实际部署或买入合成才触发购买反馈。
+                    purchasing = session.Source.Kind == RobotDragSourceKind.ShopOffer;
                     int targetId;
                     BoardPlacementTarget target;
                     if (host.Placement.TryGetDragOccupant(out targetId))
@@ -170,7 +169,10 @@ namespace GameLogic
             finally
             {
                 if (result == ShopOperationResult.Success && purchasing && host != null && host.Context == context && !context.IsEnded)
+                {
                     GameSoundService.Play(GameSound.Purchase);
+                    HapticFeedbackService.PlayPurchasePulse();
+                }
                 if (generation == _generation)
                 {
                     Cancel();
@@ -204,8 +206,10 @@ namespace GameLogic
             if (_ui != null)
             { _ui.HideGhost(); _ui.ClearOfferMergeCandidates(); _ui.RefreshView(); }
         }
-        private void OnApplicationFocus(bool focused) { if (!focused) Cancel(); }
-        private void OnDisable() { Cancel(); }
+        private void OnApplicationFocus(bool focused) { if (!focused) CancelInteractions(); }
+        private void OnApplicationPause(bool paused) { if (paused) CancelInteractions(); }
+        private void OnDisable() { CancelInteractions(); }
+        private void CancelInteractions() { _ui?.CancelSlotRefresh(); Cancel(); }
         private void OnDestroy() { Cancel(); _ui = null; _host = null; }
     }
 }

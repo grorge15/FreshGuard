@@ -20,6 +20,7 @@ namespace GameLogic
         private BattleShopContext _refreshContext;
         private float _refreshStartedAt;
         private GameSoundPlayback _spinSound;
+        private HapticFeedbackService.SlotRefreshHaptic _spinHaptic;
         private bool _leverReturned;
         public bool IsRefreshing { get; private set; }
 
@@ -130,6 +131,11 @@ namespace GameLogic
                 return;
             }
             var elapsed = Time.unscaledTime - _refreshStartedAt;
+            if (elapsed >= REEL_DELAY && !_reelStopped[_reelStopped.Length - 1])
+            {
+                if (_spinHaptic == null) _spinHaptic = HapticFeedbackService.BeginSlotRefresh();
+                _spinHaptic.Update();
+            }
             if (elapsed >= REEL_DELAY && _spinSound == null && !_reelStopped[_reelStopped.Length - 1])
                 _spinSound = GameSoundService.Play(GameSound.ReelSpin);
             if (elapsed >= 0.43f && !_leverReturned)
@@ -154,7 +160,13 @@ namespace GameLogic
                 {
                     _reelStopped[i] = true;
                     GameSoundService.Play(GameSound.ReelStop, pitch: 1f + i * 0.08f);
-                    if (i == _reelWindows.Length - 1) { _spinSound?.Stop(); _spinSound = null; }
+                    if (i == _reelWindows.Length - 1)
+                    {
+                        _spinSound?.Stop();
+                        _spinSound = null;
+                        _spinHaptic?.Dispose();
+                        _spinHaptic = null;
+                    }
                     _reelWindows[i].gameObject.SetActive(false);
                 }
                 if (i < _items.Count) PresentSlotItem(i, elapsed);
@@ -182,6 +194,8 @@ namespace GameLogic
             }
             _spinSound?.Stop();
             _spinSound = null;
+            _spinHaptic?.Dispose();
+            _spinHaptic = null;
             IsRefreshing = false;
             _refreshContext = null;
             if (_leverPivot != null) _leverPivot.localRotation = _leverRotation;

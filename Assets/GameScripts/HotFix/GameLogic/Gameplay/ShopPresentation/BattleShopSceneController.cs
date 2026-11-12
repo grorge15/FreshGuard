@@ -335,7 +335,10 @@ namespace GameLogic
         private void OnBerserkChanged(BattleSide side, bool active)
         {
             if (side == BattleSide.Player && IsCombatRunning)
+            {
                 GameSoundService.Play(active ? GameSound.RageStart : GameSound.RageEnd);
+                if (active) HapticFeedbackService.PlayBerserkStartPulse();
+            }
             if (side == BattleSide.Player) ShopWindow?.RefreshBerserkBar();
             var views = new List<RobotView>();
             foreach (var instance in _views.Values)
@@ -624,7 +627,9 @@ namespace GameLogic
             GameObject view;
             if (_views.TryGetValue(snapshot.TargetInstanceId, out view) && view != null)
                 view.GetComponent<RobotView>()?.PlayMergeFeedback(sourcePosition, snapshot.PreviousLevel, snapshot.Level);
-            if (snapshot.Side == BattleSide.Player) HapticFeedbackService.PlayMergePulse();
+            // 买入合成由购买成功统一轻震，避免与原有合成震动叠加。
+            if (snapshot.Side == BattleSide.Player && snapshot.Source.Kind == RobotDragSourceKind.OwnedRobot)
+                HapticFeedbackService.PlayMergePulse();
         }
 
         public void EndBattle()

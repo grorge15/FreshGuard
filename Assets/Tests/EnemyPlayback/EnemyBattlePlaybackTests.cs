@@ -117,6 +117,14 @@ namespace GameLogic.Tests
             }
             Assert.IsNotNull(host);
             Assert.IsTrue(host.IsReady);
+            var hapticsEnabled = HapticFeedbackService.Enabled;
+            var pulseOverride = typeof(HapticFeedbackService).GetProperty("LightPulseOverride",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            var previousOverride = pulseOverride.GetValue(null);
+            var pulses = new System.Collections.Generic.List<Vector2Int>();
+            pulseOverride.SetValue(null, (System.Action<int, int>)((duration, amplitude) =>
+                pulses.Add(new Vector2Int(duration, amplitude))));
+            HapticFeedbackService.Enabled = true;
             try
             {
                 var window = host.CombatWindow;
@@ -219,8 +227,37 @@ namespace GameLogic.Tests
                 Assert.AreEqual(anchor, ((RobotEntity)placed).Anchor);
                 Assert.AreEqual(coins - sourceOffer.Price, state.EnergyCoins);
                 Assert.IsNull(state.FindSlot(sourceSlot).Offer);
+                CollectionAssert.AreEqual(new[] { new Vector2Int(18, 48) }, pulses,
+                    "实际购买成功只触发一次短促轻震。");
                 var second = (ShopRobotItemWidget)items[1];
                 var secondPoint = RectTransformUtility.WorldToScreenPoint(camera, second.transform.position);
+                var secondOffer = state.FindSlot(second.SlotId).Offer;
+                shop.PressSlot(second.SlotId, -1, secondPoint, Time.unscaledTime);
+                shop.Drag.Move(-1, secondPoint + Vector2.right);
+                shop.Drag.Release(-1, secondPoint - (center - contact));
+                Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
+                Assert.AreSame(secondOffer, state.FindSlot(second.SlotId).Offer);
+                Assert.AreEqual(1, pulses.Count, "商品放回原位不算购买，不能震动。");
+                shop.PressSlot(second.SlotId, -1, secondPoint, Time.unscaledTime);
+                shop.Drag.Release(-1, new Vector2(-1000, -1000));
+                Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
+                Assert.AreEqual(1, pulses.Count, "非法位置放置失败不能震动。");
+
+                var enterBerserk = typeof(PlacementBoardsBootstrap).GetMethod("EnterBerserk",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                enterBerserk.Invoke(host.Bootstrap, new object[] { host.Bootstrap.OpponentBall });
+                Assert.AreEqual(1, pulses.Count, "敌方暴走不能触发玩家手机震动。");
+                enterBerserk.Invoke(host.Bootstrap, new object[] { host.Bootstrap.PlayerBall });
+                Assert.AreEqual(2, pulses.Count);
+                Assert.AreEqual(new Vector2Int(25, 60), pulses[1], "己方暴走开始使用轻震。");
+                enterBerserk.Invoke(host.Bootstrap, new object[] { host.Bootstrap.PlayerBall });
+                Assert.AreEqual(2, pulses.Count, "暴走持续期间不能重复震动。");
+                host.Bootstrap.AdvanceBerserk(host.Bootstrap.BerserkDuration + 0.1f);
+                Assert.AreEqual(2, pulses.Count, "暴走结束不震动。");
+                HapticFeedbackService.Enabled = false;
+                HapticFeedbackService.PlayPurchasePulse();
+                enterBerserk.Invoke(host.Bootstrap, new object[] { host.Bootstrap.PlayerBall });
+                Assert.AreEqual(2, pulses.Count, "关闭震动设置后，购买和暴走均不震动。");
                 shop.PressSlot(second.SlotId, -1, secondPoint, Time.unscaledTime);
                 shop.Drag.Move(-1, secondPoint + Vector2.right);
                 Assert.AreEqual(RobotDragPhase.Dragging, shop.Drag.Phase);
@@ -229,7 +266,12 @@ namespace GameLogic.Tests
                 Assert.IsFalse(host.Context.IsBusy);
                 window.Visible = true;
             }
-            finally { host.EndBattle(); }
+            finally
+            {
+                pulseOverride.SetValue(null, previousOverride);
+                HapticFeedbackService.Enabled = hapticsEnabled;
+                host.EndBattle();
+            }
             yield return null;
             Assert.IsNull(GameModule.UI.GetUI<MainCombatUI>());
             Assert.AreEqual(0, Object.FindObjectsOfType<BattleInfoView>().Length);
