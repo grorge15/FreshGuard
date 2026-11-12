@@ -21,6 +21,7 @@ namespace GameLogic
                 case SkeletonEnemy.CONFIG_ID: enemy = MemoryPool.Acquire<SkeletonEnemy>(); break;
                 case EliteSkeletonEnemy.CONFIG_ID: enemy = MemoryPool.Acquire<EliteSkeletonEnemy>(); break;
                 case SkeletonBossEnemy.CONFIG_ID: enemy = MemoryPool.Acquire<SkeletonBossEnemy>(); break;
+                case AppleEnemy.CONFIG_ID: enemy = MemoryPool.Acquire<AppleEnemy>(); break;
                 default: throw new ArgumentException("未注册对应敌人实体类型：" + config.Id, nameof(config));
             }
             try
@@ -50,7 +51,7 @@ namespace GameLogic
             RequireRatio(config.KnockbackResist, nameof(config.KnockbackResist));
             if (string.IsNullOrWhiteSpace(config.EnemyPrefab)) throw new ArgumentException("敌人预制体资源名不能为空。", nameof(config));
             if (config.Id != SkeletonEnemy.CONFIG_ID && config.Id != EliteSkeletonEnemy.CONFIG_ID &&
-                config.Id != SkeletonBossEnemy.CONFIG_ID)
+                config.Id != SkeletonBossEnemy.CONFIG_ID && config.Id != AppleEnemy.CONFIG_ID)
                 throw new ArgumentException("未注册对应敌人实体类型：" + config.Id, nameof(config));
         }
 

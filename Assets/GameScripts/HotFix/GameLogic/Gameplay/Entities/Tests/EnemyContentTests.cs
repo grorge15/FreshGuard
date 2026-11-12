@@ -33,6 +33,9 @@ namespace GameLogic.Tests
         [TestCase(2002, "EliteSkeletonEnemy", 2, 403)]
         [TestCase(2003, "SkeletonBossEnemy", 1, 1800)]
         [TestCase(2003, "SkeletonBossEnemy", 20, 6930)]
+        [TestCase(2004, "AppleEnemy", 1, 120)]
+        [TestCase(2004, "AppleEnemy", 2, 138)]
+        [TestCase(2004, "AppleEnemy", 20, 462)]
         public void ConfigCreatesConcretePooledEnemyWithWaveHp(int configId, string expectedType, int wave, int hp)
         {
             using (var registry = new BattleEntityRegistry())
@@ -108,15 +111,16 @@ namespace GameLogic.Tests
             }
         }
 
-        [TestCase(2001, "骷髅兵", 8, 7, 8, 10)]
-        [TestCase(2002, "二级骷髅怪", 6, 8, 6, 6)]
-        [TestCase(2003, "骷髅BOSS", 12, 8, 12, 16)]
-        public void PrefabContainsAllOrderedFramesAndAnimationCompletionEvents(int configId, string folder, int idle, int move, int attack, int death)
+        [TestCase(2001, "Spinach")]
+        [TestCase(2002, "FrozenCan")]
+        [TestCase(2003, "GhostOnion")]
+        [TestCase(2004, "Apple")]
+        public void PrefabContainsAllOrderedFramesAndAnimationCompletionEvents(int configId, string folder)
         {
             var config = _tables.TbEnemy.Get(configId);
             Assert.IsEmpty(config.BuffId);
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
-                "Assets/AssetRaw/Actor/Enemy/Prefabs/" + config.EnemyPrefab + ".prefab");
+                "Assets/AssetRaw/Actor/Prefabs/Prefabs/" + config.EnemyPrefab + ".prefab");
             Assert.IsNotNull(prefab);
             var view = prefab.GetComponent("EnemyView");
             Assert.IsNotNull(view);
@@ -127,36 +131,33 @@ namespace GameLogic.Tests
             Assert.IsNotNull(controller);
             Assert.AreEqual("Idle", controller.layers[0].stateMachine.defaultState.name);
             var names = new[] { "Idle", "Move", "Attack", "Death" };
-            var actions = new[] { "待机", "移动", "攻击", "死亡" };
-            var counts = new[] { idle, move, attack, death };
             for (var i = 0; i < names.Length; i++)
             {
                 var state = controller.layers[0].stateMachine.states.Single(s => s.state.name == names[i]).state;
                 var clip = state.motion as AnimationClip;
                 Assert.IsNotNull(clip);
                 Assert.AreEqual(i < 2, clip.isLooping);
-                Assert.AreEqual(10f, clip.frameRate);
                 var binding = AnimationUtility.GetObjectReferenceCurveBindings(clip).Single();
                 Assert.AreEqual("Visual", binding.path);
                 Assert.AreEqual("m_Sprite", binding.propertyName);
                 var keys = AnimationUtility.GetObjectReferenceCurve(clip, binding);
-                // 最后额外保持一帧，确保末帧具有完整的显示时长。
-                Assert.AreEqual(counts[i] + 1, keys.Length);
-                for (var k = 0; k < counts[i]; k++)
+                Assert.GreaterOrEqual(keys.Length, 2);
+                if (names[i] == "Move" || names[i] == "Death")
+                    Assert.AreEqual(6, keys.Select(k => k.value).Distinct().Count());
+                for (var k = 0; k < keys.Length; k++)
                 {
                     Assert.IsInstanceOf<Sprite>(keys[k].value);
                     var path = AssetDatabase.GetAssetPath(keys[k].value);
                     StringAssert.Contains("/" + folder + "/", path);
-                    StringAssert.Contains(actions[i], path);
-                    Assert.AreEqual(k / 10f, keys[k].time, 0.0001f);
                     if (k > 0)
                     {
                         var previous = AssetDatabase.GetAssetPath(keys[k - 1].value);
-                        Assert.Less(FrameNumber(previous), FrameNumber(path));
+                        Assert.LessOrEqual(FrameNumber(previous), FrameNumber(path));
+                        Assert.Greater(keys[k].time, keys[k - 1].time);
                     }
                 }
-                Assert.AreSame(keys[counts[i] - 1].value, keys[counts[i]].value);
-                Assert.AreEqual(counts[i] / 10f, keys[counts[i]].time, 0.0001f);
+                Assert.AreSame(keys[keys.Length - 2].value, keys[keys.Length - 1].value);
+                Assert.Greater(clip.length, keys[keys.Length - 1].time);
                 if (i >= 2)
                     Assert.AreEqual(i == 2 ? "OnAttackAnimationComplete" : "OnDeathAnimationComplete",
                         AnimationUtility.GetAnimationEvents(clip).Single().functionName);

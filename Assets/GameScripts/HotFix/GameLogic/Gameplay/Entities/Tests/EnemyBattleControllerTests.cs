@@ -21,6 +21,7 @@ namespace GameLogic.Tests
         [TestCase(2001)]
         [TestCase(2002)]
         [TestCase(2003)]
+        [TestCase(2004)]
         public void OnlyNormalEnemiesRandomizeSpawnAndWaypointsOnBothSidesAndLaterSpawns(int enemyId)
         {
             _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
@@ -217,6 +218,7 @@ namespace GameLogic.Tests
         [TestCase(2001)]
         [TestCase(2002)]
         [TestCase(2003)]
+        [TestCase(2004)]
         public void InitialAndLaterEnemiesInheritTheirOwnBeltScale(int enemyId)
         {
             _fixture = new Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
@@ -627,7 +629,7 @@ namespace GameLogic.Tests
             var pending = new UniTaskCompletionSource<GameObject>();
             var old = f.PrepareTask((name, parent, token) => pending.Task);
             f.Clear(); f.Prepare();
-            pending.TrySetResult(f.Load("SkeletonEnemy", f.Root.transform, CancellationToken.None).GetAwaiter().GetResult());
+            pending.TrySetResult(f.Load("SpinachEnemy", f.Root.transform, CancellationToken.None).GetAwaiter().GetResult());
             Assert.Throws<OperationCanceledException>(() => old.GetAwaiter().GetResult());
             f.Start(); Assert.AreEqual(2, f.LiveCount);
         }

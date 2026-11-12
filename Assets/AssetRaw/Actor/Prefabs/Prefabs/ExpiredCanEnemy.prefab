@@ -96,7 +96,7 @@ GameObject:
   - component: {fileID: 9041247360223451811}
   - component: {fileID: 1631680663453296349}
   m_Layer: 0
-  m_Name: EliteSkeletonEnemy
+  m_Name: ExpiredCanEnemy
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

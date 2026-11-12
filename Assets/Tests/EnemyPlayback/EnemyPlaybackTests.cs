@@ -17,6 +17,8 @@ namespace GameLogic.Tests
         [TestCase(2001, 11, 250)]
         [TestCase(2002, 2, 403)]
         [TestCase(2003, 20, 6930)]
+        [TestCase(2004, 1, 120)]
+        [TestCase(2004, 2, 138)]
         public void RuntimeLifecycleAndAnimationCompletionEvents(int configId, int wave, int expectedHp)
         {
             Assert.IsTrue(Application.isPlaying, "此测试须使用 PlayMode 执行");
