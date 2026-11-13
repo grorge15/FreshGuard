@@ -23,6 +23,8 @@ namespace GameLogic
         private Button _doubleReward;
         private Button _returnMain;
         private Text _rewardAmount;
+        private MatchInfoWidget _playerInfo;
+        private MatchInfoWidget _opponentInfo;
         private BattleSettlementReward _reward;
         private Func<UniTask> _returnToMain;
         private bool _busy;
@@ -47,6 +49,8 @@ namespace GameLogic
 
         protected override void OnCreate()
         {
+            _playerInfo = CreateWidget<MatchInfoWidget>("m_rect_Content/m_rect_Player");
+            _opponentInfo = CreateWidget<MatchInfoWidget>("m_rect_Content/m_rect_Opponent");
             foreach (var text in gameObject.GetComponentsInChildren<Text>(true))
             {
                 if (text.font != null) continue;
@@ -69,6 +73,14 @@ namespace GameLogic
             Render(UserData is BattleSettlementSnapshot snapshot && snapshot.Result == BattleSettlementResult.Victory);
             if (UserData is BattleSettlementSnapshot result)
                 GameSoundService.Play(result.Result == BattleSettlementResult.Victory ? GameSound.Victory : GameSound.Defeat);
+        }
+
+        /// <summary>复用匹配页的信息组件，展示本局入场时确定的双方资料和携带 BUFF。</summary>
+        public void BindMatch(MatchEntrySnapshot entry)
+        {
+            if (entry == null) return;
+            _playerInfo.Render(entry.PlayerName, entry.PlayerAvatar, entry.Trophies, entry.PlayerBuffs);
+            _opponentInfo.Render(entry.OpponentName, entry.OpponentAvatar, entry.Trophies, entry.OpponentBuffs);
         }
 
         public void BindReward(BattleSettlementReward reward, Func<UniTask> returnToMain)

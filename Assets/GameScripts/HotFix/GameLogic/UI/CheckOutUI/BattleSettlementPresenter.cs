@@ -11,6 +11,7 @@ namespace GameLogic
     {
         private long _activeBattleId;
         private long _handledBattleId;
+        private MatchEntrySnapshot _matchEntry;
         private int _generation;
         private CancellationTokenSource _cancellation;
         private bool _released;
@@ -20,12 +21,13 @@ namespace GameLogic
             GameEvent.AddEventListener<BattleSettlementSnapshot>(BattleSettlementEvents.Requested, OnRequested);
         }
 
-        public void BeginBattle(long battleId)
+        public void BeginBattle(long battleId, MatchEntrySnapshot matchEntry = null)
         {
             if (battleId <= 0) throw new ArgumentOutOfRangeException(nameof(battleId));
             if (_released) return;
             var previousId = _activeBattleId;
             _activeBattleId = battleId;
+            _matchEntry = matchEntry;
             _handledBattleId = 0;
             _generation++;
             CancelPending();
@@ -38,6 +40,7 @@ namespace GameLogic
         {
             if (_released || battleId <= 0 || _activeBattleId != battleId) return;
             _activeBattleId = _handledBattleId = 0;
+            _matchEntry = null;
             _generation++;
             CancelPending();
             CloseOwnedWindow(battleId);
@@ -48,10 +51,11 @@ namespace GameLogic
             if (_released || snapshot.BattleId <= 0 || snapshot.BattleId != _activeBattleId ||
                 snapshot.BattleId == _handledBattleId) return;
             _handledBattleId = snapshot.BattleId;
-            OpenAsync(snapshot, _generation, _cancellation.Token).Forget();
+            OpenAsync(snapshot, _matchEntry, _generation, _cancellation.Token).Forget();
         }
 
-        private async UniTaskVoid OpenAsync(BattleSettlementSnapshot snapshot, int generation, CancellationToken token)
+        private async UniTaskVoid OpenAsync(BattleSettlementSnapshot snapshot, MatchEntrySnapshot matchEntry,
+            int generation, CancellationToken token)
         {
             try
             {
@@ -63,6 +67,7 @@ namespace GameLogic
                 }
                 if (window == null || !window.IsPrepare || window.IsDestroyed)
                     throw new InvalidOperationException("CheckOutUI 加载失败。");
+                window.BindMatch(matchEntry);
                 window.BindReward(new BattleSettlementReward(ConfigSystem.Instance.Tables, GameApp.PlayerState,
                     snapshot.Result, GameApp.SavePlayerStateAsync), () => ReturnMainAsync(snapshot.BattleId, generation));
             }
@@ -81,6 +86,7 @@ namespace GameLogic
             if (_released || _activeBattleId != battleId || _generation != generation) return;
             if (menu == null || menu.IsDestroyed) throw new InvalidOperationException("主菜单加载失败，请重试。");
             _activeBattleId = 0;
+            _matchEntry = null;
             _generation++;
             CancelPending();
             CloseOwnedWindow(battleId);
@@ -112,6 +118,7 @@ namespace GameLogic
             CancelPending();
             CloseOwnedWindow(_activeBattleId);
             _activeBattleId = _handledBattleId = 0;
+            _matchEntry = null;
         }
     }
 }
