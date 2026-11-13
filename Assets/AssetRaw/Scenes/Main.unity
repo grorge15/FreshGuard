@@ -243,8 +243,8 @@ MonoBehaviour:
   _enemies: {fileID: 164109971}
   _screenLayout: {fileID: 164109972}
   _layoutConfigId: 1
-  _playerCandidates: f5010000f6010000f7010000f8010000f9010000590200005a0200005b020000
-  _opponentCandidates: f5010000f6010000f7010000f8010000f9010000590200005a0200005b020000
+  _playerCandidates: f601000059020000bd020000be020000bf020000c0020000
+  _opponentCandidates: f601000059020000bd020000be020000bf020000c0020000
   _opponentAiSettings:
     Enabled: 1
     InitialDelay: 0.8

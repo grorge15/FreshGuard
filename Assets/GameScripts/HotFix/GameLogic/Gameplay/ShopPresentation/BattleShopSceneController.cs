@@ -20,8 +20,8 @@ namespace GameLogic
         [SerializeField] private EnemyBattleController _enemies;
         [SerializeField] private BattleScreenLayoutController _screenLayout;
         [SerializeField] private int _layoutConfigId = 1;
-        [SerializeField] private int[] _playerCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
-        [SerializeField] private int[] _opponentCandidates = { 501, 502, 503, 504, 505, 601, 602, 603 };
+        [SerializeField] private int[] _playerCandidates = { 502, 601, 701, 702, 703, 704 };
+        [SerializeField] private int[] _opponentCandidates = { 502, 601, 701, 702, 703, 704 };
         private Tables _robotPresentationTables;
         private readonly Dictionary<int, GameObject> _views = new Dictionary<int, GameObject>();
         private Transform _preparedRoot;

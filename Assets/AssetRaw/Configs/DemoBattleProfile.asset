@@ -18,40 +18,22 @@ MonoBehaviour:
   OpponentName: "\u7F8E\u5473\u6599\u7406\u5BB6"
   OpponentAvatar: Main_playerAvatar
   Robots:
-  - RobotId: 501
-    Unlocked: 1
-    ReferenceLevel: 5
   - RobotId: 502
-    Unlocked: 1
-    ReferenceLevel: 5
-  - RobotId: 503
-    Unlocked: 1
-    ReferenceLevel: 5
-  - RobotId: 504
-    Unlocked: 1
-    ReferenceLevel: 5
-  - RobotId: 505
     Unlocked: 1
     ReferenceLevel: 5
   - RobotId: 601
     Unlocked: 1
     ReferenceLevel: 5
-  - RobotId: 602
-    Unlocked: 1
-    ReferenceLevel: 5
-  - RobotId: 603
-    Unlocked: 1
-    ReferenceLevel: 5
   - RobotId: 701
     Unlocked: 1
     ReferenceLevel: 5
-  - RobotId: 704
+  - RobotId: 702
     Unlocked: 1
     ReferenceLevel: 5
   - RobotId: 703
     Unlocked: 1
     ReferenceLevel: 5
-  - RobotId: 702
+  - RobotId: 704
     Unlocked: 1
     ReferenceLevel: 5
   Buffs: []
