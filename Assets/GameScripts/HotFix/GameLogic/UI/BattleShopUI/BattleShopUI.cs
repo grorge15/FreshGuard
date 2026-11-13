@@ -183,8 +183,12 @@ namespace GameLogic
             // 商店来源在图标底边对齐触点的基础上再抬高两格，随棋盘视图缩放。
             return position + Vector2.up * (cellHeight * DragLiftCells);
         }
-        public void ShowGhost(string icon, string portrait, int level, Vector2 position) { _ghost.Show(icon, portrait, level, GetGhostPosition(position), EventCamera); }
-        public Vector2 MoveGhost(Vector2 position) => _ghost != null ? _ghost.Move(GetGhostPosition(position), EventCamera) : position;
+        private float GhostScreenCellHeight => _host != null && _host.Placement != null
+            ? _host.Placement.GetScreenCellHeight(BattleSide.Player) : 0f;
+        public void ShowGhost(string icon, string portrait, int level, Vector2 position)
+        { _ghost.Show(icon, portrait, level, GetGhostPosition(position), EventCamera, GhostScreenCellHeight); }
+        public Vector2 MoveGhost(Vector2 position) => _ghost != null
+            ? _ghost.Move(GetGhostPosition(position), EventCamera, GhostScreenCellHeight) : position;
         public void HideGhost() { if (_ghost != null && _ghost.gameObject != null) _ghost.Visible = false; }
         public void ShowFailure(ShopOperationResult result)
         {
