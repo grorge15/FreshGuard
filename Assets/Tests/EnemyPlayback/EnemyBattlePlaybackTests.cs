@@ -236,11 +236,38 @@ namespace GameLogic.Tests
                 Assert.IsNull(state.FindSlot(sourceSlot).Offer);
                 CollectionAssert.AreEqual(new[] { new Vector2Int(18, 48) }, pulses,
                     "实际购买成功只触发一次短促轻震。");
+                Assert.IsTrue(shop.Drag.Press(instanceId, -1, target, Time.unscaledTime));
+                var boardPointer = target + Vector2.right;
+                shop.Drag.Move(-1, boardPointer);
+                Assert.AreEqual(RobotDragPhase.Dragging, shop.Drag.Phase);
+                var boardBottom = RectTransformUtility.WorldToScreenPoint(camera,
+                    ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
+                var boardCenter = RectTransformUtility.WorldToScreenPoint(camera, ghost.TransformPoint(ghost.rect.center));
+                Assert.That(Vector2.Distance(boardPointer, boardBottom), Is.LessThan(1f),
+                    "从棋盘拿起时，触点应对齐图标底边中心，不额外抬高两格。");
+                var boardDragOffset = boardCenter - boardPointer;
+                shop.Drag.Move(-1, pointer);
+                boardBottom = RectTransformUtility.WorldToScreenPoint(camera,
+                    ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
+                Assert.That(Vector2.Distance(pointer, boardBottom), Is.LessThan(1f),
+                    "棋盘来源拖入商店区域后仍保持近距离偏移。");
+                shop.Drag.Release(-1, target - boardDragOffset);
+                deadline = Time.realtimeSinceStartup + 15f;
+                while (shop.Drag.Phase != RobotDragPhase.Idle && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
+                Assert.AreEqual(instanceId.ToString(), board.Model.GetOccupant(anchor),
+                    "棋盘来源松手仍按图标中心落格。");
+                Assert.AreEqual(coins - sourceOffer.Price, state.EnergyCoins);
+                Assert.AreEqual(1, pulses.Count, "移动已有机器人不产生购买反馈。");
                 var second = (ShopRobotItemWidget)items[1];
                 var secondPoint = RectTransformUtility.WorldToScreenPoint(camera, second.transform.position);
                 var secondOffer = state.FindSlot(second.SlotId).Offer;
                 shop.PressSlot(second.SlotId, -1, secondPoint, Time.unscaledTime);
                 shop.Drag.Move(-1, secondPoint + Vector2.right);
+                contact = RectTransformUtility.WorldToScreenPoint(camera,
+                    ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
+                Assert.That(contact.y - secondPoint.y, Is.EqualTo(expectedLift).Within(1f),
+                    "下一次从商店拿起时恢复远距离偏移。");
                 shop.Drag.Release(-1, secondPoint - dragOffset);
                 Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
                 Assert.AreSame(secondOffer, state.FindSlot(second.SlotId).Offer);

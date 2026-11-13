@@ -176,9 +176,11 @@ namespace GameLogic
         }
         private Vector2 GetGhostPosition(Vector2 position)
         {
+            // 按拿起前的位置固定偏移；棋盘来源只保持图标底边中心对齐触点。
+            if (Context?.ActiveInteraction?.OriginalLocation == RobotLocation.Board) return position;
             var placement = _host != null ? _host.Placement : null;
             var cellHeight = placement != null ? placement.GetScreenCellHeight(BattleSide.Player) : 0f;
-            // 在原有图标底边对齐触点的基础上，再抬高两格；按当前棋盘视图换算屏幕距离。
+            // 商店来源在图标底边对齐触点的基础上再抬高两格，随棋盘视图缩放。
             return position + Vector2.up * (cellHeight * DragLiftCells);
         }
         public void ShowGhost(string icon, string portrait, int level, Vector2 position) { _ghost.Show(icon, portrait, level, GetGhostPosition(position), EventCamera); }
