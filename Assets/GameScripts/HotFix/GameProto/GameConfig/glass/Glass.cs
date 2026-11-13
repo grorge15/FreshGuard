@@ -12,6 +12,9 @@ using Luban;
 
 namespace GameConfig.glass
 {
+/// <summary>
+/// 玻璃配置
+/// </summary>
 public sealed partial class Glass : Luban.BeanBase
 {
     public Glass(ByteBuf _buf) 

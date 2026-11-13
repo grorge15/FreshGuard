@@ -12,6 +12,9 @@ using Luban;
 
 namespace GameConfig.item
 {
+/// <summary>
+/// 道具基础表
+/// </summary>
 public sealed partial class ItemBase : Luban.BeanBase
 {
     public ItemBase(ByteBuf _buf) 

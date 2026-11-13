@@ -12,6 +12,9 @@ using Luban;
 
 namespace GameConfig.wave
 {
+/// <summary>
+/// 波次方案（演示20波，数值可由策划调整）
+/// </summary>
 public sealed partial class WavePlan : Luban.BeanBase
 {
     public WavePlan(ByteBuf _buf) 
