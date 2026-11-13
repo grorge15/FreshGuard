@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.buff
 {
-/// <summary>
-/// Buff效果模板；商店售卖信息读取shop_goods.xlsx
-/// </summary>
 public sealed partial class Buff : Luban.BeanBase
 {
     public Buff(ByteBuf _buf) 

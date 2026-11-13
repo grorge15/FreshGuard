@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.drop
 {
-/// <summary>
-/// 掉落配置
-/// </summary>
 public sealed partial class Drop : Luban.BeanBase
 {
     public Drop(ByteBuf _buf) 

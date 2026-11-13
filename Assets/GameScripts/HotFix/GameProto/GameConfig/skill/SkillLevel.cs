@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.skill
 {
-/// <summary>
-/// SkillLevel
-/// </summary>
 public sealed partial class SkillLevel : Luban.BeanBase
 {
     public SkillLevel(ByteBuf _buf) 

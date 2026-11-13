@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.bullet
 {
-/// <summary>
-/// 弹丸配置
-/// </summary>
 public sealed partial class Bullet : Luban.BeanBase
 {
     public Bullet(ByteBuf _buf) 

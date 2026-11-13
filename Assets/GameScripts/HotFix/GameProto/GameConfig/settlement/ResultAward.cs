@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.settlement
 {
-/// <summary>
-/// 结算奖励表
-/// </summary>
 public sealed partial class ResultAward : Luban.BeanBase
 {
     public ResultAward(ByteBuf _buf) 

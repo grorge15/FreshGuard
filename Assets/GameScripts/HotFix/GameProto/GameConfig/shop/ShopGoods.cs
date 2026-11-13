@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.shop
 {
-/// <summary>
-/// 神秘商店商品配置：关联Buff效果，维护助力币价格、品质和上架状态
-/// </summary>
 public sealed partial class ShopGoods : Luban.BeanBase
 {
     public ShopGoods(ByteBuf _buf) 
@@ -23,8 +20,11 @@ public sealed partial class ShopGoods : Luban.BeanBase
         BuffId = _buf.ReadInt();
         BuffId_Ref = null;
         Name = _buf.ReadString();
+        Icon = _buf.ReadString();
+        {int __n0 = _buf.ReadSize(); Descriptions = new string[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { string __e0;__e0 = _buf.ReadString(); Descriptions[__index0] = __e0;}}
         Quality = _buf.ReadInt();
         Price = _buf.ReadInt();
+        HasLevel = _buf.ReadInt();
     }
 
     public static ShopGoods DeserializeShopGoods(ByteBuf _buf)
@@ -46,6 +46,14 @@ public sealed partial class ShopGoods : Luban.BeanBase
     /// </summary>
     public readonly string Name;
     /// <summary>
+    /// 效果图标资源名，不带扩展名；商店与助力栏共用。
+    /// </summary>
+    public readonly string Icon;
+    /// <summary>
+    /// 各级效果说明，用|分隔，索引=等级-1；即时奖励固定取第1项。实际效果由行为及参数实现。
+    /// </summary>
+    public readonly string[] Descriptions;
+    /// <summary>
     /// 商品品质：2绿、3蓝、4紫、5橙。UI枚举为0～3，必须显式映射。
     /// </summary>
     public readonly int Quality;
@@ -53,6 +61,10 @@ public sealed partial class ShopGoods : Luban.BeanBase
     /// 单次购买或升级所需的助力币数量。本商店统一使用助力币，无需填写货币类型。例如150表示150助力币；当前Combo每级均150。最高等级读取Buff.maxLevel。
     /// </summary>
     public readonly int Price;
+    /// <summary>
+    /// 判断当前商品是否可升级
+    /// </summary>
+    public readonly int HasLevel;
    
     public const int __ID__ = -1277376280;
     public override int GetTypeId() => __ID__;
@@ -68,8 +80,11 @@ public sealed partial class ShopGoods : Luban.BeanBase
         + "id:" + Id + ","
         + "buffId:" + BuffId + ","
         + "name:" + Name + ","
+        + "icon:" + Icon + ","
+        + "descriptions:" + Luban.StringUtil.CollectionToString(Descriptions) + ","
         + "quality:" + Quality + ","
         + "price:" + Price + ","
+        + "hasLevel:" + HasLevel + ","
         + "}";
     }
 }

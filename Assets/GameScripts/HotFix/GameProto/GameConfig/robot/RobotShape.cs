@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.robot
 {
-/// <summary>
-/// 机器人占格形状
-/// </summary>
 public sealed partial class RobotShape : Luban.BeanBase
 {
     public RobotShape(ByteBuf _buf) 
