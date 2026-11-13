@@ -66,12 +66,7 @@ public partial class GameApp
         catch (OperationCanceledException) { }
         catch (Exception e) { Log.Error("主界面初始化失败：" + e); }
     }
-    public static async UniTask SavePlayerStateAsync()
-    {
-        if (_playerStore == null || _playerRecord == null || _playerState == null) return;
-        _playerRecord.Capture(_playerState);
-        await _playerStore.SaveAsync(_playerRecord);
-    }
+    public static UniTask SavePlayerStateAsync() => SaveCurrentPlayerStateAsync();
     public static UniTask BeginBattleFromMainMenu(MainMenuUI source)
     {
         if (_battleStarting) return UniTask.CompletedTask;
@@ -96,9 +91,12 @@ public partial class GameApp
         try
         {
             if (_demoProfile == null || _playerRecord == null) throw new InvalidOperationException("Demo入场数据尚未就绪。");
+            await PruneExpiredAssistsAsync();
             var tables = ConfigSystem.Instance.Tables;
             entry = new MatchEntrySnapshot(_demoProfile,PlayerState,ShopRules.FromTables(tables),
-                isRobotEnabled: id => SkillAvailability.IsRobotEnabled(tables,id));
+                isRobotEnabled: id => SkillAvailability.IsRobotEnabled(tables,id),
+                carriedBuffs: AssistConfigAdapter.ToMatchBuffs(PlayerState, tables, DateTimeOffset.UtcNow),
+                unlockedBuffs: AssistConfigAdapter.UnlockedMatchBuffs(tables));
             foreach (var id in entry.Candidates)
             {
                 var robot = tables.TbRobot.Get(id);
