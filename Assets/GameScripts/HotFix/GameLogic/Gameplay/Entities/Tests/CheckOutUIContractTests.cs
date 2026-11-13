@@ -12,10 +12,14 @@ namespace GameLogic.Tests
         [Test]
         public void WindowPrefabHasBothThemesAndButtonsDisabledUntilBound()
         {
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/CheckOutUI.prefab");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/CheckOutUI.prefab");
             Assert.IsNotNull(prefab, "结算窗口必须有可加载的 Prefab");
             Assert.IsNotNull(prefab.GetComponent<Canvas>());
             Assert.IsNotNull(prefab.GetComponent<GraphicRaycaster>());
+            Assert.IsNull(prefab.transform.Find("m_rect_Content/m_text_CupChange"));
+            var trophies = prefab.transform.Find("m_rect_Content/m_rect_Player/m_text_Trophies").GetComponent<Text>();
+            Assert.IsTrue(trophies.supportRichText);
+            Assert.IsFalse(trophies.raycastTarget);
             foreach (var path in new[] { "m_go_Victory", "m_go_Defeat", "m_rect_Content/m_rect_Player", "m_rect_Content/m_rect_Opponent", "m_rect_Content/m_rect_Rewards" })
                 Assert.IsNotNull(prefab.transform.Find(path), path);
             foreach (var name in new[] { "m_btn_DoubleReward", "m_btn_ReturnMain" })

@@ -12,22 +12,31 @@ namespace GameLogic
         private long _activeBattleId;
         private long _handledBattleId;
         private MatchEntrySnapshot _matchEntry;
+        private string _entryId;
+        private BattleSettlementReward _outcomeReward;
+        private BattleSettlementSnapshot? _outcomeSnapshot;
         private int _generation;
         private CancellationTokenSource _cancellation;
         private bool _released;
+        public int LeaveCupDelta => GameApp.GetBattleLeaveCupDelta(_entryId);
 
         protected override void OnInit()
         {
+            GameEvent.AddEventListener<BattleSettlementSnapshot>(BattleSettlementEvents.Determined, OnDetermined);
             GameEvent.AddEventListener<BattleSettlementSnapshot>(BattleSettlementEvents.Requested, OnRequested);
         }
 
         public void BeginBattle(long battleId, MatchEntrySnapshot matchEntry = null)
         {
             if (battleId <= 0) throw new ArgumentOutOfRangeException(nameof(battleId));
-            if (_released) return;
+            if (_released || _activeBattleId == battleId) return;
+            var entryId = GameApp.RegisterBattleSettlement(matchEntry);
             var previousId = _activeBattleId;
             _activeBattleId = battleId;
             _matchEntry = matchEntry;
+            _entryId = entryId;
+            _outcomeReward = null;
+            _outcomeSnapshot = null;
             _handledBattleId = 0;
             _generation++;
             CancelPending();
@@ -35,27 +44,40 @@ namespace GameLogic
             _cancellation = new CancellationTokenSource();
         }
 
-        /// <summary>主动离开只取消本局结算归属，迟到的终局通知不能再打开结算页。</summary>
+        /// <summary>主动离开按失败记杯数且不给金币；迟到终局不能覆盖这笔结果或重新开窗。</summary>
         public void AbandonBattle(long battleId)
         {
             if (_released || battleId <= 0 || _activeBattleId != battleId) return;
+            if (_outcomeReward == null) GameApp.SettleBattle(_entryId, BattleSettlementResult.Defeat, true);
             _activeBattleId = _handledBattleId = 0;
             _matchEntry = null;
+            _entryId = null;
+            _outcomeReward = null;
+            _outcomeSnapshot = null;
             _generation++;
             CancelPending();
             CloseOwnedWindow(battleId);
+        }
+
+        private void OnDetermined(BattleSettlementSnapshot snapshot)
+        {
+            if (_released || snapshot.BattleId <= 0 || snapshot.BattleId != _activeBattleId || _outcomeReward != null) return;
+            _outcomeReward = GameApp.SettleBattle(_entryId, snapshot.Result);
+            _outcomeSnapshot = snapshot;
         }
 
         private void OnRequested(BattleSettlementSnapshot snapshot)
         {
             if (_released || snapshot.BattleId <= 0 || snapshot.BattleId != _activeBattleId ||
                 snapshot.BattleId == _handledBattleId) return;
+            // 同步记录结果、开始持久化，然后才启动窗口加载。
+            OnDetermined(snapshot);
             _handledBattleId = snapshot.BattleId;
-            OpenAsync(snapshot, _matchEntry, _generation, _cancellation.Token).Forget();
+            OpenAsync(_outcomeSnapshot.Value, _matchEntry, _outcomeReward, _generation, _cancellation.Token).Forget();
         }
 
         private async UniTaskVoid OpenAsync(BattleSettlementSnapshot snapshot, MatchEntrySnapshot matchEntry,
-            int generation, CancellationToken token)
+            BattleSettlementReward reward, int generation, CancellationToken token)
         {
             try
             {
@@ -68,14 +90,22 @@ namespace GameLogic
                 if (window == null || !window.IsPrepare || window.IsDestroyed)
                     throw new InvalidOperationException("CheckOutUI 加载失败。");
                 window.BindMatch(matchEntry);
-                window.BindReward(new BattleSettlementReward(ConfigSystem.Instance.Tables, GameApp.PlayerState,
-                    snapshot.Result, GameApp.SavePlayerStateAsync), () => ReturnMainAsync(snapshot.BattleId, generation));
+                window.BindReward(reward, () => ReturnMainAsync(snapshot.BattleId, generation));
             }
             catch (OperationCanceledException) { }
             catch (Exception exception)
             {
                 CloseOwnedWindow(snapshot.BattleId);
                 Debug.LogError("结算窗口加载失败，对局保持结束状态：" + exception.Message);
+                if (!_released && generation == _generation)
+                {
+                    try
+                    {
+                        await reward.ClaimAsync(false);
+                        await ReturnMainAsync(snapshot.BattleId, generation);
+                    }
+                    catch (Exception recoveryError) { Debug.LogError("结算返回主界面失败：" + recoveryError.Message); }
+                }
             }
         }
 
@@ -87,6 +117,9 @@ namespace GameLogic
             if (menu == null || menu.IsDestroyed) throw new InvalidOperationException("主菜单加载失败，请重试。");
             _activeBattleId = 0;
             _matchEntry = null;
+            _entryId = null;
+            _outcomeReward = null;
+            _outcomeSnapshot = null;
             _generation++;
             CancelPending();
             CloseOwnedWindow(battleId);
@@ -114,11 +147,15 @@ namespace GameLogic
         {
             _released = true;
             _generation++;
+            GameEvent.RemoveEventListener<BattleSettlementSnapshot>(BattleSettlementEvents.Determined, OnDetermined);
             GameEvent.RemoveEventListener<BattleSettlementSnapshot>(BattleSettlementEvents.Requested, OnRequested);
             CancelPending();
             CloseOwnedWindow(_activeBattleId);
             _activeBattleId = _handledBattleId = 0;
             _matchEntry = null;
+            _entryId = null;
+            _outcomeReward = null;
+            _outcomeSnapshot = null;
         }
     }
 }

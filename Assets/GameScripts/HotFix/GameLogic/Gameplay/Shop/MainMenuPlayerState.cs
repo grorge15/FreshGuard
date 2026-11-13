@@ -8,7 +8,7 @@ namespace GameLogic
         public const int DefaultEnergyCapacity = 30;
         public const int DefaultEnergyCost = 5;
         public const int DefaultCoins = 0;
-        public const int DefaultTrophies = 2500;
+        public const int DefaultTrophies = 0;
         public const string DefaultPlayerName = "料理守护者";
 
         private readonly TimeSpan _recoveryInterval;
@@ -58,6 +58,11 @@ namespace GameLogic
         {
             if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
             Coins = checked(Coins + amount);
+        }
+
+        public void ChangeTrophies(int amount)
+        {
+            Trophies = (int)Math.Max(0L, Math.Min(int.MaxValue, (long)Trophies + amount));
         }
 
         public bool TrySpendCoins(int amount)

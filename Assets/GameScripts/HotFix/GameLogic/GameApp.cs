@@ -56,7 +56,7 @@ public partial class GameApp
             if (saved != null)
                 _playerState = saved.Restore(_playerState.EnergyCapacity,_playerState.RecoveryInterval,DateTimeOffset.UtcNow);
             _playerRecord = saved ?? new MatchPlayerRecord();
-            _playerRecord.RefundMatching(_playerState,DateTimeOffset.UtcNow);
+            _playerRecord.RecoverPending(_playerState,DateTimeOffset.UtcNow);
             await SavePlayerStateAsync();
             lifetime.ThrowIfCancellationRequested();
             await GameModule.UI.ShowUIAsyncAwait<MainMenuUI>();
@@ -154,6 +154,8 @@ public partial class GameApp
                 session.Advance(Time.unscaledDeltaTime,MatchApplicationState.IsForeground);
                 loading.Render();
             }
+            await PrepareBattleSettlementAsync(entry);
+            lifetime.ThrowIfCancellationRequested();
             GameModule.UI.CloseUI<BattleLoadingUI>();
             if (source != null) GameModule.UI.CloseUI<MainMenuUI>();
             if (!controller.ReleaseMatch(entry.EntryId)) throw new InvalidOperationException("本局无法放行开战。");
@@ -168,6 +170,7 @@ public partial class GameApp
             if (entry != null && !released)
             {
                 _matchController?.CancelMatch(entry.EntryId);
+                _playerRecord?.CancelUnreleasedBattle(entry.EntryId);
                 if (_playerRecord != null && _playerRecord.RefundFailure(PlayerState,entry.EntryId,DateTimeOffset.UtcNow))
                 {
                     try { await SavePlayerStateAsync(); }

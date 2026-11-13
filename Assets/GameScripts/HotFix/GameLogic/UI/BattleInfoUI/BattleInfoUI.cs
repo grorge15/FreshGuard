@@ -12,6 +12,13 @@ namespace GameLogic
         /// <summary>当前窗口归属的对局；未绑定或关闭后为 0，供 host 判断关闭所有权。</summary>
         public long BattleId { get; private set; }
         public BattleInfoView View { get; private set; }
+        public void BindMatch(MatchEntrySnapshot entry)
+        {
+            if (entry == null) return;
+            View.SetPlayerInfo(entry.PlayerName, entry.Trophies);
+            View.SetEnemyInfo(entry.OpponentName, entry.Trophies);
+        }
+
         public void Bind(BattleProgressSnapshot snapshot)
         {
             _userDatas = new object[] { snapshot };

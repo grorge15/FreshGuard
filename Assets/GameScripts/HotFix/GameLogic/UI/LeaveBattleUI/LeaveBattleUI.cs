@@ -42,7 +42,8 @@ namespace GameLogic
             _owner = UserData as MainCombatUI;
             _context = _owner?.Context;
             _leftBattle = false;
-            _message.text = "是否离开当前战斗？";
+            var cupLoss = -BattleSettlementPresenter.Instance.LeaveCupDelta;
+            _message.text = $"离开将扣除{cupLoss}杯，且无金币奖励。\n是否离开当前战斗？";
             RefreshButtons();
             FitToSafeArea();
             GameSoundService.Play(GameSound.UiOpen);
@@ -82,12 +83,13 @@ namespace GameLogic
                 if (!_leftBattle)
                 {
                     var host = _owner.Host;
-                    _leftBattle = true;
                     BattleSettlementPresenter.Instance.AbandonBattle(_context.BattleId);
+                    _leftBattle = true;
                     _context.RequestEndBattle();
                     GameModule.UI.CloseUI<SettingsUI>();
                     host.EndBattle();
                 }
+                await GameApp.SavePlayerStateAsync();
                 var menu = await GameModule.UI.ShowUIAsyncAwait<MainMenuUI>();
                 if (menu == null || menu.IsDestroyed) throw new InvalidOperationException("主界面加载失败。");
                 if (!IsDestroyed) Close();
@@ -97,7 +99,7 @@ namespace GameLogic
                 Debug.LogError("离开战斗或返回主界面失败：" + exception.Message);
                 if (!IsDestroyed)
                 {
-                    _message.text = "返回主界面失败，请点击确定重试";
+                    _message.text = "保存或返回失败，请点击确定重试";
                     GameSoundService.Play(GameSound.Error);
                 }
             }

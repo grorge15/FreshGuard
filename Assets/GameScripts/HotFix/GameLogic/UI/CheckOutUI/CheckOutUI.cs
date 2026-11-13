@@ -23,6 +23,14 @@ namespace GameLogic
         private Button _doubleReward;
         private Button _returnMain;
         private Text _rewardAmount;
+        private Text _playerTrophies;
+        private RectTransform _playerCup;
+        private Text _opponentTrophies;
+        private RectTransform _opponentCup;
+        private RectTransform _content;
+        private Vector3 _contentBaseScale;
+        private Vector2 _contentBasePosition;
+        private Vector2 _lastWindowSize;
         private MatchInfoWidget _playerInfo;
         private MatchInfoWidget _opponentInfo;
         private BattleSettlementReward _reward;
@@ -35,6 +43,9 @@ namespace GameLogic
             _victory = FindChild("m_go_Victory").gameObject;
             _defeat = FindChild("m_go_Defeat").gameObject;
             const string content = "m_rect_Content/";
+            _content = FindChildComponent<RectTransform>("m_rect_Content");
+            _contentBaseScale = _content.localScale;
+            _contentBasePosition = _content.anchoredPosition;
             _playerCrown = FindChild(content + "m_rect_Player/m_img_Crown").gameObject;
             _opponentCrown = FindChild(content + "m_rect_Opponent/m_img_Crown").gameObject;
             _victoryVs = FindChild(content + "m_img_VictoryVS").gameObject;
@@ -43,6 +54,10 @@ namespace GameLogic
             _defeatRewards = FindChild(content + "m_rect_Rewards/m_img_DefeatBG").gameObject;
             _rewardTitle = FindChildComponent<Text>(content + "m_rect_Rewards/m_text_Title");
             _rewardAmount = FindChildComponent<Text>(content + "m_rect_Rewards/m_item_Reward/m_text_Amount");
+            _playerTrophies = FindChildComponent<Text>(content + "m_rect_Player/m_text_Trophies");
+            _playerCup = FindChildComponent<RectTransform>(content + "m_rect_Player/m_img_Cup");
+            _opponentTrophies = FindChildComponent<Text>(content + "m_rect_Opponent/m_text_Trophies");
+            _opponentCup = FindChildComponent<RectTransform>(content + "m_rect_Opponent/m_img_Cup");
             _doubleReward = FindChildComponent<Button>(content + "m_btn_DoubleReward");
             _returnMain = FindChildComponent<Button>(content + "m_btn_ReturnMain");
         }
@@ -69,10 +84,30 @@ namespace GameLogic
             _returnToMain = null;
             _busy = false;
             _rewardSoundStage = 0;
+            _playerTrophies.text = string.Empty;
+            _opponentTrophies.text = string.Empty;
             _doubleReward.interactable = _returnMain.interactable = false;
             Render(UserData is BattleSettlementSnapshot snapshot && snapshot.Result == BattleSettlementResult.Victory);
+            FitContentToWindow();
             if (UserData is BattleSettlementSnapshot result)
                 GameSoundService.Play(result.Result == BattleSettlementResult.Victory ? GameSound.Victory : GameSound.Defeat);
+        }
+
+        protected override void OnUpdate()
+        {
+            if (_lastWindowSize != rectTransform.rect.size) FitContentToWindow();
+        }
+
+        private void FitContentToWindow()
+        {
+            var size = rectTransform.rect.size;
+            _lastWindowSize = size;
+            if (size.x <= 48f || size.y <= 48f) return;
+            var design = Vector2.Scale(_content.rect.size, new Vector2(_contentBaseScale.x, _contentBaseScale.y));
+            if (design.x <= 0f || design.y <= 0f) return;
+            var fit = Mathf.Min(1f, (size.x - 48f) / design.x, (size.y - 48f) / design.y);
+            _content.localScale = _contentBaseScale * fit;
+            _content.anchoredPosition = _contentBasePosition * fit;
         }
 
         /// <summary>复用匹配页的信息组件，展示本局入场时确定的双方资料和携带 BUFF。</summary>
@@ -81,13 +116,35 @@ namespace GameLogic
             if (entry == null) return;
             _playerInfo.Render(entry.PlayerName, entry.PlayerAvatar, entry.Trophies, entry.PlayerBuffs);
             _opponentInfo.Render(entry.OpponentName, entry.OpponentAvatar, entry.Trophies, entry.OpponentBuffs);
+            if (_reward != null) RefreshTrophies();
         }
 
         public void BindReward(BattleSettlementReward reward, Func<UniTask> returnToMain)
         {
             _reward = reward;
             _returnToMain = returnToMain;
+            RefreshTrophies();
             RefreshReward();
+        }
+
+        private void RefreshTrophies()
+        {
+            RenderTrophies(_playerTrophies, _playerCup, _reward.TrophiesBefore, _reward.TrophyDelta);
+            RenderTrophies(_opponentTrophies, _opponentCup, _reward.OpponentTrophiesBefore, _reward.OpponentTrophyDelta);
+        }
+
+        private static void RenderTrophies(Text text, RectTransform cup, int before, int delta)
+        {
+            var color = delta > 0 ? "#31D158" : delta < 0 ? "#FF3B30" : "#CBD5E1";
+            text.supportRichText = true;
+            text.text = $"{before} <color={color}>{(delta > 0 ? "+" : "")}{delta}</color>";
+            // 将奖杯、杯数和本局增减作为一整行居中，长杯数仍由原有字号适配处理。
+            var textWidth = Mathf.Min(164f, text.preferredWidth + 2f);
+            var textRect = text.rectTransform;
+            var gap = 6f;
+            textRect.sizeDelta = new Vector2(textWidth, textRect.sizeDelta.y);
+            textRect.anchoredPosition = new Vector2((cup.sizeDelta.x + gap) * 0.5f, textRect.anchoredPosition.y);
+            cup.anchoredPosition = new Vector2(-(textWidth + gap) * 0.5f, cup.anchoredPosition.y);
         }
 
         private void RefreshReward()

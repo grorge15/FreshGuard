@@ -99,6 +99,30 @@ namespace GameLogic.Tests
             Assert.IsTrue(doubleButton.interactable, "结算后必须启用双倍按钮");
             Assert.IsTrue(returnButton.interactable, "结算后必须启用返回按钮");
             Assert.AreEqual(baseAmount.ToString(), amount.text);
+            var expectedTrophies = victory ? 2520 : 2490;
+            Assert.AreEqual(expectedTrophies, GameApp.PlayerState.Trophies, "窗口领取之前已经自动结算杯数");
+            var trophies = window.transform.Find("m_rect_Content/m_rect_Player/m_text_Trophies").GetComponent<Text>();
+            StringAssert.Contains("2500", trophies.text);
+            StringAssert.Contains(victory ? "+20" : "-10", trophies.text);
+            StringAssert.Contains(victory ? "#31D158" : "#FF3B30", trophies.text);
+            var opponentTrophies = window.transform.Find("m_rect_Content/m_rect_Opponent/m_text_Trophies").GetComponent<Text>();
+            StringAssert.Contains("2500", opponentTrophies.text);
+            StringAssert.Contains(victory ? "-10" : "+20", opponentTrophies.text);
+            StringAssert.Contains(victory ? "#FF3B30" : "#31D158", opponentTrophies.text);
+            foreach (var side in new[] { "m_rect_Player", "m_rect_Opponent" })
+            {
+                var card = window.transform.Find("m_rect_Content/" + side);
+                var cup = card.Find("m_img_Cup").GetComponent<RectTransform>();
+                var text = card.Find("m_text_Trophies").GetComponent<RectTransform>();
+                var left = cup.anchoredPosition.x - cup.rect.width * 0.5f;
+                var right = text.anchoredPosition.x + text.rect.width * 0.5f;
+                Assert.AreEqual(0f, (left + right) * 0.5f, 0.1f, "奖杯与杯数整体水平居中");
+                Assert.AreEqual(-90f, text.anchoredPosition.y, 0.1f, "杯数位于卡片底部色块中央");
+                Assert.AreEqual(text.anchoredPosition.y, cup.anchoredPosition.y);
+            }
+            Assert.IsNull(window.transform.Find("m_rect_Content/m_text_CupChange"));
+            await GameApp.SavePlayerStateAsync();
+            Assert.AreEqual(victory ? 2490 : 2520, (await _store.LoadAsync()).Settlement.OpponentTrophiesAfter);
             if (doubled)
             {
                 var blockedPath = Path.Combine(_saveDirectory, "player.json.tmp");
@@ -115,7 +139,9 @@ namespace GameLogic.Tests
                 {
                     Assert.IsTrue(doubleButton.interactable, "保存失败后应允许重试");
                     Assert.AreEqual(expectedCoins, GameApp.PlayerState.Coins);
-                    Assert.IsNull(await _store.LoadAsync(), "失败保存不能伪装为成功");
+                    var previousSave = await _store.LoadAsync();
+                    Assert.AreEqual(100, previousSave.Coins, "失败领取不覆盖先前保存的余额");
+                    Assert.AreEqual(expectedTrophies, previousSave.Trophies, "奖励保存失败不丢失已结算杯数");
                     Directory.Delete(blockedPath);
                     doubleButton.onClick.Invoke();
                     for (var frame = 0; frame < 300 && !returnButton.interactable; frame++) await UniTask.Yield();
@@ -131,7 +157,9 @@ namespace GameLogic.Tests
             Assert.IsNull(GameModule.UI.GetUI<CheckOutUI>(), "返回应关闭结算页");
             Assert.IsNotNull(GameModule.UI.GetUI<MainMenuUI>(), "返回应打开主菜单");
             Assert.AreEqual(expectedCoins, GameApp.PlayerState.Coins);
+            Assert.AreEqual(expectedTrophies, GameApp.PlayerState.Trophies, "双倍或重复点击不能改变杯数");
             Assert.AreEqual(GameApp.PlayerState.Coins, (await _store.LoadAsync()).Coins, "奖励必须保存到玩家存档");
+            Assert.AreEqual(expectedTrophies, (await _store.LoadAsync()).Trophies);
             GameEvent.Send(BattleSettlementEvents.Requested, snapshot);
             await UniTask.Yield();
             Assert.IsNull(GameModule.UI.GetUI<CheckOutUI>(), "返回后旧结算通知不能重新开窗");
@@ -142,6 +170,45 @@ namespace GameLogic.Tests
             var field = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
             _savedFields.Add(field, field.GetValue(target));
             field.SetValue(target, value);
+        }
+
+        [UnityTest]
+        public IEnumerator KnownVictoryIsSavedBeforeCleanupAndWindowLoading() => SaveKnownVictoryAsync().ToCoroutine();
+
+        private async UniTask SaveKnownVictoryAsync()
+        {
+            Begin(301);
+            var snapshot = Snapshot(301, BattleSide.Opponent);
+            GameEvent.Send(BattleSettlementEvents.Determined, snapshot);
+            Assert.AreEqual(2520, GameApp.PlayerState.Trophies);
+            Assert.IsNull(GameModule.UI.GetUI<CheckOutUI>(), "记账阶段不在战斗通知栈中开窗");
+            await GameApp.SavePlayerStateAsync();
+            var record = await _store.LoadAsync();
+            var restarted = record.Restore(30, TimeSpan.FromMinutes(5), DateTimeOffset.UtcNow);
+            record.RecoverPending(restarted, DateTimeOffset.UtcNow);
+            Assert.AreEqual(BattleSettlementResult.Victory, record.Settlement.Result);
+            Assert.AreEqual(2520, restarted.Trophies);
+            Assert.AreEqual(210, restarted.Coins, "未能打开结算页时重启补领基础金币");
+        }
+
+        [UnityTest]
+        public IEnumerator AbandonRecordsLossAndRejectsLateVictory() => AbandonAsync().ToCoroutine();
+
+        private async UniTask AbandonAsync()
+        {
+            Begin(302);
+            _presenterType.GetMethod("AbandonBattle").Invoke(_presenter, new object[] { 302L });
+            Assert.AreEqual(2490, GameApp.PlayerState.Trophies);
+            await GameApp.SavePlayerStateAsync();
+            var record = await _store.LoadAsync();
+            Assert.AreEqual(100, record.Coins);
+            Assert.IsTrue(record.Settlement.Abandoned);
+            var snapshot = Snapshot(302, BattleSide.Opponent);
+            GameEvent.Send(BattleSettlementEvents.Determined, snapshot);
+            GameEvent.Send(BattleSettlementEvents.Requested, snapshot);
+            await UniTask.Yield();
+            Assert.AreEqual(2490, GameApp.PlayerState.Trophies);
+            Assert.IsNull(GameModule.UI.GetUI<CheckOutUI>());
         }
 
         [UnityTest]
@@ -280,7 +347,7 @@ namespace GameLogic.Tests
             internal bool HoldNextLoad;
             private UniTaskCompletionSource _pending;
             public GameObject LoadGameObject(string location, Transform parent = null, string packageName = "") =>
-                Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/" + location + ".prefab"), parent);
+                Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/" + location + ".prefab"), parent);
 
             public async UniTask<GameObject> LoadGameObjectAsync(string location, Transform parent = null,
                 CancellationToken cancellationToken = default, string packageName = "")
