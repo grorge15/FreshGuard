@@ -17,6 +17,7 @@ namespace GameLogic
         [SerializeField] private bool _spriteFacesRight = true;
         private Animator _animator;
         private BattleEntityRegistry _registry;
+        private BattleSide _side;
         private SpriteRenderer[] _spriteRenderers;
         private Color[] _baseSpriteColors;
         private bool[] _baseSpriteFlipX;
@@ -29,6 +30,8 @@ namespace GameLogic
         private float _hitFlashDuration;
         private float _hitShakeAmplitude;
         private const float HIT_SHAKE_MAX_DISTANCE = 0.04f;
+        private const int OPPONENT_SORTING_BASE = 16000;
+        private const int MAX_OPPONENT_SORTING_DEPTH = 1500;
 
         public int ConfigId => _configId;
         public int InstanceId { get; private set; }
@@ -60,7 +63,9 @@ namespace GameLogic
             ResetBinding();
             _registry = registry;
             InstanceId = instanceId;
+            _side = enemy.Side;
             PlayState("Idle", true);
+            RefreshSortingOrder();
         }
 
         public void Unbind()
@@ -265,7 +270,13 @@ namespace GameLogic
         {
             CacheVisuals();
             layer = _spriteRenderers.Length > 0 && _spriteRenderers[0] != null ? _spriteRenderers[0].sortingLayerID : 0;
-            order = Mathf.RoundToInt(-transform.position.y * 100f) * 10 + Mathf.Abs(InstanceId % 10);
+            var height = transform.position.y;
+            // 敌方使用同侧出生父节点为高度基准；固定在机器人前方，并保留敌人之间的前后顺序。
+            if (_side == BattleSide.Opponent && transform.parent != null) height -= transform.parent.position.y;
+            var depth = Mathf.RoundToInt(-height * 100f);
+            order = (_side == BattleSide.Opponent
+                ? OPPONENT_SORTING_BASE + Mathf.Clamp(depth, -MAX_OPPONENT_SORTING_DEPTH, MAX_OPPONENT_SORTING_DEPTH) * 10
+                : depth * 10) + Mathf.Abs(InstanceId % 10);
         }
 
         private bool HasAliveEntity()
@@ -286,6 +297,7 @@ namespace GameLogic
         private void ResetBinding()
         {
             _registry = null;
+            _side = BattleSide.Player;
             InstanceId = 0;
             _moving = false;
             _attacking = false;

@@ -248,14 +248,15 @@ namespace GameLogic.Tests
             return visual;
         }
 
-        [Test]
-        public void SortingOrderUsesWorldHeightAndStableInstanceTieBreaker()
+        [TestCase(BattleSide.Player)]
+        [TestCase(BattleSide.Opponent)]
+        public void SortingOrderUsesHeightAndKeepsOpponentEnemiesAboveRobots(BattleSide side)
         {
             CreateView();
             var visual = new GameObject("Visual");
             visual.transform.SetParent(_root.transform, false);
             var renderer = visual.AddComponent<SpriteRenderer>();
-            var firstId = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), BattleSide.Player);
+            var firstId = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), side);
             Call("Bind", _registry, firstId);
             _root.transform.position = new Vector3(0f, 2f, 0f);
             Lifecycle("LateUpdate");
@@ -265,6 +266,30 @@ namespace GameLogic.Tests
             _root.transform.position = new Vector3(0f, -1f, 0f);
             Lifecycle("LateUpdate");
             Assert.Greater(renderer.sortingOrder, highOrder);
+            if (side == BattleSide.Opponent)
+            {
+                Assert.Greater(highOrder, 33, "敌方敌人应高于机器人立绘及其合成、碰撞外框。");
+                var order = renderer.sortingOrder;
+                var parent = new GameObject("OpponentBelt");
+                try
+                {
+                    _root.transform.SetParent(parent.transform, false);
+                    parent.transform.position = Vector3.up * 100f;
+                    Lifecycle("LateUpdate");
+                    Assert.AreEqual(order, renderer.sortingOrder, "战场整体平移不能让敌人掉到机器人后面。");
+                    _registry.ApplyDamage(firstId, int.MaxValue, out var removal);
+                    Assert.AreEqual(true, Call("PlayRemoval", removal));
+                    Lifecycle("LateUpdate");
+                    Assert.AreEqual(order, renderer.sortingOrder, "死亡动画也应保持敌方敌人的显示层级。");
+                    Call("OnDeathAnimationComplete");
+                }
+                finally { _root.transform.SetParent(null, false); UnityEngine.Object.DestroyImmediate(parent); }
+                var playerId = _registry.CreateEnemyFromConfig(_tables.TbEnemy.Get(2001), BattleSide.Player);
+                Call("Bind", _registry, playerId);
+                _root.transform.position = Vector3.up * 2f;
+                Lifecycle("LateUpdate");
+                Assert.Less(renderer.sortingOrder, 0, "复用为己方敌人后应恢复原有按世界高度排序的规则。");
+            }
         }
 
         [Test]
