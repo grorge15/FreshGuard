@@ -29,7 +29,7 @@ namespace GameLogic
             _matchReleased = true;
             _checkingOperational = true;
             _operationalWait = 0;
-            BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
+            BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId, _matchEntry);
             return true;
         }
 

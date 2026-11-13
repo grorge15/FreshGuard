@@ -257,7 +257,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(2, _loader.LoadCount);
         }
 
-        private void Begin(long id) => _presenterType.GetMethod("BeginBattle").Invoke(_presenter, new object[] { id });
+        private void Begin(long id) => _presenterType.GetMethod("BeginBattle").Invoke(_presenter, new object[] { id, null });
 
         private static BattleSettlementSnapshot Snapshot(long id, BattleSide side)
         {
