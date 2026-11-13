@@ -13,7 +13,7 @@ using Luban;
 namespace GameConfig.buff
 {
 /// <summary>
-/// Sheet1战斗Buff及商店战斗增益；Sheet2购买即时奖励；grantType区分持有/即时，isShopItem只标识商品
+/// Buff效果模板；商店售卖信息读取shop_goods.xlsx
 /// </summary>
 public sealed partial class Buff : Luban.BeanBase
 {
@@ -27,18 +27,12 @@ public sealed partial class Buff : Luban.BeanBase
         TriggerSkillId = _buf.ReadInt();
         CountSkillId = _buf.ReadInt();
         EffectPrefab = _buf.ReadString();
-        IsShopItem = _buf.ReadBool();
         Name = _buf.ReadString();
         Icon = _buf.ReadString();
-        Quality = _buf.ReadInt();
-        Enabled = _buf.ReadBool();
         ActivationType = _buf.ReadString();
         GrantType = _buf.ReadString();
         OccupiesAssistSlot = _buf.ReadBool();
         TargetType = _buf.ReadString();
-        DailyPurchaseLimit = _buf.ReadInt();
-        {int __n0 = _buf.ReadSize(); LevelIds = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); LevelIds[__index0] = __e0;}}
-        {int __n0 = _buf.ReadSize(); Prices = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); Prices[__index0] = __e0;}}
         {int __n0 = _buf.ReadSize(); Descriptions = new string[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { string __e0;__e0 = _buf.ReadString(); Descriptions[__index0] = __e0;}}
         {int __n0 = _buf.ReadSize(); EffectTileIds = new int[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { int __e0;__e0 = _buf.ReadInt(); EffectTileIds[__index0] = __e0;}}
         {int __n0 = _buf.ReadSize(); SpeedBonusRates = new float[__n0];for(var __index0 = 0 ; __index0 < __n0 ; __index0++) { float __e0;__e0 = _buf.ReadFloat(); SpeedBonusRates[__index0] = __e0;}}
@@ -63,23 +57,23 @@ public sealed partial class Buff : Luban.BeanBase
     }
 
     /// <summary>
-    /// id
+    /// 效果配置唯一ID。商店通过shop_goods.buffId引用；不是商品ID，也不是局内实例ID。
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// behaviorKey
+    /// 效果行为键。原技能及商店被动统一交给Buff系统；名称必须对应已实现的行为。
     /// </summary>
     public readonly string BehaviorKey;
     /// <summary>
-    /// 统一最高效果等级：原技能Buff填1，效果数值仍读取skill_level；商店HeldBuff填可升级上限并按等级读数组；InstantReward填1表示奖励模板。此字段不控制运行时实例叠加。
+    /// HeldBuff最高持有等级；原技能与即时模板填1。原技能数值仍读skill_level，不限制技能等级，不控制实例叠层。
     /// </summary>
     public readonly int MaxLevel;
     /// <summary>
-    /// priority
+    /// 事件回调顺序，数值大先执行；不是互斥覆盖优先级。当前均0。
     /// </summary>
     public readonly int Priority;
     /// <summary>
-    /// tickInterval
+    /// 默认周期回调间隔，单位秒；0无默认周期。中毒实际间隔来自skill_level.poisonInterval。
     /// </summary>
     public readonly float TickInterval;
     /// <summary>
@@ -95,35 +89,23 @@ public sealed partial class Buff : Luban.BeanBase
     /// </summary>
     public readonly string EffectPrefab;
     /// <summary>
-    /// 是否为商店可售商品。true同时包括Sheet1战斗增益与Sheet2即时奖励；不用于区分是否参与战斗。
-    /// </summary>
-    public readonly bool IsShopItem;
-    /// <summary>
-    /// 商店道具名称；原有战斗Buff未补填名称。
+    /// 效果基础名称。商品可使用shop_goods.name覆盖显示；不影响效果身份。
     /// </summary>
     public readonly string Name;
     /// <summary>
-    /// 商店图标资源名，不带.png；不是Prefab资源。
+    /// 效果图标资源名，不带扩展名；商店与助力栏共用。
     /// </summary>
     public readonly string Icon;
     /// <summary>
-    /// 商店品质ID：2绿、3蓝、4紫、5橙；沿用当前Excel，不调整平衡数值。
-    /// </summary>
-    public readonly int Quality;
-    /// <summary>
-    /// 商店商品是否启用。当前7个商品沿用false，待业务和资源接入后开启；原战斗Buff保持已有值。
-    /// </summary>
-    public readonly bool Enabled;
-    /// <summary>
-    /// BattleStart开局；ColoredGlassBreak对应玻璃破碎；OnPurchase购买成功。
+    /// BattleStart开局注册；ColoredGlassBreak对应七彩玻璃碎裂；OnPurchase购买后立即执行。原技能留空。
     /// </summary>
     public readonly string ActivationType;
     /// <summary>
-    /// HeldBuff=持有型战斗增益，放Sheet1并进入助力快照；InstantReward=购买即时奖励，放Sheet2且不进战斗。原技能Buff留空，仍按技能引用触发。
+    /// HeldBuff保存持有等级并进入开局快照；InstantReward即时执行，不保存持有、不占槽、不进战斗。原技能留空。
     /// </summary>
     public readonly string GrantType;
     /// <summary>
-    /// 是否占助力持有槽，与棋盘占格不同；体力补给false。
+    /// 是否占玩家持有助力槽；不是棋盘占格。同种升级不新增槽，体力补给false。
     /// </summary>
     public readonly bool OccupiesAssistSlot;
     /// <summary>
@@ -131,19 +113,7 @@ public sealed partial class Buff : Luban.BeanBase
     /// </summary>
     public readonly string TargetType;
     /// <summary>
-    /// 0表示无额外每日限购，仍遵守每店最多成功购买1件的规则。
-    /// </summary>
-    public readonly int DailyPurchaseLimit;
-    /// <summary>
-    /// 原层级记录ID，按1/2/3级排列；用于追溯，不是新表主键。 数组用|分隔；读取索引=等级-1。
-    /// </summary>
-    public readonly int[] LevelIds;
-    /// <summary>
-    /// 各级售价，按1/2/3级排列。 数组用|分隔；读取索引=等级-1。
-    /// </summary>
-    public readonly int[] Prices;
-    /// <summary>
-    /// 各级说明，按1/2/3级排列；文字不能代替行为实现。 数组用|分隔；读取索引=等级-1。
+    /// 各级效果说明，用|分隔，索引=等级-1；即时奖励固定取第1项。实际效果由行为及参数实现。
     /// </summary>
     public readonly string[] Descriptions;
     /// <summary>
@@ -171,7 +141,7 @@ public sealed partial class Buff : Luban.BeanBase
     /// </summary>
     public readonly float[] ComboBonusCaps;
     /// <summary>
-    /// Combo清零时清除本项加成，不删除助力或降低等级。 数组用|分隔；读取索引=等级-1。
+    /// 各级是否在Combo归零时清除本项加成；不清除持有记录或等级。当前Combo均true。
     /// </summary>
     public readonly bool[] ResetOnComboClear;
     /// <summary>
@@ -203,7 +173,7 @@ public sealed partial class Buff : Luban.BeanBase
     /// </summary>
     public readonly string[] SpeedStackRules;
     /// <summary>
-    /// Duration计时；ComboClear清零；BattleEnd终局；BerserkEnd暴走结束；Immediate立即完成。 数组用|分隔；读取索引=等级-1。
+    /// 各级结束规则：Duration计时；ComboClear归零时清除加成；BattleEnd局末；BerserkEnd本次暴走结束；Immediate即时完成。
     /// </summary>
     public readonly string[] EndConditions;
    
@@ -225,18 +195,12 @@ public sealed partial class Buff : Luban.BeanBase
         + "triggerSkillId:" + TriggerSkillId + ","
         + "countSkillId:" + CountSkillId + ","
         + "effectPrefab:" + EffectPrefab + ","
-        + "isShopItem:" + IsShopItem + ","
         + "name:" + Name + ","
         + "icon:" + Icon + ","
-        + "quality:" + Quality + ","
-        + "enabled:" + Enabled + ","
         + "activationType:" + ActivationType + ","
         + "grantType:" + GrantType + ","
         + "occupiesAssistSlot:" + OccupiesAssistSlot + ","
         + "targetType:" + TargetType + ","
-        + "dailyPurchaseLimit:" + DailyPurchaseLimit + ","
-        + "levelIds:" + Luban.StringUtil.CollectionToString(LevelIds) + ","
-        + "prices:" + Luban.StringUtil.CollectionToString(Prices) + ","
         + "descriptions:" + Luban.StringUtil.CollectionToString(Descriptions) + ","
         + "effectTileIds:" + Luban.StringUtil.CollectionToString(EffectTileIds) + ","
         + "speedBonusRates:" + Luban.StringUtil.CollectionToString(SpeedBonusRates) + ","

@@ -20,7 +20,11 @@ namespace GameLogic.Tests
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count);
             Assert.AreEqual(8, tables.TbBullet.DataList.Count);
             Assert.AreEqual(14, tables.TbBuff.DataList.Count);
-            Assert.AreEqual(7, tables.TbBuff.DataList.Count(row => row.IsShopItem));
+            Assert.AreEqual(7, tables.TbShopGoods.DataList.Count);
+            CollectionAssert.AreEquivalent(new[] { 1800, 1801, 1802, 1803, 1804, 1805, 1806 },
+                tables.TbShopGoods.DataList.Select(row => row.BuffId));
+            foreach (var goods in tables.TbShopGoods.DataList)
+                Assert.AreSame(tables.TbBuff.Get(goods.BuffId), goods.BuffId_Ref);
             CollectionAssert.AreEquivalent(new[] { 1500, 1501, 1502, 1503, 1504, 1505, 1506, 1507, 1600, 1601, 1602, 1603, 1604, 1605, 1606, 1607 },
                 tables.TbSkill.DataList.Where(row => row.Enabled).Select(row => row.Id));
 

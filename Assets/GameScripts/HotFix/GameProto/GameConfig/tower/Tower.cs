@@ -12,6 +12,9 @@ using Luban;
 
 namespace GameConfig.tower
 {
+/// <summary>
+/// 防御塔配置
+/// </summary>
 public sealed partial class Tower : Luban.BeanBase
 {
     public Tower(ByteBuf _buf) 

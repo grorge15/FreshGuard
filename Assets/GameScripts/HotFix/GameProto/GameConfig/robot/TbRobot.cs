@@ -13,7 +13,7 @@ using Luban;
 namespace GameConfig.robot
 {
 /// <summary>
-/// 机器人
+/// Sheet1机器人；Sheet2特殊地块；通过entityType筛选
 /// </summary>
 public partial class TbRobot
 {

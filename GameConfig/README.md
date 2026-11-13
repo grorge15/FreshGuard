@@ -2,9 +2,9 @@
 
 ## 目录位置
 
-将整个 `GameConfig` 文件夹从 `FreshGuard/Configs/` 移动到 `FreshGuard/UnityProject/GameConfig/`，与 `Assets`、`Packages` 同级。菜单和客户端脚本使用此新位置，Excel 在 `UnityProject/GameConfig/Datas/` 中。
+`GameConfig/` 与 Unity 工程的 `Assets/`、`Packages/` 同级，本机位于 `D:\FreshGuard\GameConfig`。项目使用 `Datas/` 下的 Excel；修改外部策划目录后，需要先同步到这里再导出。
 
-客户端代码和数据仍导出到同一个 Unity 工程的 `Assets/` 下。`FreshGuard/Tools/` 保持原位；只拉取 UnityProject 仓库的同事如需转表，还需要在仓库的上一级准备该工具目录。服务端脚本到 `FreshGuard/Tools/` 和 `FreshGuard/Server/` 的相对层级未变。
+客户端入口会在临时目录补齐共享表结构，再调用 Luban。可编辑 Excel 保持精简样式，导出不会把已删除的边界字段写回源表。
 
 ## 日常使用
 
@@ -13,28 +13,29 @@
 3. Console 出现 `Luban export succeeded` 后，等待 Unity 编译结束。
 
 菜单默认使用按表懒加载模板。失败时 Console 会显示 Luban 的具体错误；修正表格后重新转表。
-也可以从 UnityProject 目录执行 `GameConfig/gen_code_bin_to_project_lazyload.bat`，成功退出码为 0。
+也可以从工程根目录执行 `GameConfig/gen_code_bin_to_project_lazyload.bat`，成功退出码为 0。
 `gen_code_bin_to_project.bat` 是不使用自定义懒加载模板的另一入口。
 
 ## 本机工具
 
-- Luban：4.9.0，`Tools/Luban/Luban.dll`。
-- .NET Runtime：8.0.31 Windows x64，`Tools/dotnet/dotnet.exe`。
-- Windows 客户端脚本优先使用上述项目内运行时，不需要配置系统 PATH。
-- 非 Windows 脚本仍依赖系统 `dotnet`；本次只验证 Windows 客户端流程。
+- 本次验证使用 Luban 5.1.0（`D:\Luban\Luban\Luban.dll`）和系统 .NET 8。
+- 可通过环境变量 `LUBAN_DLL` 指定 Luban 完整路径，通过 `DOTNET_EXE` 指定 dotnet 可执行文件。
+- 未设置时依次查找工程及上级目录的 `Tools/Luban/Luban.dll`，Windows 下最后尝试上述本机安装位置。
+- 优先使用与 `Luban/` 同级的 `dotnet/dotnet.exe`，否则使用系统 `dotnet`。
+- Windows 使用系统 PowerShell 5；macOS/Linux 的 `.sh` 入口需要 PowerShell 7（`pwsh`）及 .NET 8，本次只验证 Windows 客户端流程。
 
 工具来源：
 
-- https://github.com/focus-creative-games/luban/releases/tag/v4.9.0
-- https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-win-x64.zip
+- https://github.com/focus-creative-games/luban/releases/tag/v5.1.0
+- https://dotnet.microsoft.com/download/dotnet/8.0
 
 换机器时，Luban 压缩包中的 `Luban.dll`、依赖和模板目录应直接位于 `Tools/Luban/`，不要多套一层 `Luban/`。
 .NET ZIP 解压到 `Tools/dotnet/`。无需安装 SDK，也无需运行拉取最新源码的 `Tools/build-luban.bat`。
 
 ## 生成结果与读取
 
-- 代码：`UnityProject/Assets/GameScripts/HotFix/GameProto/GameConfig/`。
-- 数据：`UnityProject/Assets/AssetRaw/Configs/bytes/`。
+- 代码：`Assets/GameScripts/HotFix/GameProto/GameConfig/`。
+- 数据：`Assets/AssetRaw/Configs/bytes/`。
 - 加载器：从 `CustomTemplate/ConfigSystem.cs` 复制到 `GameProto/ConfigSystem.cs`。
 
 业务代码在游戏启动流程完成资源初始化后读取：
@@ -47,6 +48,20 @@ var name = item.Name;
 启动入口为 `Assets/Scenes/main.unity`。直接运行业务场景不能保证 YooAsset 已初始化。
 首次访问表会同步加载该表并缓存；目前沿用项目现有加载器。
 修改加载器应修改 `CustomTemplate` 中的源文件；不要手改生成代码。代码与二进制数据需要配套更新。
+
+## 神秘商店配置
+
+- `shop_goods.xlsx`：商品ID、关联Buff、名称、品质、单次助力币价格。通过 `Tables.TbShopGoods` 读取，原Buff中的售卖字段不再使用。
+- `buff.xlsx`：技能Buff页保留；商店效果页保留19个字段。按等级使用 `|` 数组的方式维持原样。
+- `robot.xlsx`：Sheet1保留原机器人；Sheet2只保留8个地块参数。`robot_shape.xlsx` 原样保留，1300为单格形状。
+- `drop.xlsx`：1704是七个商品的掉落池，package中的ID指向商品表；其他掉落记录保留。
+- `__tables__.xlsx`：保留原注册，增加 `shop.TbShopGoods`。
+
+`Export-Configs.ps1` 统一处理客户端导出，`ConfigWorkbook.ps1` 仅在临时输入中补齐技能/商店、机器人/地块共用结构所需的兼容字段。固定规则按 `behaviorKey` 或Sheet来源决定，不通过ID范围猜类型。未来增加新行为，需要先在程序中增加对应规则。
+
+Combo上限由程序固定为1/2/3级30%/60%/90%，仅限制本项加成，不限制最终球速；不再配置 `comboBonusCaps` 列。Combo清零只清除本项加成，保留持有等级。加速带球上效果持续4秒并刷新，地块本体存在到本局结束；占格宽高从形状表推导。地块资源和行为尚未接入，兼容输出继续保持未启用。
+
+导出完成表示配置和读取类已经准备好，商店购买、刷新、助力栏及七种效果的运行逻辑仍需后续开发。
 
 ## 新增表
 

@@ -12,6 +12,9 @@ using Luban;
 
 namespace GameConfig.wave
 {
+/// <summary>
+/// 波次出兵配置
+/// </summary>
 public sealed partial class WaveSpawn : Luban.BeanBase
 {
     public WaveSpawn(ByteBuf _buf) 

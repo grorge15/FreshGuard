@@ -34,7 +34,7 @@ public partial class Tables
         }
     }
     /// <summary>
-    /// 机器人
+    /// Sheet1机器人；Sheet2特殊地块；通过entityType筛选
     /// </summary>
     private robot.TbRobot m_TbRobot;
     public robot.TbRobot TbRobot
@@ -307,7 +307,7 @@ public partial class Tables
         }
     }
     /// <summary>
-    /// Buff
+    /// Buff效果模板；商店售卖信息读取shop_goods.xlsx
     /// </summary>
     private buff.TbBuff m_TbBuff;
     public buff.TbBuff TbBuff
@@ -346,6 +346,27 @@ public partial class Tables
         {
             m_TbBullet = value;
             m_TbBullet.ResolveRef(this);
+        }
+    }
+    /// <summary>
+    /// 神秘商店商品配置：关联Buff效果，维护助力币价格、品质和上架状态
+    /// </summary>
+    private shop.TbShopGoods m_TbShopGoods;
+    public shop.TbShopGoods TbShopGoods
+    {
+        get
+        {
+            if (m_TbShopGoods == null)
+            {
+                m_TbShopGoods = new shop.TbShopGoods(defaultLoader("shop_tbshopgoods"));
+                m_TbShopGoods.ResolveRef(this);
+            }
+            return m_TbShopGoods;
+        }
+        set
+        {
+            m_TbShopGoods = value;
+            m_TbShopGoods.ResolveRef(this);
         }
     }
 
