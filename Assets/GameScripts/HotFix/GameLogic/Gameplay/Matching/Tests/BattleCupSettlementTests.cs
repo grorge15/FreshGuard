@@ -30,6 +30,41 @@ namespace GameLogic.Tests
             return record;
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void CandidateSavePreservesCupAndAssistRecords(bool settled)
+        {
+            var player = Player(400);
+            player.ReplaceHeldAssists(new[]
+            {
+                new HeldAssistRecord(1802, 2, 0, DateTimeOffset.UtcNow.AddDays(1).UtcTicks)
+            });
+            var record = Started(player);
+            if (settled) record.SettleBattle(player, "battle", BattleSettlementResult.Victory, false);
+
+            var candidate = record.Copy();
+            Assert.AreEqual(JsonUtility.ToJson(record), JsonUtility.ToJson(candidate));
+            Assert.AreNotSame(record.EntryRules, candidate.EntryRules);
+            Assert.AreNotSame(record.HeldAssists[0], candidate.HeldAssists[0]);
+            if (settled) Assert.AreNotSame(record.Settlement, candidate.Settlement);
+
+            candidate.Capture(player.Clone());
+            var restored = JsonUtility.FromJson<MatchPlayerRecord>(JsonUtility.ToJson(candidate));
+            var restoredPlayer = restored.Restore(30, TimeSpan.FromMinutes(5), DateTimeOffset.UtcNow);
+            restored.RecoverPending(restoredPlayer, DateTimeOffset.UtcNow);
+            Assert.AreEqual(settled ? 420 : 390, restoredPlayer.Trophies);
+            Assert.AreEqual(1802, restoredPlayer.HeldAssists[0].BuffId);
+            Assert.AreEqual(2, restoredPlayer.HeldAssists[0].Level);
+
+            candidate.EntryRules.WinCup = 99;
+            Assert.AreEqual(20, record.EntryRules.WinCup);
+            if (settled)
+            {
+                candidate.Settlement.ClaimedMultiplier = 2;
+                Assert.AreEqual(0, record.Settlement.ClaimedMultiplier);
+            }
+        }
+
         [TestCase(0, false, 0, 28)]
         [TestCase(0, true, 28, 0)]
         [TestCase(3, false, 0, 31)]

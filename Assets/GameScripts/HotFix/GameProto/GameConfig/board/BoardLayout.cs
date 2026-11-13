@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.board
 {
-/// <summary>
-/// 棋盘布局配置
-/// </summary>
 public sealed partial class BoardLayout : Luban.BeanBase
 {
     public BoardLayout(ByteBuf _buf) 

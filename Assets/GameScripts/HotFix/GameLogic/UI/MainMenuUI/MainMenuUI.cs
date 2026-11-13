@@ -29,6 +29,8 @@ namespace GameLogic
         private long _lastMysteriousStoreBattleId;
         private bool _openingMysteriousStore;
         private bool _disposed;
+        private bool _refreshingAssists;
+        private float _nextAssistCheck;
 
         public static MainMenuPlayerState State => GameApp.PlayerState;
 
@@ -60,15 +62,30 @@ namespace GameLogic
 
         protected override void OnUpdate()
         {
+            if (GameApp.IsPlayerSavePending || _mysteriousStore?.Session?.IsBusy == true) { RefreshView(); return; }
             var previousEnergy = State?.Energy;
             State?.Refresh(DateTimeOffset.UtcNow);
             if (previousEnergy != State?.Energy) GameApp.SavePlayerStateAsync().Forget();
+            if (!_starting && _mysteriousStore == null && !_openingMysteriousStore && !_refreshingAssists && Time.unscaledTime >= _nextAssistCheck)
+            {
+                _nextAssistCheck = Time.unscaledTime + 1f;
+                RefreshAssistsAsync().Forget();
+            }
             RefreshView();
+        }
+
+        private async UniTask RefreshAssistsAsync()
+        {
+            _refreshingAssists = true;
+            try { await GameApp.PruneExpiredAssistsAsync(); }
+            catch (Exception exception) { Debug.LogWarning("到期助力保存失败：" + exception.Message); }
+            finally { _refreshingAssists = false; }
+            if (!_disposed && !IsDestroyed) RefreshView();
         }
 
         private void OnStartClicked()
         {
-            if (_starting || _openingMysteriousStore || _mysteriousStore != null || State == null) return;
+            if (_starting || _openingMysteriousStore || _mysteriousStore != null || State == null || GameApp.IsPlayerSavePending || _refreshingAssists) return;
             _starting = true;
             if (_startButton != null) _startButton.interactable = false;
             GameApp.BeginBattleFromMainMenu(this).Forget();
@@ -76,6 +93,7 @@ namespace GameLogic
 
         private void OnEnergyPlusClicked()
         {
+            if (GameApp.IsPlayerSavePending || _mysteriousStore != null) return;
             State?.AddEnergy(5);
             GameApp.SavePlayerStateAsync().Forget();
             RefreshView();
@@ -89,6 +107,7 @@ namespace GameLogic
 
         private void OnCoinsPlusClicked()
         {
+            if (GameApp.IsPlayerSavePending || _mysteriousStore != null) return;
             State?.AddCoins(100);
             GameApp.SavePlayerStateAsync().Forget();
             RefreshView();
@@ -100,8 +119,22 @@ namespace GameLogic
             RefreshView();
         }
 
-        public UniTask ShowMysteriousStorePreviewAsync(long battleId) =>
-            ShowMysteriousStorePreviewAsync(battleId, MysteriousStorePreviewSession.CreateDefault(State));
+        public async UniTask ShowMysteriousStorePreviewAsync(long battleId)
+        {
+            if (_disposed || IsDestroyed || battleId <= 0 || battleId == _lastMysteriousStoreBattleId || _openingMysteriousStore || _mysteriousStore != null) return;
+            try
+            {
+                await GameApp.PruneExpiredAssistsAsync();
+                if (_disposed || IsDestroyed) return;
+                var session = MysteriousStoreSession.Create(State, ConfigSystem.Instance.Tables, new ShopRandom(), GameApp.SavePlayerCandidateAsync);
+                await ShowMysteriousStorePreviewAsync(battleId, session);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("神秘商店初始化失败：" + exception.Message);
+                if (!_disposed && !IsDestroyed) ShowStatus("神秘商店暂时无法打开");
+            }
+        }
 
         /// <summary>商品和助力可传入演示数据；购买扣除会话引用的玩家助力币并保存。</summary>
         public async UniTask ShowMysteriousStorePreviewAsync(long battleId, MysteriousStorePreviewSession session)
@@ -151,12 +184,13 @@ namespace GameLogic
 
         private void OnMysteriousStorePurchased()
         {
-            GameApp.SavePlayerStateAsync().Forget();
+            if (!(_mysteriousStore?.Session is MysteriousStoreSession)) GameApp.SavePlayerStateAsync().Forget();
             RefreshView();
         }
 
         private void CloseMysteriousStore()
         {
+            if (_mysteriousStore?.Session?.IsBusy == true) return;
             GameSoundService.Play(GameSound.UiClose);
             var widget = _mysteriousStore;
             _mysteriousStore = null;
@@ -167,7 +201,9 @@ namespace GameLogic
 
         private void RefreshView()
         {
-            if (_startButton != null) _startButton.interactable = !_starting && !_openingMysteriousStore && _mysteriousStore == null;
+            if (_startButton != null) _startButton.interactable = !_starting && !_openingMysteriousStore && _mysteriousStore == null && !GameApp.IsPlayerSavePending && !_refreshingAssists;
+            if (_energyPlusButton != null) _energyPlusButton.interactable = !GameApp.IsPlayerSavePending && _mysteriousStore == null;
+            if (_coinsPlusButton != null) _coinsPlusButton.interactable = !GameApp.IsPlayerSavePending && _mysteriousStore == null;
             RefreshStatus();
             if (State == null) return;
             if (_energyCool != null) _energyCool.SetActive(State.Energy < State.EnergyCapacity);

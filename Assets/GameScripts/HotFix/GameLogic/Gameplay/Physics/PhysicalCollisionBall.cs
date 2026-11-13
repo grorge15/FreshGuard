@@ -79,6 +79,7 @@ namespace GameLogic
         private Vector3? _mapOriginalScale;
         private float _mapScale = 1f;
         private float _battleSpeedScale = 1f;
+        private BattleAssistState _assistState;
         public float MapScale => _mapScale;
         public float BattleSpeedScale => _battleSpeedScale;
         public float WorldRadius
@@ -104,7 +105,8 @@ namespace GameLogic
             {
                 float increase = _bounceSpeedRemaining > 0f
                     ? _bounceSpeedIncrease * Mathf.Clamp01(_bounceSpeedRemaining / _bounceSpeedDuration) : 0f;
-                return (Speed + increase) * _mapScale * _battleSpeedScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
+                var assistRate = IsBerserk ? 0f : _assistState?.NormalBallSpeedRate ?? 0f;
+                return (Speed * (1f + assistRate) + increase) * _mapScale * _battleSpeedScale * (!_dragging || IsBerserk ? 1f : ReadDraggingMultiplier());
             }
         }
         public int BounceCount { get; private set; }
@@ -116,6 +118,7 @@ namespace GameLogic
         public float SecondsSinceEffectiveInteraction { get; private set; }
         public event Action<PhysicalCollisionBall> EffectiveInteraction;
         public event Action<PhysicalCollisionBall> ComboThresholdReached;
+        public event Action<PhysicalCollisionBall, int> ComboChanged;
         public event Action<PhysicalCollisionBall, int> RobotContactDetected;
 
         public void ConfigureFromTables(GameConfig.Tables tables) => Configure(BallGlobalRules.FromTables(tables));
@@ -251,6 +254,7 @@ namespace GameLogic
         public void BindBattle(long battleId, BattleSide side, Func<bool> runningGate)
         {
             Stop();
+            _assistState = null;
             _comboEnabled = false;
             _comboRegistry = null;
             _comboPopupRoot = null;
@@ -263,6 +267,14 @@ namespace GameLogic
             _frozen = false;
             SecondsSinceEffectiveInteraction = 0f;
             _rageReentryRemaining = 0f;
+        }
+
+        public void BindAssistState(BattleAssistState state)
+        {
+            if (state != null && (state.BattleId != BattleId || state.Side != Side || _launched))
+                throw new InvalidOperationException("球助力必须在发射前绑定到所属方当前战场。");
+            _assistState = state;
+            _assistState?.SetCombo(ComboCount);
         }
 
         public void BindCombo(BattleEntityRegistry registry, Transform popupRoot)
@@ -955,6 +967,7 @@ namespace GameLogic
             if (_rageReentryRemaining > 0f) return;
             ComboCount++;
             _comboElapsed = 0d;
+            NotifyComboChanged();
             if (ComboCount <= 50 && ComboCount % 10 == 0)
             {
                 if (Side == BattleSide.Player && ComboCount != (_rules?.ComboTriggerCount ?? 50))
@@ -1056,7 +1069,20 @@ namespace GameLogic
             }
         }
 
-        private void ResetComboCount() { ComboCount = 0; _comboElapsed = 0d; }
+        private void ResetComboCount()
+        {
+            var changed = ComboCount != 0;
+            ComboCount = 0; _comboElapsed = 0d;
+            if (changed) NotifyComboChanged();
+            else _assistState?.SetCombo(0);
+        }
+
+        private void NotifyComboChanged()
+        {
+            // 在暴走阈值通知之前提交派生加成，归零也只走这一处。
+            _assistState?.SetCombo(ComboCount);
+            ComboChanged?.Invoke(this, ComboCount);
+        }
 
         private void ClearCombo()
         {

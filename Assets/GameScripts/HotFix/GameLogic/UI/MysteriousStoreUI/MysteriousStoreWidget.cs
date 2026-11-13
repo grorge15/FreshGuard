@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using Cysharp.Threading.Tasks;
 
 namespace GameLogic
 {
@@ -12,14 +13,22 @@ namespace GameLogic
         private sealed class IconView
         {
             private readonly GameObject[] _qualities = new GameObject[4];
+            private string _location;
+            private int _quality = -1;
             public IconView(Transform root)
             {
                 for (var i = 0; i < _qualities.Length; i++)
                     _qualities[i] = root.Find("m_img_" + (MysteriousStoreQuality)i).gameObject;
             }
-            public void Render(MysteriousStoreQuality quality)
+            public void Render(MysteriousStoreQuality quality, string location = null)
             {
                 for (var i = 0; i < _qualities.Length; i++) _qualities[i].SetActive(i == (int)quality);
+                if (!string.IsNullOrEmpty(location) && (_location != location || _quality != (int)quality))
+                {
+                    _location = location; _quality = (int)quality;
+                    var image = _qualities[(int)quality].GetComponent<Image>();
+                    image.SetSprite(location, cancellationToken: image.gameObject.GetCancellationTokenOnDestroy());
+                }
             }
             public void Clear()
             {
@@ -57,6 +66,8 @@ namespace GameLogic
         private Sprite _buySprite, _soldOutSprite;
         private int _removeBuffId;
         private bool _disposed;
+        private bool _refreshingExpiry;
+        private float _nextExpiryCheck;
         private RectTransform _rootCanvasRect;
         private readonly Vector3[] _canvasCorners = new Vector3[4];
 
@@ -73,6 +84,24 @@ namespace GameLogic
         {
             FitToRootCanvas();
             if (_session != null && !_disposed) RefreshCoins();
+            if (_session is MysteriousStoreSession && !_refreshingExpiry && !_session.IsBusy &&
+                Time.unscaledTime >= _nextExpiryCheck)
+            {
+                _nextExpiryCheck = Time.unscaledTime + 1f;
+                RefreshExpiryAsync().Forget();
+            }
+        }
+
+        private async UniTask RefreshExpiryAsync()
+        {
+            _refreshingExpiry = true;
+            try
+            {
+                var session = _session;
+                await session.RefreshExpiredAsync();
+                if (!_disposed && _session == session) RefreshView();
+            }
+            finally { _refreshingExpiry = false; }
         }
 
         private void RefreshCoins()
@@ -103,7 +132,7 @@ namespace GameLogic
             var content = FindChild("m_rect_Content");
             _balance = content.Find("m_text_Balance").GetComponent<Text>();
             _feedback = content.Find("m_text_Feedback").GetComponent<Text>();
-            Listen(content.Find("m_btn_Close").GetComponent<Button>(), () => _close?.Invoke());
+            Listen(content.Find("m_btn_Close").GetComponent<Button>(), () => { if (_session?.IsBusy != true) _close?.Invoke(); });
             for (var i = 0; i < _offers.Length; i++)
             {
                 var index = i;
@@ -121,7 +150,7 @@ namespace GameLogic
                     Coin = button.transform.Find("m_img_Coin").gameObject,
                     SoldOut = button.transform.Find("m_text_SoldOut").GetComponent<Text>()
                 };
-                Listen(button, () => Buy(index));
+                Listen(button, () => BuyAsync(index).Forget());
             }
             _buySprite = _offers[0].Background.sprite;
             _soldOutSprite = content.Find("m_img_SoldOutTemplate").GetComponent<Image>().sprite;
@@ -144,7 +173,7 @@ namespace GameLogic
             _removeIcon = new IconView(panel.Find("m_rect_Icon"));
             Listen(_confirmation.transform.Find("m_btn_Outside").GetComponent<Button>(), CancelRemoval);
             Listen(panel.Find("m_btn_Close").GetComponent<Button>(), CancelRemoval);
-            Listen(panel.Find("m_btn_Remove").GetComponent<Button>(), ConfirmRemoval);
+            Listen(panel.Find("m_btn_Remove").GetComponent<Button>(), () => ConfirmRemovalAsync().Forget());
         }
 
         public void Bind(MysteriousStorePreviewSession session, Action close, Action purchased = null)
@@ -156,6 +185,8 @@ namespace GameLogic
             _close = close;
             _purchased = purchased;
             _feedback.text = string.Empty;
+            var resetHint = transform.Find("m_rect_Content/ResetHint")?.GetComponent<Text>();
+            if (resetHint != null) resetHint.text = "助力于北京时间次日零点到期，已开战对局保留本局效果。\n助力币保留。";
             CancelRemoval();
             RefreshView();
         }
@@ -172,18 +203,19 @@ namespace GameLogic
                 if (i >= _session.Offers.Count) continue;
                 var data = _session.Offers[i];
                 var heldLevel = _session.GetHeldLevel(data.BuffId);
-                view.Icon.Render(data.Quality);
+                view.Icon.Render(data.Quality, data.IconLocation);
                 view.Name.text = data.Name;
-                view.Description.text = data.Description;
-                view.Level.text = heldLevel > 0 ? $"当前{heldLevel}层 → 购买后{heldLevel + 1}层" : "购买后获得第1层";
-                view.Upgrade.SetActive(heldLevel > 0 && !_session.HasPurchased);
+                var displayLevel = _session.HasPurchased && heldLevel > 0 ? heldLevel : _session.GetTargetLevel(i);
+                view.Description.text = data.DescriptionAt(displayLevel);
+                view.Level.gameObject.SetActive(data.HasLevel && !data.IsInstantReward);
+                view.Level.text = displayLevel + "级";
+                view.Upgrade.SetActive(data.HasLevel && heldLevel > 0 && heldLevel < data.MaxLevel && !_session.HasPurchased);
                 view.Price.text = _session.GetPrice(i).ToString();
                 view.Price.gameObject.SetActive(!_session.HasPurchased);
                 view.Coin.SetActive(!_session.HasPurchased);
                 view.SoldOut.gameObject.SetActive(_session.HasPurchased);
                 view.Background.sprite = _session.HasPurchased ? _soldOutSprite : _buySprite;
-                view.Buy.interactable = !_session.HasPurchased && _session.GetTargetLevel(i) <= data.MaxLevel;
-                if (_session.HasPurchased) view.Level.text = heldLevel > 0 ? $"当前持有{heldLevel}层" : "本店已结束购买";
+                view.Buy.interactable = !_session.IsBusy && !_session.HasPurchased && _session.GetTargetLevel(i) <= data.MaxLevel;
             }
             for (var slot = 0; slot < _held.Length; slot++)
             {
@@ -196,22 +228,29 @@ namespace GameLogic
                     view.Level.text = string.Empty;
                     continue;
                 }
-                view.Icon.Render(item.Buff.Quality);
+                view.Icon.Render(item.Buff.Quality, item.Buff.IconLocation);
                 view.Level.text = item.Level + "级";
+                view.Remove.interactable = !_session.IsBusy;
             }
         }
 
-        private void Buy(int index)
+        private async UniTask BuyAsync(int index)
         {
-            if (_disposed || _session == null || _confirmation.activeSelf) return;
-            var wasHeld = _session.GetHeldLevel(_session.Offers[index].BuffId) > 0;
-            switch (_session.TryBuy(index))
+            if (_disposed || _session == null || _session.IsBusy || _confirmation.activeSelf || index < 0 || index >= _session.Offers.Count) return;
+            var session = _session;
+            var offer = session.Offers[index];
+            var wasHeld = session.GetHeldLevel(offer.BuffId) > 0;
+            var purchase = session.TryBuyAsync(index);
+            RefreshView();
+            var result = await purchase;
+            if (_disposed || _session != session) return;
+            switch (result)
             {
                 case MysteriousStorePurchaseResult.Success:
                     GameSoundService.Play(wasHeld ? GameSound.BuffStack : GameSound.BuffAcquired);
                     _purchased?.Invoke();
-                    _feedback.text = (wasHeld ? "升层成功：" : "获得助力：") + _session.Offers[index].Name +
-                        " " + _session.GetHeldLevel(_session.Offers[index].BuffId) + "层";
+                    _feedback.text = offer.IsInstantReward ? "已补充体力" :
+                        (wasHeld ? "升级成功：" : "获得助力：") + offer.Name + " " + session.GetHeldLevel(offer.BuffId) + "级";
                     break;
                 case MysteriousStorePurchaseResult.InsufficientBalance:
                     GameSoundService.Play(GameSound.Error);
@@ -220,6 +259,13 @@ namespace GameLogic
                 case MysteriousStorePurchaseResult.SlotsFull:
                     GameSoundService.Play(GameSound.Error);
                     _feedback.text = "当前可装备助力道具已达上限，\n请在下方移除道具后再次购买。";
+                    break;
+                case MysteriousStorePurchaseResult.SaveFailed:
+                    GameSoundService.Play(GameSound.Error);
+                    _feedback.text = "保存失败，请重试";
+                    break;
+                case MysteriousStorePurchaseResult.Unavailable:
+                    _feedback.text = "该商品当前不可购买";
                     break;
             }
             RefreshView();
@@ -234,12 +280,12 @@ namespace GameLogic
 
         private void OpenRemoval(int slot)
         {
-            if (_disposed) return;
+            if (_disposed || _session?.IsBusy == true) return;
             var item = FindSlot(slot);
             if (item == null) return;
             _removeBuffId = item.BuffId;
             _removeName.text = "移除" + item.Buff.Name;
-            _removeIcon.Render(item.Buff.Quality);
+            _removeIcon.Render(item.Buff.Quality, item.Buff.IconLocation);
             _removeLevel.text = item.Level + "级";
             _confirmation.SetActive(true);
             GameSoundService.Play(GameSound.UiOpen);
@@ -247,19 +293,27 @@ namespace GameLogic
 
         private void CancelRemoval()
         {
+            if (_session?.IsBusy == true) return;
             if (_confirmation.activeSelf) GameSoundService.Play(GameSound.UiClose);
             _removeBuffId = 0;
             _confirmation.SetActive(false);
         }
 
-        private void ConfirmRemoval()
+        private async UniTask ConfirmRemovalAsync()
         {
-            if (_disposed || _session == null || _removeBuffId == 0) return;
-            if (_session.Remove(_removeBuffId))
+            if (_disposed || _session == null || _session.IsBusy || _removeBuffId == 0) return;
+            var session = _session;
+            var removal = session.RemoveAsync(_removeBuffId);
+            RefreshView();
+            var removed = await removal;
+            if (_disposed || _session != session) return;
+            if (removed)
             {
                 _feedback.text = "已移除助力，全部层数已清除";
                 GameSoundService.Play(GameSound.BuffRemove);
+                _purchased?.Invoke();
             }
+            else if (!string.IsNullOrEmpty(session.LastError)) _feedback.text = "保存失败，请重试";
             CancelRemoval();
             RefreshView();
         }

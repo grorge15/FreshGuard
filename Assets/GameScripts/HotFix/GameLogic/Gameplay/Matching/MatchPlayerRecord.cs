@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -20,11 +22,13 @@ namespace GameLogic
         public string EntryPhase;
         public BattleRewardRules EntryRules;
         public BattleSettlementRecord Settlement;
+        public List<HeldAssistRecord> HeldAssists = new List<HeldAssistRecord>();
 
         public void Capture(MainMenuPlayerState state)
         {
             Energy = state.Energy; Coins = state.Coins; Trophies = state.Trophies;
             PlayerName = state.PlayerName; LastEnergyUpdateUtcTicks = state.LastEnergyUpdateUtc.UtcTicks;
+            HeldAssists = state.HeldAssists.Select(record => record.Copy()).ToList();
         }
         public MainMenuPlayerState Restore(int capacity, TimeSpan recovery, DateTimeOffset now)
         {
@@ -33,7 +37,26 @@ namespace GameLogic
             var state = new MainMenuPlayerState(Energy, recovery, capacity, Coins, Trophies,
                 new DateTimeOffset(LastEnergyUpdateUtcTicks, TimeSpan.Zero)) { PlayerName = PlayerName };
             state.Refresh(now);
+            state.ReplaceHeldAssists(HeldAssists);
+            state.PruneExpiredAssists(now);
             return state;
+        }
+
+        /// <summary>保存候选不得先改写当前记录，匹配扣费阶段也必须随候选一同保留。</summary>
+        public MatchPlayerRecord Copy()
+        {
+            return new MatchPlayerRecord
+            {
+                Version = Version, Energy = Energy, Coins = Coins, Trophies = Trophies,
+                PlayerName = PlayerName, LastEnergyUpdateUtcTicks = LastEnergyUpdateUtcTicks,
+                EntryId = EntryId, EntryPhase = EntryPhase,
+                // 候选存档保留杯数账目，并与当前记录隔离可变的结算数据。
+                EntryRules = EntryRules == null ? null :
+                    JsonUtility.FromJson<BattleRewardRules>(JsonUtility.ToJson(EntryRules)),
+                Settlement = Settlement == null ? null :
+                    JsonUtility.FromJson<BattleSettlementRecord>(JsonUtility.ToJson(Settlement)),
+                HeldAssists = HeldAssists?.Select(record => record.Copy()).ToList() ?? new List<HeldAssistRecord>()
+            };
         }
         public void BeginEntry(MainMenuPlayerState state, string entryId, DateTimeOffset now)
         {

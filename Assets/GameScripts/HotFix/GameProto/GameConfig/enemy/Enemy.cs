@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.enemy
 {
-/// <summary>
-/// 敌人配置
-/// </summary>
 public sealed partial class Enemy : Luban.BeanBase
 {
     public Enemy(ByteBuf _buf) 

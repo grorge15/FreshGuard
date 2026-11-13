@@ -12,9 +12,6 @@ using Luban;
 
 namespace GameConfig.robot
 {
-/// <summary>
-/// Sheet1机器人；Sheet2特殊地块；通过entityType筛选
-/// </summary>
 public sealed partial class Robot : Luban.BeanBase
 {
     public Robot(ByteBuf _buf) 

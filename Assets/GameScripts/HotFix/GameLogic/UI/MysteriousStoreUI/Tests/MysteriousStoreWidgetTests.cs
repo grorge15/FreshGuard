@@ -18,7 +18,7 @@ namespace GameLogic.Tests
 {
     public sealed class MysteriousStoreWidgetTests
     {
-        private const string PrefabPath = "Assets/AssetRaw/UI/MysteriousStoreWidget.prefab";
+        private const string PrefabPath = "Assets/AssetRaw/Actor/Prefabs/UIPrefabs/MysteriousStoreWidget.prefab";
         private GameObject _root;
         private MysteriousStoreWidget _widget;
         private Scene _scene;
@@ -83,6 +83,120 @@ namespace GameLogic.Tests
             Assert.That(TextAt("m_rect_Content/m_text_Balance"), Is.EqualTo("助力币  60"));
             Assert.That(TextAt("m_rect_Content/m_item_Held0/m_go_Content/m_text_Level"), Is.EqualTo("2级"));
         }
+
+        private sealed class FirstRandom : IShopRandom
+        {
+            public int NextInt(int maxExclusive) => 0;
+            public double NextDouble() => 0;
+        }
+
+        private MysteriousStoreSession ProductionSession(Func<MainMenuPlayerState, UniTask> save,
+            bool includeInstant = false)
+        {
+            var player = MysteriousStorePreviewTests.Player(500);
+            player.ReplaceHeldAssists(new[] { new HeldAssistRecord(1802, 1, 4,
+                HeldAssistRecord.NextBeijingMidnight(DateTimeOffset.UtcNow).UtcTicks) });
+            var offers = new[]
+            {
+                new MysteriousStoreOfferData(1802, 1802, "Combo加速器", "", new[] { "一级", "二级", "三级" },
+                    MysteriousStoreQuality.Green, 150, true, 3),
+                includeInstant
+                    ? new MysteriousStoreOfferData(1806, 0, "体力补给", "", new[] { "增加10点体力" },
+                        MysteriousStoreQuality.Green, 200, false, 1, true)
+                    : new MysteriousStoreOfferData(1804, 1804, "玻璃击破器", "", new[] { "扣除2点耐久" },
+                        MysteriousStoreQuality.Green, 100, false, 1),
+                new MysteriousStoreOfferData(1803, 1803, "Combo增伤器", "", new[] { "一级增伤", "二级增伤", "三级增伤" },
+                    MysteriousStoreQuality.Green, 150, true, 3)
+            };
+            return new MysteriousStoreSession(player, offers, new FirstRandom(), save);
+        }
+
+        [Test]
+        public void HeldLevelOneShowsNextLevelAndExistingArrowThenUpgradeSellsOut()
+        {
+            var session = ProductionSession(_ => UniTask.CompletedTask);
+            _widget.Bind(session, null);
+            Assert.That(TextAt("m_rect_Content/m_item_Offer0/m_text_Level"), Is.EqualTo("2级"));
+            Assert.That(TextAt("m_rect_Content/m_item_Offer0/m_text_Description"), Is.EqualTo("二级"));
+            var arrow = _root.transform.Find("m_rect_Content/m_item_Offer0/m_img_Upgrade");
+            Assert.That(arrow.gameObject.activeSelf, Is.True);
+            Assert.That(arrow.GetComponent<Image>().sprite, Is.SameAs(AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Assets/AssetRaw/UI/UISprites/MysteriousStore/Shop_upgradeArrow.png")));
+            Assert.That(_root.transform.Find("m_rect_Content/m_item_Offer0/m_rect_Icon/m_img_Upgrade"), Is.Null,
+                "复用原有同级箭头，不能另建或迁移布局。");
+            Assert.That(TextAt("m_rect_Content/m_item_Held4/m_go_Content/m_text_Level"), Is.EqualTo("1级"));
+            Click("m_rect_Content/m_item_Offer0/m_btn_Buy");
+            Assert.That(session.PlayerState.HeldAssists.Single().Slot, Is.EqualTo(4));
+            Assert.That(TextAt("m_rect_Content/m_item_Held4/m_go_Content/m_text_Level"), Is.EqualTo("2级"));
+            Assert.That(TextAt("m_rect_Content/m_item_Offer0/m_text_Level"), Is.EqualTo("2级"));
+            Assert.That(TextAt("m_rect_Content/m_item_Offer0/m_text_Description"), Is.EqualTo("二级"));
+            Assert.That(TextAt("m_rect_Content/m_item_Offer2/m_text_Level"), Is.EqualTo("1级"));
+            for (var row = 0; row < session.Offers.Count; row++)
+            {
+                var offer = _root.transform.Find("m_rect_Content/m_item_Offer" + row);
+                Assert.That(offer.Find("m_img_Upgrade").gameObject.activeSelf, Is.False);
+                Assert.That(offer.Find("m_btn_Buy").GetComponent<Button>().interactable, Is.False);
+                Assert.That(offer.Find("m_btn_Buy/m_text_SoldOut").gameObject.activeSelf, Is.True);
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void NonLevelGoodsAndStaminaHideLevelAndArrow(bool instant)
+        {
+            _widget.Bind(ProductionSession(_ => UniTask.CompletedTask, instant), null);
+            var row = _root.transform.Find("m_rect_Content/m_item_Offer1");
+            Assert.That(row.Find("m_text_Level").gameObject.activeSelf, Is.False);
+            Assert.That(row.Find("m_img_Upgrade").gameObject.activeSelf, Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator PendingPurchaseLocksActionsAndSaveFailurePreservesHeldAndBalance() => UniTask.ToCoroutine(async () =>
+        {
+            var pending = new UniTaskCompletionSource();
+            var session = ProductionSession(_ => pending.Task);
+            var closed = false;
+            _widget.Bind(session, () => closed = true);
+            Click("m_rect_Content/m_item_Offer0/m_btn_Buy");
+            Assert.That(session.IsBusy, Is.True);
+            Assert.That(session.PlayerState.Coins, Is.EqualTo(500));
+            Assert.That(session.GetHeldLevel(1802), Is.EqualTo(1));
+            Assert.That(_root.transform.Find("m_rect_Content/m_item_Offer0/m_btn_Buy").GetComponent<Button>().interactable, Is.False);
+            Assert.That(_root.transform.Find("m_rect_Content/m_item_Held4/m_go_Content/m_btn_Remove").GetComponent<Button>().interactable, Is.False);
+            Click("m_rect_Content/m_btn_Close");
+            Click("m_rect_Content/m_item_Held4/m_go_Content/m_btn_Remove");
+            Assert.That(closed, Is.False);
+            Assert.That(_root.transform.Find("m_go_RemoveConfirmation").gameObject.activeSelf, Is.False);
+            pending.TrySetException(new IOException("测试磁盘写入失败"));
+            await UniTask.Yield();
+            Assert.That(session.IsBusy, Is.False);
+            Assert.That(session.HasPurchased, Is.False);
+            Assert.That(session.PlayerState.Coins, Is.EqualTo(500));
+            Assert.That(session.GetHeldLevel(1802), Is.EqualTo(1));
+            Assert.That(TextAt("m_rect_Content/m_text_Feedback"), Is.EqualTo("保存失败，请重试"));
+            Assert.That(_root.transform.Find("m_rect_Content/m_item_Offer0/m_btn_Buy").GetComponent<Button>().interactable, Is.True);
+            Click("m_rect_Content/m_btn_Close");
+            Assert.That(closed, Is.True);
+        });
+
+        [UnityTest]
+        public IEnumerator PendingRemovalKeepsConfirmationAndFailureDoesNotRemoveHeld() => UniTask.ToCoroutine(async () =>
+        {
+            var pending = new UniTaskCompletionSource();
+            var session = ProductionSession(_ => pending.Task);
+            _widget.Bind(session, null);
+            Click("m_rect_Content/m_item_Held4/m_go_Content/m_btn_Remove");
+            Click("m_go_RemoveConfirmation/m_rect_Content/m_btn_Remove");
+            Click("m_go_RemoveConfirmation/m_btn_Outside");
+            Assert.That(session.IsBusy, Is.True);
+            Assert.That(_root.transform.Find("m_go_RemoveConfirmation").gameObject.activeSelf, Is.True);
+            pending.TrySetException(new IOException("测试移除保存失败"));
+            await UniTask.Yield();
+            Assert.That(session.GetHeldLevel(1802), Is.EqualTo(1));
+            Assert.That(session.PlayerState.Coins, Is.EqualTo(500));
+            Assert.That(TextAt("m_rect_Content/m_text_Feedback"), Is.EqualTo("保存失败，请重试"));
+            Assert.That(_root.transform.Find("m_go_RemoveConfirmation").gameObject.activeSelf, Is.False);
+        });
 
         [Test]
         public void RemovalRequiresConfirmationAndOutsideOrCloseOnlyCancelDialog()
@@ -174,7 +288,7 @@ namespace GameLogic.Tests
             public CancellationToken ReceivedToken;
             public readonly UniTaskCompletionSource<GameObject> Completion = new UniTaskCompletionSource<GameObject>();
             public GameObject LoadGameObject(string location, Transform parent = null, string packageName = "") =>
-                Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/" + location + ".prefab"), parent, false);
+                Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/" + location + ".prefab"), parent, false);
             public UniTask<GameObject> LoadGameObjectAsync(string location, Transform parent = null,
                 CancellationToken cancellationToken = default, string packageName = "")
             {
@@ -199,7 +313,7 @@ namespace GameLogic.Tests
         public void SetUp()
         {
             _scene = EditorSceneManager.NewPreviewScene();
-            _root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/MainMenuUI.prefab"));
+            _root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/MainMenuUI.prefab"));
             SceneManager.MoveGameObjectToScene(_root, _scene);
             _menu = new MainMenuUI();
             typeof(UIWindow).GetField("_panel", Private).SetValue(_menu, _root);
@@ -236,12 +350,12 @@ namespace GameLogic.Tests
         {
             Invoke("OnRefresh");
             Assert.That(_loader.Calls, Is.Zero);
-            _menu.ShowMysteriousStorePreviewAsync(101).GetAwaiter().GetResult();
+            OpenPreview(101).GetAwaiter().GetResult();
             var store = _root.transform.GetChild(_root.transform.childCount - 1);
             Assert.That(store.name, Does.StartWith("MysteriousStoreWidget"));
             var balance = store.Find("m_rect_Content/m_text_Balance").GetComponent<Text>();
             Assert.That(balance.text, Is.EqualTo("助力币  777"));
-            _menu.ShowMysteriousStorePreviewAsync(101).GetAwaiter().GetResult();
+            OpenPreview(101).GetAwaiter().GetResult();
             Invoke("OnRefresh");
             Assert.That(_loader.Calls, Is.EqualTo(1));
             var button = _root.GetComponentsInChildren<Button>().First(b => b.name == "StartBattleButton");
@@ -254,7 +368,7 @@ namespace GameLogic.Tests
         [Test]
         public void MainMenuAndStoreRefreshShowSameChangedCoins()
         {
-            _menu.ShowMysteriousStorePreviewAsync(106).GetAwaiter().GetResult();
+            OpenPreview(106).GetAwaiter().GetResult();
             MainMenuUI.State.AddCoins(23);
             Invoke("OnUpdate");
             var widget = (MysteriousStoreWidget)typeof(MainMenuUI).GetField("_mysteriousStore", Private).GetValue(_menu);
@@ -275,7 +389,7 @@ namespace GameLogic.Tests
             AppField("_playerRecord").SetValue(null, new MatchPlayerRecord());
             try
             {
-                _menu.ShowMysteriousStorePreviewAsync(107).GetAwaiter().GetResult();
+                OpenPreview(107).GetAwaiter().GetResult();
                 var widget = (MysteriousStoreWidget)typeof(MainMenuUI).GetField("_mysteriousStore", Private).GetValue(_menu);
                 widget.transform.Find("m_rect_Content/m_item_Offer0/m_btn_Buy").GetComponent<Button>().onClick.Invoke();
                 var deadline = DateTime.UtcNow.AddSeconds(5);
@@ -310,7 +424,7 @@ namespace GameLogic.Tests
         [TestCase(true)]
         public void SettlementReturnButtonOpensStoreForBothResults(bool victory)
         {
-            var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/CheckOutUI.prefab"));
+            var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/CheckOutUI.prefab"));
             SceneManager.MoveGameObjectToScene(root, _scene);
             var checkout = new CheckOutUI();
             typeof(UIWindow).GetField("_panel", Private).SetValue(checkout, root);
@@ -325,7 +439,7 @@ namespace GameLogic.Tests
                 var reward = new BattleSettlementReward(tables, MainMenuUI.State,
                     victory ? BattleSettlementResult.Victory : BattleSettlementResult.Defeat,
                     () => { saved++; return UniTask.CompletedTask; });
-                checkout.BindReward(reward, () => _menu.ShowMysteriousStorePreviewAsync(victory ? 109 : 108));
+                checkout.BindReward(reward, () => OpenPreview(victory ? 109 : 108));
                 var returnButton = root.transform.Find("m_rect_Content/m_btn_ReturnMain").GetComponent<Button>();
                 Assert.That(returnButton.interactable, Is.True);
                 returnButton.onClick.Invoke();
@@ -347,13 +461,19 @@ namespace GameLogic.Tests
             Invoke("OnRefresh");
             var countdown = _root.GetComponentsInChildren<Text>(true).First(t => t.name == "EnergyCountdown");
             var previousCountdown = countdown.text;
+            var countdownObservedAt = DateTimeOffset.UtcNow;
             _loader.Fail = true;
-            _menu.ShowMysteriousStorePreviewAsync(103).GetAwaiter().GetResult();
-            _menu.ShowMysteriousStorePreviewAsync(103).GetAwaiter().GetResult();
+            OpenPreview(103).GetAwaiter().GetResult();
+            OpenPreview(103).GetAwaiter().GetResult();
             Assert.That(_loader.Calls, Is.EqualTo(1));
             Assert.That((bool)typeof(MainMenuUI).GetField("_openingMysteriousStore", Private).GetValue(_menu), Is.False);
             Assert.That((string)typeof(MainMenuUI).GetField("_statusMessage", Private).GetValue(_menu), Is.EqualTo("神秘商店加载失败"));
-            Assert.That(countdown.text, Is.EqualTo(previousCountdown), "商店错误不能覆盖体力倒计时。");
+            StringAssert.IsMatch(@"^\d{2}:[0-5]\d$", countdown.text, "商店错误不能覆盖体力倒计时。");
+            var before = TimeSpan.ParseExact(previousCountdown, @"mm\:ss", System.Globalization.CultureInfo.InvariantCulture);
+            var after = TimeSpan.ParseExact(countdown.text, @"mm\:ss", System.Globalization.CultureInfo.InvariantCulture);
+            var elapsedSeconds = (DateTimeOffset.UtcNow - countdownObservedAt).TotalSeconds;
+            Assert.That((before - after).TotalSeconds, Is.InRange(0d, Math.Ceiling(elapsedSeconds) + 1d),
+                "加载失败后倒计时应只随真实时间自然递减。");
             var status = _root.transform.Find("m_text_Status").GetComponent<Text>();
             Assert.That(status.gameObject.activeSelf, Is.True);
             Assert.That(status.text, Is.EqualTo("神秘商店加载失败"));
@@ -368,7 +488,7 @@ namespace GameLogic.Tests
         public void DestroyingMenuCancelsPendingStoreLoad()
         {
             _loader.Pending = true;
-            var task = _menu.ShowMysteriousStorePreviewAsync(104);
+            var task = OpenPreview(104);
             Assert.That(task.Status, Is.EqualTo(UniTaskStatus.Pending));
             Invoke("OnDestroy");
             _destroyed = true;
@@ -378,5 +498,7 @@ namespace GameLogic.Tests
         }
 
         private void Invoke(string method) => typeof(MainMenuUI).GetMethod(method, Private).Invoke(_menu, null);
+        private UniTask OpenPreview(long battleId) => _menu.ShowMysteriousStorePreviewAsync(battleId,
+            MysteriousStorePreviewSession.CreateDefault(MainMenuUI.State));
     }
 }

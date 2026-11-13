@@ -112,7 +112,8 @@ namespace GameLogic
         }
 
         /// <summary>后续伤害只发事实通知，不经过攻击/受伤/击杀玩法钩子。</summary>
-        public CombatTargetResolution ResolvePeriodicDamage(SkillOwnerRef source, SkillOwnerRef target, int skillId, int damage)
+        public CombatTargetResolution ResolvePeriodicDamage(SkillOwnerRef source, SkillOwnerRef target, int skillId, int damage,
+            CombatSourceKind sourceKind = CombatSourceKind.Robot)
         {
             var id = target.EntityId ?? 0;
             var ignored = new CombatTargetResolution(id, 0, DamageResult.Ignored);
@@ -124,8 +125,14 @@ namespace GameLogic
             {
                 var raw = new CombatActionSnapshot(BattleId, source.EntityId.Value, source.Side, skillId, new[] { id },
                     CombatOutcomeTag.DamageOverTime, damage, UnityEngine.Vector3.zero, UnityEngine.Vector3.zero, 1,
-                    damageOrigin: DamageOrigin.FollowUp);
-                var action = raw.Lock(_owner, checked(++_sequence), new CombatOutcomeDraft(raw));
+                    sourceKind, damageOrigin: DamageOrigin.FollowUp);
+                var draft = new CombatOutcomeDraft(raw);
+                // 后续伤害不运行玩法钩子；数值使用本跳的战场加成，源机器人移除也不取消中毒。
+                if (sourceKind == CombatSourceKind.Robot)
+                    draft.AddPercent(CombatModifierGroup.GlobalDamage,
+                        (source.Side == BattleSide.Player ? _battle.Player : _battle.Opponent).Assists.RobotDamageRate);
+                var action = raw.Lock(_owner, checked(++_sequence), draft);
+                damage = action.LockedDamage;
                 action.Consumed = true;
                 var context = new CombatDamageContext(new CombatOutcomeDraft(action), target);
                 DamageApplying?.Invoke(context);

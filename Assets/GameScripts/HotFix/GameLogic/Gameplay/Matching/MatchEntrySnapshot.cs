@@ -10,10 +10,31 @@ namespace GameLogic
         public string Name { get; }
         public string IconLocation { get; }
         public int Layers { get; }
-        public MatchBuff(int id, string name, string iconLocation, int layers)
+        public long ExpiresUtcTicks { get; }
+        public MatchBuff(int id, string name, string iconLocation, int layers, long expiresUtcTicks = long.MaxValue)
         {
             if (id <= 0 || layers <= 0) throw new ArgumentOutOfRangeException(nameof(id));
-            BuffId = id; Name = name; IconLocation = iconLocation; Layers = layers;
+            BuffId = id; Name = name; IconLocation = iconLocation; Layers = layers; ExpiresUtcTicks = expiresUtcTicks;
+        }
+    }
+    /// <summary>放行开战时复制有效助力，已开战后不再按墙上时间撤销。</summary>
+    public sealed class MatchAssistSnapshot
+    {
+        public IReadOnlyList<MatchBuff> PlayerBuffs { get; }
+        public IReadOnlyList<MatchBuff> OpponentBuffs { get; }
+        public MatchAssistSnapshot(IReadOnlyList<MatchBuff> player, IReadOnlyList<MatchBuff> opponent, DateTimeOffset now)
+        {
+            var carried = new List<MatchBuff>();
+            foreach (var buff in player ?? throw new ArgumentNullException(nameof(player)))
+                if (buff.ExpiresUtcTicks > now.UtcTicks)
+                    carried.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, buff.Layers, buff.ExpiresUtcTicks));
+            var enemies = new List<MatchBuff>();
+            foreach (var buff in opponent ?? throw new ArgumentNullException(nameof(opponent)))
+            {
+                if (enemies.Count >= carried.Count) break;
+                enemies.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1));
+            }
+            PlayerBuffs = carried.AsReadOnly(); OpponentBuffs = enemies.AsReadOnly();
         }
     }
     public static class MatchBuffGenerator
@@ -58,7 +79,8 @@ namespace GameLogic
         public IReadOnlyList<MatchBuff> OpponentBuffs { get; }
 
         public MatchEntrySnapshot(DemoBattleProfile profile, MainMenuPlayerState player, ShopRules rules, IShopRandom random = null,
-            Func<int, bool> isRobotEnabled = null)
+            Func<int, bool> isRobotEnabled = null, IReadOnlyList<MatchBuff> carriedBuffs = null,
+            IReadOnlyList<MatchBuff> unlockedBuffs = null)
         {
             if (profile == null || player == null || rules == null) throw new ArgumentNullException();
             if (string.IsNullOrWhiteSpace(profile.PlayerName) || string.IsNullOrWhiteSpace(profile.OpponentName) ||
@@ -82,6 +104,26 @@ namespace GameLogic
                 if (!positive) throw new ArgumentException("Demo已解锁机器人在槽位" + slot + "没有正Drop权重。");
             }
             var unlocked = new List<MatchBuff>(); var catalogue = new Dictionary<int, DemoBuffDefinition>();
+            var carried = new List<MatchBuff>();
+            if (carriedBuffs != null || unlockedBuffs != null)
+            {
+                if (carriedBuffs == null || unlockedBuffs == null) throw new ArgumentException("真实助力目录与携带列表必须同时提供。");
+                var unlockedIds = new HashSet<int>();
+                foreach (var buff in unlockedBuffs)
+                {
+                    if (buff == null || !unlockedIds.Add(buff.BuffId)) throw new ArgumentException("真实助力目录重复或无效。");
+                    unlocked.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1));
+                }
+                seen.Clear();
+                foreach (var buff in carriedBuffs)
+                {
+                    if (buff == null || !unlockedIds.Contains(buff.BuffId) || !seen.Add(buff.BuffId))
+                        throw new ArgumentException("真实携带助力不属于可用目录或重复。");
+                    carried.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, buff.Layers, buff.ExpiresUtcTicks));
+                }
+            }
+            else
+            {
             foreach (var buff in profile.Buffs)
             {
                 if (buff == null || buff.BuffId <= 0 || catalogue.ContainsKey(buff.BuffId) || string.IsNullOrWhiteSpace(buff.Name) || string.IsNullOrWhiteSpace(buff.IconLocation))
@@ -89,13 +131,14 @@ namespace GameLogic
                 catalogue.Add(buff.BuffId, buff);
                 if (buff.Unlocked) unlocked.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1));
             }
-            var carried = new List<MatchBuff>(); seen.Clear();
+            seen.Clear();
             foreach (var carry in profile.PlayerBuffs)
             {
                 DemoBuffDefinition buff;
                 if (carry == null || carry.Layers < 1 || !seen.Add(carry.BuffId) || !catalogue.TryGetValue(carry.BuffId, out buff) || !buff.Unlocked)
                     throw new ArgumentException("玩家携带BUFF必须已解锁、层数为正且种类不重复。");
                 carried.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, carry.Layers));
+            }
             }
             EntryId = Guid.NewGuid().ToString("N"); PlayerName = player.PlayerName; PlayerAvatar = profile.PlayerAvatar;
             OpponentName = profile.OpponentName; OpponentAvatar = profile.OpponentAvatar; Trophies = player.Trophies;

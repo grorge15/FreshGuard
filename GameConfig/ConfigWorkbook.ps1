@@ -90,13 +90,26 @@ function New-TextCell($Xml, [string]$Address, $Value) {
     return $cell
 }
 
-function Get-FieldMap($Book, $Sheet) {
+function Get-FieldMap($Book, $Sheet, [switch]$AllowMirroredName) {
     $map = [ordered]@{}
     foreach ($cell in $Sheet.SelectNodes('//*[local-name()="row"][@r="1"]/*[local-name()="c"]')) {
         $column = Get-ColumnIndex $cell.GetAttribute('r')
         $name = Get-CellText $Book $cell
         if ($column -gt 1 -and $name -ne '') {
-            if ($map.Contains($name)) { throw "Duplicate field: $name" }
+            if ($map.Contains($name)) {
+                if (!$AllowMirroredName -or $name -ne 'name') { throw "Duplicate field: $name" }
+                # The editable shop-effect sheet contains a display-name mirror. Keep the
+                # source intact, accepting it only when types, groups and actual data agree.
+                foreach ($row in $Sheet.SelectNodes('//*[local-name()="row"]')) {
+                    $rowNumber = [int]$row.GetAttribute('r')
+                    if ($rowNumber -eq 4) { continue } # Human-readable column comments differ.
+                    $firstAddress = (Get-ColumnName $map[$name]) + $rowNumber
+                    $secondAddress = (Get-ColumnName $column) + $rowNumber
+                    $first = Get-CellText $Book $row.SelectSingleNode('./*[local-name()="c"][@r="' + $firstAddress + '"]')
+                    $second = Get-CellText $Book $row.SelectSingleNode('./*[local-name()="c"][@r="' + $secondAddress + '"]')
+                    if ($first -cne $second) { throw "Conflicting duplicate name: $firstAddress / $secondAddress" }
+                }
+            }
             $map[$name] = $column
         }
     }
@@ -139,13 +152,19 @@ function Get-ShopFixedValues($Values) {
         # Only this bonus is capped. This does not cap final ball speed or final damage.
         $caps = (@('0.3', '0.6', '0.9')[0..($count - 1)]) -join '|'
     }
-    return @{
+    $defaults = @{
         activationType = $rule[0]; grantType = $rule[1]; occupiesAssistSlot = $rule[2]; targetType = $rule[3]
         resetOnComboClear = (Join-LevelValue $rule[4] $count); affectsSkillDamage = (Join-LevelValue $rule[5] $count)
         affectsDotDamage = (Join-LevelValue $rule[6] $count); allowStaminaOverflow = (Join-LevelValue $rule[7] $count)
         speedStackRules = (Join-LevelValue $rule[8] $count); endConditions = (Join-LevelValue $rule[9] $count)
         comboBonusCaps = $caps
     }
+    if (!$Values.ContainsKey('staminaAmount')) {
+        if ($key -eq 'AddStamina') { throw 'AddStamina requires an explicit staminaAmount.' }
+        # Stamina goods are awarded directly by the shop and no longer need a Buff row.
+        $defaults.staminaAmount = '0'
+    }
+    return $defaults
 }
 
 function Expand-ConfigSheet($Book, [string]$SchemaSheet, [string]$InputSheet, [scriptblock]$FixedValues) {
@@ -153,7 +172,7 @@ function Expand-ConfigSheet($Book, [string]$SchemaSheet, [string]$InputSheet, [s
     $schema = Read-WorkbookXml $Book $Book.Sheets[$SchemaSheet]
     $sheet = Read-WorkbookXml $Book $Book.Sheets[$InputSheet]
     $fields = Get-FieldMap $Book $schema
-    $inputFields = Get-FieldMap $Book $sheet
+    $inputFields = Get-FieldMap $Book $sheet -AllowMirroredName:($InputSheet -eq '商店效果')
     foreach ($name in $inputFields.Keys) { if (!$fields.Contains($name)) { throw "Unknown $InputSheet field: $name" } }
     $data = $sheet.SelectSingleNode('//*[local-name()="sheetData"]')
     foreach ($row in @($data.SelectNodes('./*[local-name()="row"]'))) {
@@ -205,6 +224,30 @@ function Prepare-ConfigWorkbooks([string]$DataDir) {
     $buff = Open-ConfigWorkbook (Join-Path $DataDir 'buff.xlsx')
     try { Expand-ConfigSheet $buff '技能Buff' '商店效果' { param($values) Get-ShopFixedValues $values } }
     finally { $buff.Zip.Dispose() }
+
+    $goods = Open-ConfigWorkbook (Join-Path $DataDir 'shop_goods.xlsx')
+    try {
+        foreach ($part in $goods.Sheets.Values) {
+            $sheet = Read-WorkbookXml $goods $part
+            $fields = Get-FieldMap $goods $sheet
+            foreach ($row in $sheet.SelectNodes('//*[local-name()="row"]')) {
+                if ([int]$row.GetAttribute('r') -le 4) { continue }
+                $values = Get-RowValues $goods $row $fields
+                if ($values['id'] -eq '') { continue }
+                if ($values['id'] -ne '1806' -and [int]$values['buffId'] -le 0) {
+                    throw "Shop goods requires a buffId: $($values['id'])"
+                }
+            }
+            # The direct stamina reward uses 0 instead of a Buff reference.
+            $address = (Get-ColumnName $fields['buffId']) + '2'
+            $typeCell = $sheet.SelectSingleNode('//*[local-name()="c"][@r="' + $address + '"]')
+            $type = Get-CellText $goods $typeCell
+            if ($type -eq 'int#ref=buff.TbBuff') {
+                [void]$typeCell.ParentNode.ReplaceChild((New-TextCell $sheet $address ($type + '?')), $typeCell)
+                Write-WorkbookXml $goods $part $sheet
+            }
+        }
+    } finally { $goods.Zip.Dispose() }
 
     $shapes = @{}
     $shapeBook = Open-ConfigWorkbook (Join-Path $DataDir 'robot_shape.xlsx')
