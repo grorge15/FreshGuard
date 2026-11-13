@@ -25,6 +25,7 @@ namespace GameLogic
             public PhysicalCollisionBall Main;
             public PhysicalCollisionBall[] Temporary;
             public int AuthoredCount;
+            public BattleEntityRegistry Registry;
             public bool Berserk;
             public float Remaining;
         }
@@ -73,21 +74,14 @@ namespace GameLogic
                 if (temporary[i] == null || temporary[i] == main || Array.IndexOf(temporary, temporary[i]) != i)
                     throw new InvalidOperationException("临时暴走球引用必须有效且不能重复。");
             }
-            var session = new BallSession { Main = main, Temporary = new PhysicalCollisionBall[count], AuthoredCount = authoredCount };
+            var session = new BallSession { Main = main, Temporary = new PhysicalCollisionBall[count], AuthoredCount = authoredCount, Registry = registry };
             try
             {
                 for (var i = 0; i < count; i++)
                 {
                     var ball = i < authoredCount ? temporary[i] : main.CreateTemporary();
                     session.Temporary[i] = ball;
-                    ball.gameObject.SetActive(false);
-                    ball.SetMapScale(main.MapScale);
-                    ball.SetBattleSpeedScale(main.BattleSpeedScale);
-                    if (_rules != null) ball.Configure(_rules);
-                    ball.BindBattle(_battleId, main.Side, _runningGate);
-                    main.CopyRenderBindingTo(ball);
-                    ball.BindRobotContacts(registry);
-                    ball.RobotContactDetected += ForwardContact;
+                    BindTemporary(session, ball);
                 }
             }
             catch
@@ -98,6 +92,61 @@ namespace GameLogic
             main.RobotContactDetected += ForwardContact;
             main.ComboThresholdReached += EnterBerserk;
             return session;
+        }
+
+        /// <summary>助力在正式发射前确定；按基础数量重新计算，重复调用不会累计生成。</summary>
+        public void ConfigureAssistBallCounts(int playerExtra, int opponentExtra)
+        {
+            if (_launched || _player == null || _opponent == null || _player.Main.IsLaunched || _opponent.Main.IsLaunched)
+                throw new InvalidOperationException("额外暴走球只能在绑定本局后、发射前装配。");
+            if (playerExtra < 0 || opponentExtra < 0) throw new ArgumentOutOfRangeException();
+            ResizeTemporary(_player, checked((_rules?.ExtraBallCount ?? 2) + playerExtra));
+            ResizeTemporary(_opponent, checked((_rules?.ExtraBallCount ?? 2) + opponentExtra));
+        }
+
+        private void BindTemporary(BallSession session, PhysicalCollisionBall ball)
+        {
+            var main = session.Main;
+            ball.gameObject.SetActive(false);
+            ball.SetMapScale(main.MapScale);
+            ball.SetBattleSpeedScale(main.BattleSpeedScale);
+            if (_rules != null) ball.Configure(_rules);
+            ball.BindBattle(_battleId, main.Side, _runningGate);
+            main.CopyRenderBindingTo(ball);
+            ball.BindRobotContacts(session.Registry);
+            ball.RobotContactDetected += ForwardContact;
+        }
+
+        private void ResizeTemporary(BallSession session, int count)
+        {
+            var previous = session.Temporary;
+            if (previous.Length == count) return;
+            var resized = new PhysicalCollisionBall[count];
+            Array.Copy(previous, resized, Math.Min(previous.Length, count));
+            try
+            {
+                for (var i = previous.Length; i < count; i++)
+                {
+                    var ball = session.Main.CreateTemporary();
+                    resized[i] = ball;
+                    BindTemporary(session, ball);
+                }
+            }
+            catch
+            {
+                for (var i = previous.Length; i < count; i++) ReleaseTemporary(resized[i]);
+                throw;
+            }
+            for (var i = count; i < previous.Length; i++) ReleaseTemporary(previous[i]);
+            session.Temporary = resized;
+        }
+
+        private void ReleaseTemporary(PhysicalCollisionBall ball)
+        {
+            if (ball == null) return;
+            ball.RobotContactDetected -= ForwardContact;
+            if (Application.isPlaying) Destroy(ball.gameObject);
+            else DestroyImmediate(ball.gameObject);
         }
 
         private void ForwardContact(PhysicalCollisionBall ball, int robotId)
@@ -202,6 +251,7 @@ namespace GameLogic
             {
                 session.Main.RobotContactDetected -= ForwardContact;
                 session.Main.ComboThresholdReached -= EnterBerserk;
+                session.Main.BindAssistState(null);
             }
             for (var i = 0; i < session.Temporary.Length; i++)
             {
@@ -214,8 +264,7 @@ namespace GameLogic
                     ball.SetBattleSpeedScale(1f);
                     continue;
                 }
-                if (Application.isPlaying) Destroy(ball.gameObject);
-                else DestroyImmediate(ball.gameObject);
+                ReleaseTemporary(ball);
             }
         }
 

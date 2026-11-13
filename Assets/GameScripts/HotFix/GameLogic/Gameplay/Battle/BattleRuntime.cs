@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TEngine;
 
 namespace GameLogic
@@ -6,6 +7,7 @@ namespace GameLogic
     public sealed class BattleRuntime : IDisposable
     {
         private readonly bool _ownsRegistry;
+        private bool _assistsConfigured;
         public long BattleId { get; }
         public BattleEntityRegistry Registry { get; }
         public CombatRuntime Combat { get; }
@@ -38,6 +40,11 @@ namespace GameLogic
             BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
             BuffBehaviors.Register("attack_cycle", () => new AttackCycleBuffBehavior(this));
             BuffBehaviors.Register("store_isolation", () => new StoreIsolationBuffBehavior(this));
+            BuffBehaviors.Register("OpeningBallSpeedBonus", () => new OpeningBallSpeedBonusBehavior(this));
+            BuffBehaviors.Register("ComboBallSpeedBonus", () => new ComboBallSpeedBonusBehavior(this));
+            BuffBehaviors.Register("ComboRobotDamageBonus", () => new ComboRobotDamageBonusBehavior(this));
+            BuffBehaviors.Register("GlassDurabilityOverride", () => new GlassDurabilityOverrideBehavior(this));
+            BuffBehaviors.Register("ExtraBerserkBall", () => new ExtraBerserkBallBehavior(this));
             TriggeredSkills = new BuffTriggeredSkillQueue(this);
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
@@ -49,6 +56,78 @@ namespace GameLogic
             if (IsDisposed) throw new ObjectDisposedException(nameof(BattleRuntime));
             Catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             foreach (var id in Registry.CopyIds()) if (Registry.TryGet(id, out var entity)) Attach(entity);
+        }
+
+        /// <summary>正式发射前装配一次；持有等级与运行时叠层分开。</summary>
+        public void ConfigureAssists(GameConfig.Tables tables, IReadOnlyList<MatchBuff> player, IReadOnlyList<MatchBuff> opponent)
+        {
+            if (IsDisposed) throw new ObjectDisposedException(nameof(BattleRuntime));
+            if (_assistsConfigured) throw new InvalidOperationException("本局助力已经装配。");
+            if (tables == null || player == null || opponent == null) throw new ArgumentNullException();
+            var requests = new List<AddBuffInfo>();
+            PrepareAssists(tables, Player, player, requests);
+            PrepareAssists(tables, Opponent, opponent, requests);
+            _assistsConfigured = true;
+            foreach (var request in requests) Buffs.Submit(request);
+        }
+
+        private void PrepareAssists(GameConfig.Tables tables, BattlefieldRuntime owner, IReadOnlyList<MatchBuff> carried,
+            List<AddBuffInfo> requests)
+        {
+            var seen = new HashSet<int>();
+            foreach (var carry in carried)
+            {
+                if (carry == null || !seen.Add(carry.BuffId)) throw new ArgumentException("携带助力重复或为空。");
+                var row = tables.TbBuff.GetOrDefault(carry.BuffId);
+                if (row == null || carry.Layers < 1 || carry.Layers > row.MaxLevel || row.GrantType != "HeldBuff")
+                    throw new InvalidOperationException("携带助力配置或等级无效：" + carry.BuffId);
+                var i = carry.Layers - 1;
+                var parameters = new Dictionary<string, float> { { "level", carry.Layers } };
+                var duration = 0f;
+                switch (row.BehaviorKey)
+                {
+                    case "OpeningBallSpeedBonus":
+                        parameters.Add("speedRate", AssistValue(row.SpeedBonusRates, i, row.Id));
+                        duration = AssistValue(row.DurationSeconds, i, row.Id);
+                        if (duration <= 0f) throw new InvalidOperationException("开局助力持续时间必须大于0。");
+                        break;
+                    case "ComboBallSpeedBonus":
+                    case "ComboRobotDamageBonus":
+                        var step = AssistValue(row.ComboSteps, i, row.Id);
+                        if (step <= 0) throw new InvalidOperationException("Combo档位必须大于0。");
+                        parameters.Add("comboStep", step);
+                        parameters.Add("comboCap", AssistValue(row.ComboBonusCaps, i, row.Id));
+                        parameters.Add(row.BehaviorKey == "ComboBallSpeedBonus" ? "speedRate" : "damageRate",
+                            AssistValue(row.BehaviorKey == "ComboBallSpeedBonus" ? row.SpeedBonusRates : row.DamageBonusRates, i, row.Id));
+                        break;
+                    case "GlassDurabilityOverride":
+                        var loss = AssistValue(row.GlassDurabilityPerHit, i, row.Id);
+                        if (loss <= 0) throw new InvalidOperationException("玻璃助力扣耐久必须大于0。");
+                        parameters.Add("glassLoss", loss);
+                        break;
+                    case "ExtraBerserkBall":
+                        parameters.Add("extraBalls", AssistValue(row.ExtraBerserkBallCount, i, row.Id));
+                        break;
+                    default: throw new InvalidOperationException("未实现的战场助力：" + row.BehaviorKey);
+                }
+                var model = new BuffModel(row.Id, row.BehaviorKey, 1, row.Priority);
+                requests.Add(new AddBuffInfo(model, owner.OwnerRef, owner.OwnerRef, duration, true,
+                    param: parameters, permanent: duration == 0f));
+            }
+        }
+
+        private static float AssistValue(float[] values, int index, int id)
+        {
+            if (values == null || index >= values.Length || !EntityValidation.IsFiniteNonNegative(values[index]))
+                throw new InvalidOperationException("助力等级参数无效：" + id);
+            return values[index];
+        }
+
+        private static int AssistValue(int[] values, int index, int id)
+        {
+            if (values == null || index >= values.Length || values[index] < 0)
+                throw new InvalidOperationException("助力等级参数无效：" + id);
+            return values[index];
         }
         internal void Attach(Entity entity)
         {
@@ -157,13 +236,15 @@ namespace GameLogic
         public BattleSide Side => OwnerRef.Side;
         public SkillContainer Skills { get; } = new SkillContainer();
         public BuffContainer Buffs { get; } = new BuffContainer();
+        public BattleAssistState Assists { get; }
         public bool CanCast => !_battle.IsDisposed;
         internal BattlefieldRuntime(BattleRuntime battle, BattleSide side)
         {
             _battle = battle; OwnerRef = SkillOwnerRef.Battlefield(battle.BattleId, side); Buffs.Owner = OwnerRef;
+            Assists = new BattleAssistState(battle.BattleId, side);
             battle.Buffs.Bind(Buffs);
         }
-        internal void Clear() { Skills.Clear(); Buffs.Dispose(); }
+        internal void Clear() { Skills.Clear(); Buffs.Dispose(); Assists.Clear(); }
     }
 }
 

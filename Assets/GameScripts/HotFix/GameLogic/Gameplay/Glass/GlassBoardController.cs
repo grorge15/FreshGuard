@@ -76,7 +76,9 @@ namespace GameLogic
         {
             if (!IsRunning || view == null || ball == null || ball.Side != _side || ball.BattleId != BattleId || view.Owner != this)
                 return GlassCollisionResult.Ignored;
-            var result = _context.Registry.ApplyGlassCollision(view.InstanceId, ball.IsBerserk, out var snapshot);
+            var assists = (_side == BattleSide.Player ? _context.Battle.Player : _context.Battle.Opponent).Assists;
+            var result = _context.Registry.ApplyGlassCollision(view.InstanceId, ball.IsBerserk, out var snapshot,
+                assists.NormalBallGlassLossOverride);
             if (result == GlassCollisionResult.Damaged)
             {
                 GameSoundService.PlayForSide(GameSound.GlassHit, _side);

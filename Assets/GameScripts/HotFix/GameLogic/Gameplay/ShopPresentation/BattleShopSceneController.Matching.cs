@@ -10,6 +10,7 @@ namespace GameLogic
         private bool _matchReleased = true;
         private float _operationalWait;
         private bool _checkingOperational;
+        private MatchAssistSnapshot _battleAssists;
         public bool IsWaitingForMatch => _matchEntry != null && !_matchReleased;
         public string MatchEntryId => _matchEntry?.EntryId;
 
@@ -24,11 +25,22 @@ namespace GameLogic
         public bool ReleaseMatch(string entryId)
         {
             if (_matchEntry?.EntryId != entryId || _matchReleased || !IsReady) return false;
+            _battleAssists = new MatchAssistSnapshot(_matchEntry.PlayerBuffs, _matchEntry.OpponentBuffs, DateTimeOffset.UtcNow);
             _matchReleased = true;
             _checkingOperational = true;
             _operationalWait = 0;
             BattleSettlementPresenter.Instance.BeginBattle(Context.BattleId);
             return true;
+        }
+
+        private void ConfigureBattleAssistsBeforeLaunch()
+        {
+            if (_battleAssists == null) return;
+            var battle = Context.Battle;
+            battle.ConfigureAssists(ConfigSystem.Instance.Tables, _battleAssists.PlayerBuffs, _battleAssists.OpponentBuffs);
+            _bootstrap.PlayerBall.BindAssistState(battle.Player.Assists);
+            _bootstrap.OpponentBall.BindAssistState(battle.Opponent.Assists);
+            _bootstrap.ConfigureAssistBallCounts(battle.Player.Assists.ExtraBerserkBallCount, battle.Opponent.Assists.ExtraBerserkBallCount);
         }
         public bool CancelMatch(string entryId)
         {

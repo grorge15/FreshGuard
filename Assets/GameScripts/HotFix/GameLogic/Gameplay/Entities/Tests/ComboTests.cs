@@ -156,6 +156,72 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void AssistExtraBallIsAddedOnceAndReusedAcrossBerserkCycles()
+        {
+            var tables = ConfigureGlobals(new Dictionary<int, float> { { 35, 2 }, { 10, 1 } });
+            _ball.GlobalValueProvider = id => tables.TbGlobal.Get(id).Value;
+            AssignPopup();
+            var opponentRoot = UnityEngine.Object.Instantiate(_ball.gameObject);
+            _objects.Add(opponentRoot);
+            var opponent = opponentRoot.GetComponent<PhysicalCollisionBall>();
+            opponent.GlobalValueProvider = _ball.GlobalValueProvider;
+            var bootstrap = NewObject("AssistExtraBallBootstrap").AddComponent<PlacementBoardsBootstrap>();
+            Set(bootstrap, "_ball", _ball); Set(bootstrap, "_opponentBall", opponent);
+            bootstrap.ConfigureFromTables(tables);
+            bootstrap.BindBattle(2, () => _running, _registry, _popups);
+            try
+            {
+                bootstrap.ConfigureAssistBallCounts(1, 0);
+                var session = Get(bootstrap, "_player");
+                var extras = (PhysicalCollisionBall[])session.GetType().GetField("Temporary").GetValue(session);
+                Assert.AreEqual(3, extras.Length);
+                bootstrap.ConfigureAssistBallCounts(1, 0);
+                Assert.AreSame(extras, session.GetType().GetField("Temporary").GetValue(session));
+                var otherSession = Get(bootstrap, "_opponent");
+                Assert.AreEqual(2, ((PhysicalCollisionBall[])otherSession.GetType().GetField("Temporary").GetValue(otherSession)).Length);
+                foreach (var extra in extras)
+                {
+                    if (Get(extra, "_body") == null) Invoke(extra, "Awake");
+                    extra.GlobalValueProvider = _ball.GlobalValueProvider;
+                }
+                for (var cycle = 0; cycle < 2; cycle++)
+                {
+                    _ball.LaunchAt(Vector2.zero, 45f);
+                    Advance(tables.TbGlobal.Get(49).Value + 0.01f);
+                    Hit(Robot());
+                    Assert.IsTrue(bootstrap.IsBerserk(BattleSide.Player));
+                    Assert.AreEqual(tables.TbGlobal.Get(15).Value, bootstrap.BerserkRemaining(BattleSide.Player));
+                    foreach (var extra in extras) Assert.IsTrue(extra.IsLaunched && extra.IsBerserk);
+                    bootstrap.AdvanceBerserk(bootstrap.BerserkDuration + 0.1f);
+                    foreach (var extra in extras) Assert.IsFalse(extra.IsLaunched);
+                }
+                bootstrap.UnbindBattle();
+                foreach (var extra in extras) Assert.IsTrue(extra == null);
+            }
+            finally { bootstrap.UnbindBattle(); }
+        }
+
+        [Test]
+        public void ComboChangedReportsIncrementBeforeThresholdAndAllResetPaths()
+        {
+            ConfigureGlobals(new Dictionary<int, float> { { 10, 2 } });
+            Bind();
+            var values = new List<int>();
+            _ball.ComboChanged += (ball, value) => values.Add(value);
+            _ball.ComboThresholdReached += ball =>
+            {
+                Assert.AreEqual(2, values[values.Count - 1]);
+                ball.SetBerserk(true);
+            };
+            Hit(Robot()); Hit(Robot());
+            CollectionAssert.AreEqual(new[] { 1, 2, 0 }, values);
+            _ball.SetBerserk(false); _ball.LaunchAt(Vector2.zero, 45f);
+            Advance(100f);
+            Hit(Robot()); Advance(1.51f);
+            CollectionAssert.AreEqual(new[] { 1, 2, 0, 1, 0 }, values);
+        }
+
+        [Test]
         public void OpponentBerserkBallsKeepCellSpeedForAuthoredAndDynamicBallsAndAcceleration()
         {
             var tables = ConfigureGlobals(new Dictionary<int, float> { { 35, 2 }, { 11, 1 }, { 12, 0.5f }, { 13, 1 } });
@@ -557,7 +623,10 @@ namespace GameLogic.Tests
         private RobotView Robot(BattleSide side = BattleSide.Player, BattleEntityRegistry registry = null)
         {
             registry = registry ?? _registry;
-            var go = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Robots/Prefabs/RobotCannon.prefab"));
+            const string prefabPath = "Assets/AssetRaw/Actor/Prefabs/Robots/RobotCannon.prefab";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            Assert.IsNotNull(prefab, "Combo 测试机器人 Prefab 不存在：" + prefabPath);
+            var go = UnityEngine.Object.Instantiate(prefab);
             _objects.Add(go); go.transform.position = Vector3.right * (20f + _objects.Count * 2f);
             var view = go.GetComponent<RobotView>();
             var entity = registry.CreateRobot(501, side, 1, 1);

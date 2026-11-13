@@ -32,11 +32,13 @@ namespace GameLogic
             DamageCooldownRemaining = 0f;
         }
 
-        internal GlassCollisionResult ApplyCollision(bool isBerserk)
+        internal GlassCollisionResult ApplyCollision(bool isBerserk, int? normalHitLossOverride = null)
         {
-            // 普通球和暴走球统一扣除配置耐久，并共享同一受击冷却。
+            if (normalHitLossOverride.HasValue) EntityValidation.RequirePositive(normalHitLossOverride.Value, nameof(normalHitLossOverride));
+            // 助力只覆盖本次普通球命中；暴走仍读原配置，两者共享冷却。
             if (!IsAlive || DamageCooldownRemaining > 0f) return GlassCollisionResult.Ignored;
-            CurrentDurability = Math.Max(0, CurrentDurability - HitDurabilityLoss);
+            var loss = !isBerserk && normalHitLossOverride.HasValue ? normalHitLossOverride.Value : HitDurabilityLoss;
+            CurrentDurability = Math.Max(0, CurrentDurability - loss);
             DamageCooldownRemaining = CooldownInterval;
             return CurrentDurability == 0 ? GlassCollisionResult.Broken : GlassCollisionResult.Damaged;
         }

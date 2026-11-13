@@ -531,6 +531,13 @@ namespace GameLogic
                     _preparationRemaining = Mathf.Max(0f, _preparationRemaining - deltaTime);
                     if (_preparationRemaining > 0f) return;
                     _running = true;
+                    try { ConfigureBattleAssistsBeforeLaunch(); }
+                    catch (Exception exception)
+                    {
+                        Debug.LogException(exception, this);
+                        Cleanup();
+                        return;
+                    }
                     if (!_bootstrap.LaunchBoth(_playerBoard, _opponentBoard))
                     {
                         Cleanup();
@@ -683,6 +690,7 @@ namespace GameLogic
             var renderRegistry = GetComponent<BattleSideRenderRegistry>();
             if (renderRegistry != null) renderRegistry.Clear();
             _matchEntry = null;
+            _battleAssists = null;
             _matchReleased = true;
             _checkingOperational = false;
             DisposeOpponentAi();

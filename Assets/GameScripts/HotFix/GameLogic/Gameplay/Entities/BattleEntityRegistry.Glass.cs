@@ -39,14 +39,15 @@ namespace GameLogic
             return true;
         }
 
-        public GlassCollisionResult ApplyGlassCollision(int id, bool isBerserk, out GlassBreakSnapshot snapshot)
+        public GlassCollisionResult ApplyGlassCollision(int id, bool isBerserk, out GlassBreakSnapshot snapshot,
+            int? normalHitLossOverride = null)
         {
             snapshot = default(GlassBreakSnapshot);
             Entity entity;
             if (!TryGet(id, out entity)) return GlassCollisionResult.Ignored;
             var glass = entity as GlassEntity;
             if (glass == null) return GlassCollisionResult.Ignored;
-            var result = glass.ApplyCollision(isBerserk);
+            var result = glass.ApplyCollision(isBerserk, normalHitLossOverride);
             if (result != GlassCollisionResult.Broken) return result;
 
             // Remove 会立即清空并归还池对象，碎裂身份必须先复制。
