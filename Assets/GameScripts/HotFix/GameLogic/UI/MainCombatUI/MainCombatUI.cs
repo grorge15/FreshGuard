@@ -57,6 +57,7 @@ namespace GameLogic
             var context = UserData as BattleShopContext;
             if (!ReferenceEquals(Context, context)) Notices.Clear();
             Context = context;
+            Info.BindMatch(context?.Entry);
             Host = UserDatas != null && UserDatas.Length > 1 ? UserDatas[1] as BattleShopSceneController : null;
             Shop.Bind(Context, Host);
             CurrencyFlight.Bind(Context, Host != null && Host.Placement != null ? Host.Placement.SceneCamera : null,

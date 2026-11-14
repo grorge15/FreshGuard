@@ -43,6 +43,7 @@ namespace GameLogic
 
     public static class BattleSettlementEvents
     {
+        public const int Determined = 0x4253544D;
         public const int Requested = 0x4253544C;
     }
 
