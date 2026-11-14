@@ -52,7 +52,7 @@ namespace GameLogic
         { EntityValidation.RequirePositive(id, nameof(id)); return new SkillTarget(SkillTargetKind.Entity, side, id, position); }
         public static SkillTarget AtPosition(BattleSide side, Vector3 position) => new SkillTarget(SkillTargetKind.Position, side, 0, position);
     }
-    public enum SkillTriggerSource { Contact, Button, AI, Buff }
+    public enum SkillTriggerSource { Contact, Button, AI, Buff, AttackCycle }
     public sealed class SkillCastRequest
     {
         public SkillOwnerRef Owner { get; }
@@ -60,8 +60,12 @@ namespace GameLogic
         public SkillTriggerSource Trigger { get; }
         public SkillTarget Target { get; }
         public long? SourceBuffInstanceId { get; }
+        public long? SourceAttackCycleVersion { get; }
         public SkillCastRequest(SkillOwnerRef owner, int skillId, SkillTriggerSource trigger, SkillTarget target,
-            long? sourceBuffInstanceId = null)
-        { Owner = owner; SkillId = skillId; Trigger = trigger; Target = target; SourceBuffInstanceId = sourceBuffInstanceId; }
+            long? sourceBuffInstanceId = null, long? sourceAttackCycleVersion = null)
+        {
+            Owner = owner; SkillId = skillId; Trigger = trigger; Target = target;
+            SourceBuffInstanceId = sourceBuffInstanceId; SourceAttackCycleVersion = sourceAttackCycleVersion;
+        }
     }
 }

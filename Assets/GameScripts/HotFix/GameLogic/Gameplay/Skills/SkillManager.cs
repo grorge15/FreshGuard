@@ -24,6 +24,7 @@ namespace GameLogic
         public Dictionary<string, float> Parameters { get; } = new Dictionary<string, float>();
         public IReadOnlyList<CombatBuffApplication> HitBuffs => _level.CaptureHitBuffs(Parameters);
         public bool IsCancelled { get; private set; }
+        internal long AttackCycleVersion { get; set; }
         internal SkillCastContext(SkillCastRequest request, SkillObj skill, SkillLevelModel level)
         {
             Request = request; Level = skill.Level; TimelineKey = skill.Model.TimelineKey; BulletId = skill.Model.BulletId;
@@ -42,6 +43,14 @@ namespace GameLogic
     }
     public sealed class SkillCastSnapshot
     {
+        internal long AttackCycleVersion { get; }
+        private bool _attackCycleCounted;
+        internal bool TryCountAttackCycle()
+        {
+            if (_attackCycleCounted) return false;
+            _attackCycleCounted = true;
+            return true;
+        }
         public StaffConfig Staff { get; }
         public SkillOwnerRef Owner { get; }
         public int SkillId { get; }
@@ -60,6 +69,7 @@ namespace GameLogic
             BulletId = context.BulletId;
             HitBuffs = context.HitBuffs;
             Staff = context.Staff;
+            AttackCycleVersion = context.AttackCycleVersion;
         }
         public float Get(string key, float fallback = 0f) => Parameters.TryGetValue(key, out var value) ? value : fallback;
     }
@@ -81,9 +91,12 @@ namespace GameLogic
             {
                 var robot = owner as RobotEntity;
                 var actionVersion = robot?.ActionVersion;
+                var cycleVersion = robot?.AttackCycle.Version;
                 var context = new SkillCastContext(request, skill, level);
                 owner.Buffs.OnCast(context);
-                if (context.IsCancelled || (robot != null && robot.ActionVersion != actionVersion))
+                robot?.AttackCycle.PrepareCast(context);
+                if (context.IsCancelled || (robot != null &&
+                    (robot.ActionVersion != actionVersion || robot.AttackCycle.Version != cycleVersion)))
                     return new SkillCastResult(SkillCastFailure.Cancelled);
                 failure = Validate(request, out var finalOwner, out var finalSkill, true);
                 if (failure != SkillCastFailure.None || !ReferenceEquals(skill, finalSkill) || !ReferenceEquals(owner, finalOwner))
@@ -95,7 +108,7 @@ namespace GameLogic
                 {
                     failure = Validate(request, out _, out _, true);
                     if (failure != SkillCastFailure.None) return new SkillCastResult(failure);
-                    if (robot != null && robot.ActionVersion != actionVersion)
+                    if (robot != null && (robot.ActionVersion != actionVersion || robot.AttackCycle.Version != cycleVersion))
                         return new SkillCastResult(SkillCastFailure.Cancelled);
                     if (commitContact != null && !commitContact()) return new SkillCastResult(SkillCastFailure.NotAllowed);
                     skill.CooldownRemaining = skill.Model.Cooldown;
@@ -103,7 +116,7 @@ namespace GameLogic
                     // 接受回调也可能升级或移除机器人，旧动作不得再启动。
                     if (_battle.IsDisposed || !_battle.TryResolveOwner(request.Owner, out var committedOwner) ||
                         !ReferenceEquals(owner, committedOwner) ||
-                        (robot != null && robot.ActionVersion != actionVersion))
+                        (robot != null && (robot.ActionVersion != actionVersion || robot.AttackCycle.Version != cycleVersion)))
                         return new SkillCastResult(SkillCastFailure.Cancelled);
                     started = true;
                     _battle.Timelines.Start(timeline);
@@ -124,6 +137,11 @@ namespace GameLogic
                 foreach (var buff in owner.Buffs.Items) if (buff.InstanceId == request.SourceBuffInstanceId.Value) { exists = true; break; }
                 if (!exists || request.Trigger != SkillTriggerSource.Buff) return SkillCastFailure.Cancelled;
             }
+            if (request.Trigger == SkillTriggerSource.AttackCycle &&
+                (!(owner is RobotEntity cycleOwner) || !request.SourceAttackCycleVersion.HasValue ||
+                 request.SourceAttackCycleVersion != cycleOwner.AttackCycle.Version ||
+                 !_battle.TriggeredSkills.TryGet(request.Owner, out var pending) || !cycleOwner.AttackCycle.Matches(pending) ||
+                 pending.SkillId != request.SkillId)) return SkillCastFailure.Cancelled;
             if (!owner.CanCast || !_battle.CanCastNow() || !_battle.Combat.AllowsGameplayTriggers) return SkillCastFailure.NotAllowed;
             if (!owner.Skills.TryGet(request.SkillId, out skill)) return SkillCastFailure.MissingSkill;
             if (skill.CooldownRemaining > 0f) return SkillCastFailure.Cooldown;

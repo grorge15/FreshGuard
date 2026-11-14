@@ -5,28 +5,27 @@ using System.Linq;
 namespace GameLogic
 {
     /// <summary>只保存对局内身份和数值，释放通道后再尝试，不从OnCast重入施法。</summary>
-    public sealed class BuffTriggeredSkillQueue
+    public sealed class RobotTriggeredSkillQueue
     {
         public sealed class PendingCast
         {
             public SkillOwnerRef Owner { get; }
-            public long BuffInstanceId { get; }
+            public long Version { get; }
             public int SkillId { get; }
             public int Cost { get; }
             public SkillTarget Target { get; }
-            internal PendingCast(SkillOwnerRef owner, long buffId, int skillId, int cost, SkillTarget target)
-            { Owner = owner; BuffInstanceId = buffId; SkillId = skillId; Cost = cost; Target = target; }
+            internal PendingCast(SkillOwnerRef owner, long version, int skillId, int cost, SkillTarget target)
+            { Owner = owner; Version = version; SkillId = skillId; Cost = cost; Target = target; }
         }
         private readonly BattleRuntime _battle;
-        private readonly Dictionary<(SkillOwnerRef, long), PendingCast> _pending = new Dictionary<(SkillOwnerRef, long), PendingCast>();
+        private readonly Dictionary<SkillOwnerRef, PendingCast> _pending = new Dictionary<SkillOwnerRef, PendingCast>();
         private bool _processing;
         public int Count => _pending.Count;
-        internal BuffTriggeredSkillQueue(BattleRuntime battle) { _battle = battle; }
-        public bool TryGet(SkillOwnerRef owner, long buffId, out PendingCast cast) => _pending.TryGetValue((owner, buffId), out cast);
-        internal void Enqueue(SkillOwnerRef owner, long buffId, int skillId, int cost, SkillTarget target)
-        { if (!_battle.IsDisposed && !_pending.ContainsKey((owner, buffId))) _pending.Add((owner, buffId), new PendingCast(owner, buffId, skillId, cost, target)); }
-        internal void Cancel(SkillOwnerRef owner, long buffId)
-        { _pending.Remove((owner, buffId)); }
+        internal RobotTriggeredSkillQueue(BattleRuntime battle) { _battle = battle; }
+        public bool TryGet(SkillOwnerRef owner, out PendingCast cast) => _pending.TryGetValue(owner, out cast);
+        internal void Enqueue(SkillOwnerRef owner, long version, int skillId, int cost, SkillTarget target)
+        { if (!_battle.IsDisposed && !_pending.ContainsKey(owner)) _pending.Add(owner, new PendingCast(owner, version, skillId, cost, target)); }
+        internal void Cancel(SkillOwnerRef owner) => _pending.Remove(owner);
         internal void Clear() => _pending.Clear();
         public void Process()
         {
@@ -34,18 +33,18 @@ namespace GameLogic
             _processing = true;
             try
             {
-                foreach (var pending in _pending.Values.OrderBy(p => p.Owner.EntityId).ThenBy(p => p.BuffInstanceId).ToArray())
+                foreach (var pending in _pending.Values.OrderBy(p => p.Owner.EntityId).ToArray())
                 {
                     if (_battle.IsDisposed || !_battle.CanCastNow()) break;
-                    if (!TryGet(pending.Owner, pending.BuffInstanceId, out var current) || !ReferenceEquals(current, pending)) continue;
+                    if (!TryGet(pending.Owner, out var current) || !ReferenceEquals(current, pending)) continue;
                     if (!_battle.TryResolveOwner(pending.Owner, out var owner) ||
-                        !owner.Buffs.Items.Any(b => b.InstanceId == pending.BuffInstanceId))
-                    { Cancel(pending.Owner, pending.BuffInstanceId); continue; }
+                        !(owner is RobotEntity robot) || !robot.AttackCycle.Matches(pending))
+                    { Cancel(pending.Owner); continue; }
                     if (!owner.CanCast || _battle.Timelines.HasChannel(pending.Owner)) continue;
                     if (!_battle.Catalog.TryGet(pending.SkillId, out var skill)) continue;
                     if (!TrySelectTarget(pending, skill, out var target)) continue;
-                    _battle.Skills.TryCast(new SkillCastRequest(pending.Owner, pending.SkillId, SkillTriggerSource.Buff,
-                        target, pending.BuffInstanceId));
+                    _battle.Skills.TryCast(new SkillCastRequest(pending.Owner, pending.SkillId, SkillTriggerSource.AttackCycle,
+                        target, sourceAttackCycleVersion: pending.Version));
                 }
             }
             finally { _processing = false; }

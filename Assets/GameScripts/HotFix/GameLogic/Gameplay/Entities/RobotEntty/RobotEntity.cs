@@ -19,6 +19,7 @@ namespace GameLogic
         public BoardCoordinate? Anchor { get; private set; }
         public bool IsDragging { get; private set; }
         public long ActionVersion { get; private set; } = 1;
+        public RobotAttackCycle AttackCycle { get; }
         public float TriggerCooldownRemaining { get; private set; }
         public bool CanParticipate => !IsRemoved && Location == RobotLocation.Board && !IsDragging;
         public override bool CanCast => CanParticipate;
@@ -28,6 +29,7 @@ namespace GameLogic
             int level, int maxLevel)
         {
             InitializeIdentity(instanceId, configId, side);
+            AttackCycle = new RobotAttackCycle(this);
             ShapeId = shapeId;
             SkillId = skillId;
             Level = level;
@@ -83,10 +85,7 @@ namespace GameLogic
             ActionVersion++;
             Level++;
             Skills.SyncRobotLevel(Level);
-            if (UsesProjectileAttackCycle)
-                foreach (var buff in Buffs.Items)
-                    if (buff.Model.CountSkillId == SkillId && buff.Behavior is AttackCycleBuffBehavior cycle)
-                        cycle.Reset(Buffs, buff);
+            if (UsesProjectileAttackCycle) AttackCycle.Reset();
             TriggerCooldownRemaining = 0f;
             return true;
         }
@@ -95,8 +94,7 @@ namespace GameLogic
         {
             if (!UsesProjectileAttackCycle || IsRemoved || !OwnerRef.Equals(cast.Owner) ||
                 cast.SkillId != SkillId || cast.Level != Level) return;
-            foreach (var buff in Buffs.Items)
-                if (buff.Behavior is AttackCycleBuffBehavior cycle) cycle.OnProjectileLaunched(Buffs, buff, cast);
+            AttackCycle.RecordProjectile(cast);
         }
 
         internal bool TryConsumeAttackTrigger(float protectionSeconds)
@@ -115,6 +113,7 @@ namespace GameLogic
 
         protected override void OnRemoved()
         {
+            AttackCycle.Reset();
             ClearCombat();
             ActionVersion++;
             Location = RobotLocation.Unplaced;

@@ -13,7 +13,7 @@ namespace GameLogic
         public CombatRuntime Combat { get; }
         public SkillCatalog Catalog { get; private set; } = new SkillCatalog();
         public SkillManager Skills { get; }
-        public BuffTriggeredSkillQueue TriggeredSkills { get; }
+        public RobotTriggeredSkillQueue TriggeredSkills { get; }
         public BuffBehaviorRegistry BuffBehaviors { get; } = new BuffBehaviorRegistry();
         public BuffManager Buffs { get; }
         public TimelineManager Timelines { get; }
@@ -38,14 +38,13 @@ namespace GameLogic
             Buffs = new BuffManager(this);
             BuffBehaviors.Register("slow", () => new SlowBuffBehavior(this));
             BuffBehaviors.Register("poison", () => new PoisonBuffBehavior(this));
-            BuffBehaviors.Register("attack_cycle", () => new AttackCycleBuffBehavior(this));
             BuffBehaviors.Register("store_isolation", () => new StoreIsolationBuffBehavior(this));
             BuffBehaviors.Register("OpeningBallSpeedBonus", () => new OpeningBallSpeedBonusBehavior(this));
             BuffBehaviors.Register("ComboBallSpeedBonus", () => new ComboBallSpeedBonusBehavior(this));
             BuffBehaviors.Register("ComboRobotDamageBonus", () => new ComboRobotDamageBonusBehavior(this));
             BuffBehaviors.Register("GlassDurabilityOverride", () => new GlassDurabilityOverrideBehavior(this));
             BuffBehaviors.Register("ExtraBerserkBall", () => new ExtraBerserkBallBehavior(this));
-            TriggeredSkills = new BuffTriggeredSkillQueue(this);
+            TriggeredSkills = new RobotTriggeredSkillQueue(this);
             Skills = new SkillManager(this); Timelines = new TimelineManager(this);
             Timelines.RegisterAction("buff.add", new AddBuffTimelineAction(this));
             Player = new BattlefieldRuntime(this, BattleSide.Player); Opponent = new BattlefieldRuntime(this, BattleSide.Opponent);
@@ -135,7 +134,10 @@ namespace GameLogic
             entity.BindSkillOwner(BattleId);
             Buffs.Bind(entity.Buffs);
             if (entity is RobotEntity robot && robot.SkillId > 0 && Catalog.TryGet(robot.SkillId, out var model))
+            {
                 Grant(entity, model).SetLevel(Math.Min(robot.Level, model.MaxLevel));
+                robot.AttackCycle.Configure(this, robot.Configuration?.AttackCycleSkillId ?? 0);
+            }
         }
         public SkillObj Grant(ISkillOwner owner, SkillModel model)
         {
@@ -217,7 +219,11 @@ namespace GameLogic
             };
             clean(Timelines.Dispose); clean(Bullets.Dispose); clean(Player.Clear); clean(Opponent.Clear); clean(Combat.Dispose);
             foreach (var id in Registry.CopyIds())
-                if (Registry.TryGet(id, out var entity)) { entity.Skills.Clear(); clean(entity.Buffs.Dispose); }
+                if (Registry.TryGet(id, out var entity))
+                {
+                    if (entity is RobotEntity robot) clean(robot.AttackCycle.Reset);
+                    entity.Skills.Clear(); clean(entity.Buffs.Dispose);
+                }
             EnemyIsolationChanged = null;
             if (_ownsRegistry) clean(Registry.Dispose);
             if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();

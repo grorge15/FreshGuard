@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace GameLogic
 {
-    /// <summary>只读取周期被动的次数；每次推进一段并停在段末，零次保持初始帧，不驱动发射。</summary>
+    /// <summary>只读取机器人攻击次数；每次推进一段并停在段末，零次保持初始帧，不驱动发射。</summary>
     [DisallowMultipleComponent]
     public sealed class RobotChargeAnimationView : MonoBehaviour
     {
@@ -43,11 +43,8 @@ namespace GameLogic
                 !level.Parameters.TryGetValue("attackCycleCount", out var count) || count < 1 || count >= int.MaxValue ||
                 count != Math.Truncate(count))
             { Hide(); return; }
-            AttackCycleBuffBehavior cycle = null;
-            foreach (var buff in _robot.Buffs.Items)
-                if (buff.Model.CountSkillId == _robot.SkillId && buff.Behavior is AttackCycleBuffBehavior candidate)
-                { cycle = candidate; break; }
-            if (cycle == null) { Hide(); return; }
+            var cycle = _robot.AttackCycle;
+            if (cycle.TriggerSkillId == 0) { Hide(); return; }
             var required = (int)count;
             // 0 是未播放；第 1 次才播放第 1 段，满次数仍保留最后一段。
             var stage = cycle.AttackCount > 0 ? (cycle.AttackCount - 1) % required + 1 : 0;

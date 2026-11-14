@@ -183,6 +183,8 @@ namespace GameLogic
                 _reserves.Add(pair.Key, reserve);
                 reserve.ChargeAnimation?.Bind(_context.Battle, robot, reserve.CastAnimation);
                 PrepareSkillPools(reserve, robot.SkillId);
+                if (robot.AttackCycle.TriggerSkillId > 0)
+                    PrepareSkillPools(reserve, robot.AttackCycle.TriggerSkillId);
                 if (_context.Battle.Catalog.TryGet(robot.SkillId, out var primary))
                     foreach (var id in primary.PassiveBuffIds)
                         if (_context.Battle.Catalog.TryGetBuff(id, out var buff) && buff.TriggerSkillId > 0)

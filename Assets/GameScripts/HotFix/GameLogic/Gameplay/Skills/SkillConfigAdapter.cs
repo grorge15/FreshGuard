@@ -54,14 +54,10 @@ namespace GameLogic
                     !(needsIsolation && row.BehaviorKey == "store_isolation")) continue;
                 if (row.MaxLevel < 1)
                     throw new InvalidOperationException("Buff最高等级至少为1：" + row.Id);
-                if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "attack_cycle" && row.BehaviorKey != "store_isolation")
+                if (row.BehaviorKey != "slow" && row.BehaviorKey != "poison" && row.BehaviorKey != "store_isolation")
                     throw new InvalidOperationException("启用技能引用了未知Buff行为：" + row.Id + "/" + row.BehaviorKey);
-                if (row.BehaviorKey == "attack_cycle" &&
-                    (row.TickInterval != 0f || row.CountSkillId <= 0 ||
-                     !enabledSkills.Contains(row.CountSkillId) || row.TriggerSkillId <= 0 || row.TriggerSkillId == row.CountSkillId))
-                    throw new InvalidOperationException("攻击计数Buff参数无效：" + row.Id);
                 catalog.Add(new BuffModel(row.Id, row.BehaviorKey, RuntimeBuffMaxStacks, row.Priority, row.TickInterval,
-                    row.TriggerSkillId, row.CountSkillId, row.EffectPrefab));
+                    row.TriggerSkillId, row.EffectPrefab));
                 if (row.BehaviorKey == "store_isolation")
                 {
                     if (isolationBuffId != 0 || row.TickInterval != 0f || string.IsNullOrWhiteSpace(row.EffectPrefab))
@@ -143,14 +139,27 @@ namespace GameLogic
                 foreach (var id in row.PassiveBuffIds)
                 {
                     if (!catalog.TryGetBuff(id, out var passive)) throw new InvalidOperationException("缺少被动Buff：" + id);
-                    if (passive.BehaviorKey == "attack_cycle" && passive.CountSkillId != row.Id)
-                        throw new InvalidOperationException("周期Buff的统计技能与安装技能不一致：" + id);
                     if (passive.TriggerSkillId > 0 && !catalog.TryGet(passive.TriggerSkillId, out _))
                         throw new InvalidOperationException("缺少启用的被动触发技能：" + passive.TriggerSkillId);
 
                 }
             }
+            ValidateRobotCycles(tables, catalog);
             return catalog;
+        }
+
+        private static void ValidateRobotCycles(Tables tables, SkillCatalog catalog)
+        {
+            foreach (var robot in tables.TbRobot.DataList)
+            {
+                if (robot.AttackCycleSkillId < 0)
+                    throw new InvalidOperationException("机器人周期技能ID不能为负：" + robot.Id);
+                if (robot.AttackCycleSkillId == 0 || !catalog.TryGet(robot.SkillId, out var primary)) continue;
+                if (robot.AttackCycleSkillId == robot.SkillId || !catalog.TryGet(robot.AttackCycleSkillId, out _))
+                    throw new InvalidOperationException("机器人周期技能缺失、未启用或引用自身普攻：" + robot.Id);
+                for (var level = 1; level <= primary.MaxLevel; level++)
+                    RobotAttackCycle.RequiredCountForConfig(catalog, primary.Id, level);
+            }
         }
 
         private static void ValidateBullet(Bullet row)
@@ -205,13 +214,6 @@ namespace GameLogic
             if (skill.BulletId != 0 && catalog.TryGetBullet(skill.BulletId, out var bullet) &&
                 bullet.HitMode == BulletHitMode.PierceEnemies && row.PierceTargetCount < 1)
                 throw new InvalidOperationException("穿透人数必须至少为1：" + row.Id);
-            foreach (var id in skill.PassiveBuffIds)
-            {
-                if (!catalog.TryGetBuff(id, out var passive) || passive.BehaviorKey != "attack_cycle") continue;
-                if (row.AttackCycleCount < 1)
-                    throw new InvalidOperationException("攻击周期次数至少为1：" + row.Id);
-
-            }
             if (skill.BulletId != 0 && catalog.TryGetBullet(skill.BulletId, out var chain) && chain.BehaviorKey == "chain")
             {
                 if (row.ChainTargetCount < 1 ||
