@@ -10,6 +10,7 @@ namespace GameLogic
     {
         private readonly IBulletWorld _world;
         private readonly Action<BulletState, int> _onHit;
+        private readonly ParabolicTrajectory _trajectory;
         private readonly HashSet<int> _hitTargets = new HashSet<int>();
         private readonly List<Contact> _contacts = new List<Contact>();
         private Vector3 _targetPosition;
@@ -35,6 +36,8 @@ namespace GameLogic
             Position = launcher.Action.Origin;
             Direction = launcher.Direction;
             _targetPosition = launcher.Action.AimPoint;
+            if (launcher.Model.FlightType == BulletFlightType.Parabolic)
+                _trajectory = new ParabolicTrajectory(launcher.Action.Origin, _targetPosition, launcher.Model.ArcHeight);
         }
         public bool Advance(float deltaTime)
         {
@@ -54,6 +57,7 @@ namespace GameLogic
 
         private bool AdvanceParabolic(float deltaTime)
         {
+            if (deltaTime <= 0f) return false;
             var landing = Launcher.Model.HitMode == BulletHitMode.AreaAtLanding;
             if (!landing && !_targetLost)
             {
@@ -72,11 +76,8 @@ namespace GameLogic
             }
             Elapsed = Mathf.Min(Launcher.Model.FlightTime, Elapsed + deltaTime);
             var u = Elapsed / Launcher.Model.FlightTime;
-            var previousPosition = Position;
-            Position = Vector3.Lerp(Action.Origin, _targetPosition, u) +
-                Vector3.up * (4f * Launcher.Model.ArcHeight * u * (1f - u));
-            var movement = Position - previousPosition;
-            if (movement.sqrMagnitude > 0f) Direction = movement.normalized;
+            Position = _trajectory.Evaluate(_targetPosition, u, out var direction);
+            if (direction.sqrMagnitude > 0f) Direction = direction;
             if (Elapsed < Launcher.Model.FlightTime) return false;
             IsResolved = true; // 命中回调之前封住重入。
             if (landing)
