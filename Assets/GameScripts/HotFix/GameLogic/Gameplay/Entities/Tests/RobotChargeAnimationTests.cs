@@ -33,22 +33,24 @@ namespace GameLogic.Tests
         [TearDown]
         public void Clear() { _combat?.Dispose(); _f?.Dispose(); _views.Clear(); }
 
-        [TestCase(704, 12, 18)]
-        [TestCase(701, 4, 6)]
-        public void LaunchedAttackChangesSegmentAndEachSegmentKeepsLooping(int configId, int startFrame, int middleFrame)
+        [TestCase(704, 12)]
+        [TestCase(701, 4)]
+        public void LaunchedAttackPlaysOneSegmentThenHoldsItsLastFrame(int configId, int endFrame)
         {
             var robot = AddRobot(configId);
             var renderer = AnimatedPortrait(robot);
             var frames = Frames(configId);
             Assert.AreSame(frames[0], renderer.sprite);
             _combat.AdvanceExistingBullets(.1f);
-            Assert.AreNotSame(frames[0], renderer.sprite, "无攻击时当前阶段也应持续播放");
+            Assert.AreSame(frames[0], renderer.sprite, "没有攻击时保持初始帧");
             Assert.IsTrue(Fire(robot));
-            Assert.AreSame(frames[startFrame], renderer.sprite, "成功发射应立即切到下一阶段起点");
+            Assert.AreSame(frames[0], renderer.sprite, "第一发从第一段起点播放");
             _combat.AdvanceExistingBullets(.09f);
-            Assert.AreSame(frames[middleFrame], renderer.sprite);
-            _combat.AdvanceExistingBullets(.09f);
-            Assert.AreSame(frames[startFrame], renderer.sprite, "段内循环，不自动跳到下一阶段");
+            Assert.AreNotSame(frames[0], renderer.sprite, "战斗时间推进时播放当前段");
+            _combat.AdvanceExistingBullets(.5f);
+            Assert.AreSame(frames[endFrame], renderer.sprite);
+            _combat.AdvanceExistingBullets(.5f);
+            Assert.AreSame(frames[endFrame], renderer.sprite, "次数不变时停在段末，不循环或跳到下一阶段");
             Assert.AreEqual(1, Counter(robot).AttackCount);
         }
 
@@ -101,7 +103,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, Counter(second).AttackCount);
             // 电磁炉先播放施法动画；结束后才重新显示累计动画默认段。
             _f.Context.Battle.Timelines.Cancel(first.OwnerRef);
-            _combat.AdvanceExistingBullets(0);
+            _views[first.InstanceId].GetComponent<RobotChargeAnimationView>().Advance(.5f);
             Assert.AreSame(Frames(configId)[0], AnimatedPortrait(first).sprite);
             Assert.AreSame(Frames(configId)[0], secondRenderer.sprite);
             Assert.IsTrue(Fire(second));
@@ -187,8 +189,7 @@ namespace GameLogic.Tests
             return AnimationUtility.GetObjectReferenceCurve(clip, AnimationUtility.GetObjectReferenceCurveBindings(clip)[0])
                 .Select(key => (Sprite)key.value).ToArray();
         }
-        private static AttackCycleBuffBehavior Counter(RobotEntity robot) =>
-            (AttackCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Behavior is AttackCycleBuffBehavior).Behavior;
+        private static RobotAttackCycle Counter(RobotEntity robot) => robot.AttackCycle;
         private bool Fire(RobotEntity robot) => _combat.TryAttackFromContact(_f.Context.BattleId, robot.Side, robot.InstanceId);
         private static void Set(object owner, string name, object value) => owner.GetType().GetField(name,
             BindingFlags.NonPublic | BindingFlags.Instance).SetValue(owner, value);
@@ -211,7 +212,7 @@ namespace GameLogic.Tests
             internal ChildCastHook(RobotEntity robot, bool upgrade) { _robot = robot; _upgrade = upgrade; }
             public override void OnCast(BuffContainer c, BuffObj b, SkillCastContext cast)
             {
-                if (cast.Request.Trigger != SkillTriggerSource.Buff) return;
+                if (cast.Request.Trigger != SkillTriggerSource.AttackCycle) return;
                 if (_upgrade) _robot.TryUpgrade(); else cast.Cancel();
             }
         }

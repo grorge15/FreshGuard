@@ -44,7 +44,8 @@ namespace GameLogic.Tests
                 Assert.IsTrue(robot.Skills.TryGet(1603, out var primary));
                 Assert.IsTrue(robot.Skills.TryGet(1604, out var child));
                 Assert.AreEqual(2, primary.Level); Assert.AreEqual(2, child.Level);
-                Assert.AreEqual(1, robot.Buffs.Items.Count(b => b.Model.Id == 2601));
+                Assert.IsEmpty(robot.Buffs.Items);
+                Assert.AreEqual(1604, robot.AttackCycle.TriggerSkillId);
             }
         }
 

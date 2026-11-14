@@ -100,9 +100,7 @@ namespace GameLogic.Tests
 
         private static void Invoke(RobotEntity robot, string name, params object[] args) => typeof(RobotEntity)
             .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(robot, args);
-        private static AttackCycleBuffBehavior Counter(RobotEntity robot) =>
-            robot.Buffs.Items.Select(b => typeof(BuffObj).GetField("Behavior", BindingFlags.Instance | BindingFlags.NonPublic)
-                .GetValue(b)).OfType<AttackCycleBuffBehavior>().Single();
+        private static RobotAttackCycle Counter(RobotEntity robot) => robot.AttackCycle;
         private static void Capture(Camera camera)
         {
             var previous = camera.targetTexture; var active = RenderTexture.active;

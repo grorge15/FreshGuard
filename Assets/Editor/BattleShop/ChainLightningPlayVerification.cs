@@ -175,9 +175,7 @@ namespace FreshGuard.Editor
                 report.deployed = robot.Location == RobotLocation.Board && Nullable.Equals(robot.Anchor, anchor) &&
                     Object.FindObjectsOfType<RobotView>().Any(v => v.InstanceId == robot.InstanceId);
                 Require(report.deployed, "购买实体未原样部署到真实场景。");
-                var behaviorField = typeof(BuffObj).GetField("Behavior", Private);
-                Require(behaviorField != null, "找不到BuffObj.Behavior观察点。");
-                var cycle = robot.Buffs.Items.Select(b => behaviorField.GetValue(b)).OfType<AttackCycleBuffBehavior>().Single();
+                var cycle = robot.AttackCycle;
                 Require(cycle.AttackCount == 0, "701部署后循环计数不是0，运行中入口需要未攻击的新机器人。");
 
                 // 使用本局已经预加载的真实波次生成，不构造替代世界或伪造敌人血量。

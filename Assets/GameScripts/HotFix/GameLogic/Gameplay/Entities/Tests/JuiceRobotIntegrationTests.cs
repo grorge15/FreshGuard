@@ -159,8 +159,7 @@ namespace GameLogic.Tests
         }
         private BulletState[] States() => _f.Root.GetComponentsInChildren<RobotBulletView>()
             .Where(v => v.State != null).Select(v => v.State).ToArray();
-        private static AttackCycleBuffBehavior Counter(RobotEntity robot) =>
-            (AttackCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2601).Behavior;
+        private static RobotAttackCycle Counter(RobotEntity robot) => robot.AttackCycle;
         private UniTask<GameObject> Load(string name, Transform parent, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();

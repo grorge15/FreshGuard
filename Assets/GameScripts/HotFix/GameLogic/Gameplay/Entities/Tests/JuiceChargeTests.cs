@@ -61,7 +61,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void PauseAndPassiveRemovalPreventPendingChildFromCasting()
+        public void PauseAndCycleResetPreventPendingChildFromCasting()
         {
             using (var f = new Fixture())
             {
@@ -69,7 +69,7 @@ namespace GameLogic.Tests
                 f.Battle.CanCastNow = () => false;
                 f.Battle.TriggeredSkills.Process();
                 Assert.AreEqual(3, f.Counter.AttackCount);
-                f.Robot.Buffs.Remove(f.Robot.Buffs.Items.Single(b => b.Model.Id == 2601));
+                f.Robot.AttackCycle.Reset();
                 Assert.AreEqual(0, f.Battle.TriggeredSkills.Count);
                 f.Battle.CanCastNow = () => true;
                 f.Battle.TriggeredSkills.Process();
@@ -91,7 +91,10 @@ namespace GameLogic.Tests
                 Assert.AreEqual(2, child.Level);
                 Assert.IsTrue(f.Robot.Skills.TryGet(1603, out var main));
                 f.Battle.Grant(f.Robot, main.Model);
-                Assert.AreEqual(1, f.Robot.Buffs.Items.Count(b => b.Model.Id == 2601));
+                Assert.IsEmpty(f.Robot.Buffs.Items);
+                f.Robot.AttackCycle.Configure(f.Battle, 1604);
+                Assert.AreSame(original, f.Counter);
+                Assert.AreEqual(1, f.Counter.AttackCount);
                 Assert.IsTrue(f.Cast().Accepted); Assert.IsTrue(f.Cast().Accepted);
                 f.Battle.TriggeredSkills.Process();
                 Assert.AreEqual(2, f.Action.Casts.Last().Level);
@@ -104,10 +107,11 @@ namespace GameLogic.Tests
             using (var f = new Fixture())
             {
                 var second = f.Battle.Registry.CreateRobot(704, BattleSide.Player, 1, 1603);
+                second.AttackCycle.Configure(f.Battle, 1604);
                 second.TrySetLocation(RobotLocation.Board, new BoardCoordinate(1, 0));
                 for (var i = 0; i < 3; i++) Assert.IsTrue(f.Cast().Accepted);
                 Assert.IsTrue(f.Battle.Skills.TryCast(new SkillCastRequest(second.OwnerRef, 1603, SkillTriggerSource.AI, SkillTarget.None)).Accepted);
-                var other = (AttackCycleBuffBehavior)second.Buffs.Items.Single().Behavior;
+                var other = second.AttackCycle;
                 Assert.AreEqual(1, other.AttackCount);
                 f.Battle.TriggeredSkills.Process();
                 Assert.AreEqual(0, f.Counter.AttackCount); Assert.AreEqual(1, other.AttackCount);
@@ -119,12 +123,11 @@ namespace GameLogic.Tests
             internal readonly BattleRuntime Battle = new BattleRuntime(704);
             internal readonly RobotEntity Robot;
             internal readonly CastAction Action = new CastAction();
-            internal AttackCycleBuffBehavior Counter => (AttackCycleBuffBehavior)Robot.Buffs.Items.Single(b => b.Model.Id == 2601).Behavior;
+            internal RobotAttackCycle Counter => Robot.AttackCycle;
             internal Fixture()
             {
                 var catalog = new SkillCatalog();
-                catalog.Add(new BuffModel(2601, "attack_cycle", triggerSkillId: 1604, countSkillId: 1603));
-                catalog.Add(new SkillModel(1603, SkillType.NormalAttack, "test", 5, 0, SkillTargetRule.None, new[] { 2601 }));
+                catalog.Add(new SkillModel(1603, SkillType.NormalAttack, "test", 5, 0, SkillTargetRule.None));
                 catalog.Add(new SkillModel(1604, SkillType.Robot, "test", 5, 0, SkillTargetRule.SameSidePosition));
                 for (var i = 1; i <= 5; i++)
                 {
@@ -135,6 +138,7 @@ namespace GameLogic.Tests
                 Battle.Timelines.RegisterAction("test", Action);
                 Battle.Timelines.Register(new TimelineModel("test", 0, new[] { new TimelineNode(0, "test") }));
                 Robot = Battle.Registry.CreateRobot(704, BattleSide.Player, 1, 1603);
+                Robot.AttackCycle.Configure(Battle, 1604);
                 Robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0));
             }
             internal SkillCastRequest Request() => new SkillCastRequest(Robot.OwnerRef, 1603, SkillTriggerSource.AI, SkillTarget.None);

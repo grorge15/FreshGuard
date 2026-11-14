@@ -54,7 +54,7 @@ namespace GameLogic.Tests
             _f.Context.Registry.AdvanceTime(1);
             Assert.IsTrue(_combat.TryAttackFromContact(_f.Context.BattleId, robot.Side, robot.InstanceId));
         }
-        private static AttackCycleBuffBehavior Counter(RobotEntity r) => (AttackCycleBuffBehavior)r.Buffs.Items.Single(b => b.Model.Id == 2603).Behavior;
+        private static RobotAttackCycle Counter(RobotEntity r) => r.AttackCycle;
         private EnemyEntity Target() { _f.Context.Registry.TryGet(_f.PlayerView.InstanceId, out var e); return (EnemyEntity)e; }
         private void Summon(RobotEntity r) { for (var i = 0; i < 5; i++) Shoot(r); }
 

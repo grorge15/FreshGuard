@@ -19,12 +19,14 @@ namespace GameLogic.Tests
             Assert.AreEqual(16, tables.TbSkill.DataList.Count);
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count);
             Assert.AreEqual(8, tables.TbBullet.DataList.Count);
-            Assert.AreEqual(14, tables.TbBuff.DataList.Count);
+            CollectionAssert.AreEquivalent(new[] { 1800, 1801, 1802, 1803, 1804, 1805, 2505, 2507, 2600 },
+                tables.TbBuff.DataList.Select(row => row.Id));
             Assert.AreEqual(7, tables.TbShopGoods.DataList.Count);
-            CollectionAssert.AreEquivalent(new[] { 1800, 1801, 1802, 1803, 1804, 1805, 1806 },
+            CollectionAssert.AreEquivalent(new[] { 1800, 1801, 1802, 1803, 1804, 1805, 0 },
                 tables.TbShopGoods.DataList.Select(row => row.BuffId));
             foreach (var goods in tables.TbShopGoods.DataList)
-                Assert.AreSame(tables.TbBuff.Get(goods.BuffId), goods.BuffId_Ref);
+                if (goods.BuffId > 0) Assert.AreSame(tables.TbBuff.Get(goods.BuffId), goods.BuffId_Ref);
+                else Assert.IsNull(goods.BuffId_Ref, "即时商品不引用Buff");
             CollectionAssert.AreEquivalent(new[] { 1500, 1501, 1502, 1503, 1504, 1505, 1506, 1507, 1600, 1601, 1602, 1603, 1604, 1605, 1606, 1607 },
                 tables.TbSkill.DataList.Where(row => row.Enabled).Select(row => row.Id));
 
@@ -37,7 +39,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count(row => catalog.TryGetLevel(row.SkillId, row.Level, out _)));
             CollectionAssert.AreEquivalent(new[] { 3500, 3501, 3502, 3600, 3602, 3603, 3604, 3605 },
                 tables.TbBullet.DataList.Where(row => catalog.TryGetBullet(row.Id, out _)).Select(row => row.Id));
-            CollectionAssert.AreEquivalent(new[] { 2505, 2507, 2600, 2601, 2602, 2603, 2604 },
+            CollectionAssert.AreEquivalent(new[] { 2505, 2507, 2600 },
                 tables.TbBuff.DataList.Where(row => catalog.TryGetBuff(row.Id, out _)).Select(row => row.Id));
             Assert.AreEqual(BulletHitMode.AreaAtLanding, tables.TbBullet.Get(3604).HitMode);
             Assert.IsTrue(catalog.TryGetBullet(3604, out _), "榨汁机落地区域弹已启用。");
@@ -53,7 +55,8 @@ namespace GameLogic.Tests
             Assert.AreEqual(SkillType.Robot, skill.Type);
             Assert.AreEqual("robot.single", skill.TimelineKey);
             Assert.AreEqual(3605, skill.BulletId);
-            CollectionAssert.AreEqual(new[] { 2602 }, skill.PassiveBuffIds);
+            Assert.IsEmpty(skill.PassiveBuffIds);
+            Assert.AreEqual(1600, tables.TbRobot.Get(701).AttackCycleSkillId);
             for (var level = 1; level <= 5; level++)
             {
                 Assert.IsTrue(catalog.TryGetLevel(1605, level, out var values));
@@ -80,11 +83,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(id == 3600 ? "chain" : "direct", bullet.BehaviorKey);
                 Assert.AreEqual("LightningChainEffect", bullet.HitEffectPrefab);
             }
-            Assert.IsTrue(catalog.TryGetBuff(2602, out var passive));
-            Assert.AreEqual("attack_cycle", passive.BehaviorKey);
-            Assert.AreEqual(1605, passive.CountSkillId);
-            Assert.AreEqual(1, passive.MaxStacks);
-            Assert.AreEqual(1600, tables.TbBuff.Get(2602).TriggerSkillId);
+            Assert.IsFalse(catalog.TryGetBuff(2602, out _));
         }
 
         [Test]
@@ -157,7 +156,8 @@ namespace GameLogic.Tests
         public void UnknownEnabledPassiveBehaviorFailsBeforeBattle()
         {
             var tables = LoadTables();
-            SetField(tables.TbBuff.Get(2602), "BehaviorKey", "unknown_behavior");
+            SetField(tables.TbSkill.Get(1605), "PassiveBuffIds", new System.Collections.Generic.List<int> { 2505 });
+            SetField(tables.TbBuff.Get(2505), "BehaviorKey", "unknown_behavior");
             var exception = Assert.Throws<InvalidOperationException>(() => SkillConfigAdapter.FromTables(tables));
             StringAssert.Contains("未知Buff行为", exception.Message);
         }
@@ -170,7 +170,6 @@ namespace GameLogic.Tests
             SetField(tables.TbSkill.Get(1604), "Enabled", false);
             SetField(tables.TbBullet.Get(3604), "BehaviorKey", "unfinished_behavior");
             SetField(tables.TbBullet.Get(3604), "Prefab", string.Empty);
-            SetField(tables.TbBuff.Get(2601), "BehaviorKey", "unfinished_behavior");
             SetField(tables.TbSkillLevel.Get(160401), "Damage", -1);
             var catalog = SkillConfigAdapter.FromTables(tables);
             Assert.IsTrue(catalog.TryGet(1605, out _));
@@ -182,10 +181,6 @@ namespace GameLogic.Tests
         [TestCase(2505)]
         [TestCase(2507)]
         [TestCase(2600)]
-        [TestCase(2601)]
-        [TestCase(2602)]
-        [TestCase(2603)]
-        [TestCase(2604)]
         public void BuffMaxLevelDoesNotRaiseRuntimeStacksOrClampRobotSkillLevels(int buffId)
         {
             var tables = LoadTables();

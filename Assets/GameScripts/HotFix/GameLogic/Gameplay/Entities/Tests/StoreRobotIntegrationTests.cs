@@ -126,7 +126,8 @@ namespace GameLogic.Tests
                 Assert.IsTrue(robot.TryUpgrade());
                 robot.Skills.TryGet(1607, out var primary); robot.Skills.TryGet(1602, out var child);
                 Assert.AreEqual(2, primary.Level); Assert.AreEqual(2, child.Level);
-                Assert.AreEqual(1, robot.Buffs.Items.Count(b => b.Model.Id == 2604));
+                Assert.IsEmpty(robot.Buffs.Items);
+                Assert.AreEqual(1602, robot.AttackCycle.TriggerSkillId);
             }
         }
 
@@ -159,8 +160,7 @@ namespace GameLogic.Tests
         }
         private BulletState[] States() => _f.Root.GetComponentsInChildren<RobotBulletView>()
             .Where(v => v.State != null).Select(v => v.State).ToArray();
-        private static AttackCycleBuffBehavior Counter(RobotEntity robot) =>
-            (AttackCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2604).Behavior;
+        private static RobotAttackCycle Counter(RobotEntity robot) => robot.AttackCycle;
         private UniTask<GameObject> Load(string name, Transform parent, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();

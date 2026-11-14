@@ -35,7 +35,8 @@ namespace GameLogic.Tests
                 Assert.IsTrue(robot.TryUpgrade());
                 Assert.IsTrue(robot.Skills.TryGet(1606, out var primary)); Assert.AreEqual(2, primary.Level);
                 Assert.IsTrue(robot.Skills.TryGet(1601, out var child)); Assert.AreEqual(2, child.Level);
-                Assert.AreEqual(1, robot.Buffs.Items.Count(b => b.Model.Id == 2603));
+                Assert.IsEmpty(robot.Buffs.Items);
+                Assert.AreEqual(1601, robot.AttackCycle.TriggerSkillId);
             }
         }
         [Test]
@@ -49,9 +50,8 @@ namespace GameLogic.Tests
             Assert.AreEqual("robot.roll", staff.TimelineKey);
             Assert.IsTrue(catalog.TryGet(1606, out var primary));
             Assert.AreEqual(3500, primary.BulletId);
-            Assert.IsTrue(catalog.TryGetBuff(2603, out var passive));
-            Assert.AreEqual(1601, passive.TriggerSkillId);
-            Assert.AreEqual(1606, passive.CountSkillId);
+            Assert.IsFalse(catalog.TryGetBuff(2603, out _));
+            Assert.AreEqual(1601, tables.TbRobot.Get(702).AttackCycleSkillId);
             Assert.IsFalse(catalog.TryGetBullet(3601, out _));
             for (var i = 1; i <= 5; i++)
             {

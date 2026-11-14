@@ -113,7 +113,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void RobotsKeepIndependentCountersAndRefreshDoesNotResetProgress()
+        public void RobotsKeepIndependentCountersAndReconfigurationDoesNotResetProgress()
         {
             using (var f = new Fixture())
             {
@@ -171,17 +171,15 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void RecreatedPassiveDoesNotReceiveProgressFromOldTimeline()
+        public void ResetCycleDoesNotReceiveProgressFromOldTimeline()
         {
             using (var f = new Fixture(true))
             {
                 Assert.IsTrue(f.Cast(f.First).Accepted);
-                var oldBuff = f.First.Buffs.Items.Single(b => b.Model.Id == 2602);
-                var oldCast = f.Action.LastPrepared;
-                f.First.Buffs.Remove(oldBuff);
+                var original = f.First.AttackCycle;
+                f.First.AttackCycle.Reset();
                 f.Refresh(f.First);
-                var current = f.First.Buffs.Items.Single(b => b.Model.Id == 2602);
-                Assert.AreNotEqual(oldBuff.InstanceId, current.InstanceId);
+                Assert.AreSame(original, f.First.AttackCycle);
                 f.Battle.Timelines.Advance(1);
                 Assert.AreEqual(0, f.Counter(f.First).AttackCount);
                 Assert.IsTrue(f.Cast(f.First).Accepted);
@@ -195,17 +193,13 @@ namespace GameLogic.Tests
             internal readonly BattleRuntime Battle = new BattleRuntime(711);
             internal readonly RobotEntity First;
             internal readonly LaunchAction Action = new LaunchAction();
-            private readonly BuffModel _passive;
             internal Fixture(bool delayed = false)
             {
                 var catalog = new SkillCatalog();
-                _passive = new BuffModel(2602, "attack_cycle", triggerSkillId: 1600, countSkillId: 1605);
-                catalog.Add(_passive);
                 catalog.Add(new SkillModel(1600, SkillType.Robot, "chain", 5, 0, SkillTargetRule.None, bulletId: 3600));
                 catalog.Add(new SkillLevelModel(1600, 1, new Dictionary<string, float> { { "damage", 45 } }));
                 catalog.Add(new SkillLevelModel(1600, 2, new Dictionary<string, float> { { "damage", 65 } }));
-                catalog.Add(new SkillModel(1605, SkillType.Robot, "test", 5, 0, SkillTargetRule.None,
-                    new[] { 2602 }, 3605));
+                catalog.Add(new SkillModel(1605, SkillType.Robot, "test", 5, 0, SkillTargetRule.None, bulletId: 3605));
                 catalog.Add(new SkillLevelModel(1605, 1, Parameters(5, 20)));
                 catalog.Add(new SkillLevelModel(1605, 2, Parameters(4, 30)));
                 Battle.Configure(catalog);
@@ -221,15 +215,14 @@ namespace GameLogic.Tests
             internal RobotEntity Robot()
             {
                 var robot = Battle.Registry.CreateRobot(701, BattleSide.Player, 1, 1605);
+                robot.AttackCycle.Configure(Battle, 1600);
                 Assert.IsTrue(robot.TrySetLocation(RobotLocation.Board, new BoardCoordinate(0, 0)));
                 return robot;
             }
             internal SkillCastResult Cast(RobotEntity robot) => Battle.Skills.TryCast(new SkillCastRequest(robot.OwnerRef,
                 1605, SkillTriggerSource.AI, SkillTarget.None));
-            internal AttackCycleBuffBehavior Counter(RobotEntity robot) =>
-                (AttackCycleBuffBehavior)robot.Buffs.Items.Single(b => b.Model.Id == 2602).Behavior;
-            internal void Refresh(RobotEntity robot) => Battle.Buffs.Submit(
-                new AddBuffInfo(_passive, robot.OwnerRef, robot.OwnerRef, permanent: true));
+            internal RobotAttackCycle Counter(RobotEntity robot) => robot.AttackCycle;
+            internal void Refresh(RobotEntity robot) => robot.AttackCycle.Configure(Battle, 1600);
             public void Dispose() => Battle.Dispose();
         }
         private sealed class LaunchAction : ITimelineAction
