@@ -334,6 +334,105 @@ namespace GameLogic.Tests
             }
         }
 
+        [TestCase(2, 1, 2, 0)]
+        [TestCase(3, 1, 2, 1)]
+        [TestCase(1, 3, 1, 2)]
+        [TestCase(2, 2, 2, 0)]
+        public void ShapePerimeterAddsPlacementsBeyondOriginalEightAnchors(int width, int height, int dx, int dy)
+        {
+            using (var fixture = new DragFixture())
+            {
+                var expected = new BoardCoordinate(2 + dx, 3 + dy);
+                var open = new System.Collections.Generic.List<BoardCoordinate>();
+                for (var column = 0; column < width; column++)
+                    for (var row = 0; row < height; row++)
+                        open.Add(new BoardCoordinate(expected.Column + column, expected.Row + row));
+                fixture.Player.OpenOnly(open.ToArray());
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Shape", width, height), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 2, 3, new Vector2((width - 1) * 0.5f, (height - 1) * 0.5f));
+                Assert.IsTrue(fixture.Controller.TryGetPreviewScreenCenter(out _), "外围候选应找到原八格搜索以外的完整空位。");
+                BoardPlacementTarget target;
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(expected, target.Anchor);
+            }
+        }
+
+        [Test]
+        public void SparseShapePerimeterPreservesHolesAndRespectsBoardTransform()
+        {
+            using (var fixture = new DragFixture())
+            {
+                fixture.Player.Root.transform.localScale = Vector3.one * 0.6f;
+                fixture.Player.Root.transform.localRotation = Quaternion.Euler(0f, 0f, 20f);
+                fixture.Player.OpenOnly(new BoardCoordinate(4, 3), new BoardCoordinate(4, 4), new BoardCoordinate(5, 3));
+                fixture.Controller.BeginDrag(LShape(), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 2, 3, new Vector2(0.5f, 0.5f));
+                BoardPlacementTarget target;
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(new BoardCoordinate(4, 3), target.Anchor);
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(5, 4)));
+            }
+        }
+
+        [TestCase(1.5f, false)]
+        [TestCase(2.5f, true)]
+        public void MaximumSnapDistanceLimitsExpandedPerimeterCandidates(float limit, bool expected)
+        {
+            using (var fixture = new DragFixture())
+            {
+                SetField(fixture.Controller, "_maxSnapDistanceCells", limit);
+                fixture.Player.OpenOnly(new BoardCoordinate(4, 3), new BoardCoordinate(5, 3));
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Pair", 2, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 2, 3, new Vector2(0.5f, 0f));
+                BoardPlacementTarget target;
+                Assert.AreEqual(expected, fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(expected, fixture.Player.View.Model.IsOccupied(new BoardCoordinate(4, 3)));
+            }
+        }
+
+        [Test]
+        public void NearbyOriginalCandidateWinsOverFartherPerimeterOpening()
+        {
+            using (var fixture = new DragFixture())
+            {
+                fixture.Player.OpenOnly(new BoardCoordinate(3, 4), new BoardCoordinate(4, 4),
+                    new BoardCoordinate(5, 3), new BoardCoordinate(6, 3));
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Pair", 2, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 3, 3, new Vector2(0.5f, 0f));
+                BoardPlacementTarget target;
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(new BoardCoordinate(3, 4), target.Anchor);
+            }
+        }
+
+        [Test]
+        public void ExpandedCandidateStillRequiresEntireFootprintToBeOpen()
+        {
+            using (var fixture = new DragFixture())
+            {
+                fixture.Player.OpenOnly(new BoardCoordinate(4, 3));
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Pair", 2, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 2, 3, new Vector2(0.5f, 0f));
+                BoardPlacementTarget target;
+                Assert.IsFalse(fixture.Controller.TryCommit(out target));
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(4, 3)));
+            }
+        }
+
+        [Test]
+        public void LongShapePerimeterCannotSnapBeyondMaximumDistance()
+        {
+            using (var fixture = new DragFixture())
+            {
+                fixture.Player.OpenOnly(new BoardCoordinate(6, 3), new BoardCoordinate(7, 3),
+                    new BoardCoordinate(8, 3), new BoardCoordinate(9, 3));
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Long", 4, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 2, 3, new Vector2(1.5f, 0f));
+                BoardPlacementTarget target;
+                Assert.IsFalse(fixture.Controller.TryCommit(out target));
+            }
+        }
+
         [Test]
         public void ValidAnchorTakesPriorityOverAdjacentOpenings()
         {
@@ -709,6 +808,16 @@ namespace GameLogic.Tests
                 Assert.IsTrue(View.Initialize());
             }
             public SpriteRenderer Slot(int column, int row) => Root.transform.Find("Slots/Slot_" + column + "_" + row).GetComponent<SpriteRenderer>();
+            public void OpenOnly(params BoardCoordinate[] cells)
+            {
+                var open = new System.Collections.Generic.HashSet<BoardCoordinate>(cells);
+                for (var column = 0; column < View.Columns; column++)
+                    for (var row = 0; row < View.Rows; row++)
+                    {
+                        var cell = new BoardCoordinate(column, row);
+                        View.Model.SetOpen(cell, open.Contains(cell));
+                    }
+            }
             public void Dispose()
             {
                 UnityEngine.Object.DestroyImmediate(Root);

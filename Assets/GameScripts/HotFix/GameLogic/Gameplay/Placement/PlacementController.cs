@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GameLogic
@@ -26,6 +27,9 @@ namespace GameLogic
         [SerializeField] private PlacementBoardView _playerBoard;
         [SerializeField] private PlacementBoardView _enemyBoard;
         [SerializeField] private Camera _sceneCamera;
+        [SerializeField, Min(0f), Tooltip("机器人形状中心与拖拽目标之间的最大吸附距离，单位为棋盘格。")]
+        private float _maxSnapDistanceCells = 2.5f;
+        private readonly List<BoardCoordinate> _snapAnchorOffsets = new List<BoardCoordinate>();
         private bool _ready;
         private bool _dragging;
         private PlaceableDefinition _definition;
@@ -139,8 +143,34 @@ namespace GameLogic
             if (!containsGrabbedCell) return false;
             _definition = definition;
             _footprintCenter = new Vector2((minColumn + maxColumn) * 0.5f, (minRow + maxRow) * 0.5f);
+            BuildSnapAnchorOffsets(definition);
             _dragging = true;
             return true;
+        }
+
+        private void BuildSnapAnchorOffsets(PlaceableDefinition definition)
+        {
+            _snapAnchorOffsets.Clear();
+            var candidates = new HashSet<BoardCoordinate>();
+            var footprint = new HashSet<BoardCoordinate>(definition.Cells);
+            // 保留原八格，即使某个候选锚点位于当前形状内部，也允许整体小幅挪动。
+            for (var column = -1; column <= 1; column++)
+                for (var row = -1; row <= 1; row++)
+                    AddSnapAnchorOffset(new BoardCoordinate(column, row), candidates);
+
+            // 每个实际占格向外扩一圈，只排除本形状占格；凹口和空洞仍可产生候选。
+            foreach (var cell in definition.Cells)
+                for (var column = -1; column <= 1; column++)
+                    for (var row = -1; row <= 1; row++)
+                    {
+                        var offset = new BoardCoordinate(cell.Column + column, cell.Row + row);
+                        if (!footprint.Contains(offset)) AddSnapAnchorOffset(offset, candidates);
+                    }
+        }
+
+        private void AddSnapAnchorOffset(BoardCoordinate offset, HashSet<BoardCoordinate> candidates)
+        {
+            if ((offset.Column != 0 || offset.Row != 0) && candidates.Add(offset)) _snapAnchorOffsets.Add(offset);
         }
 
         public bool BeginDrag(PlaceableDefinition definition, BoardCoordinate grabbedCell, BattleSide side)
@@ -258,31 +288,34 @@ namespace GameLogic
                 _previewBoard.Columns, _previewBoard.Rows, _previewBoard.CellSize, _footprintCenter);
             var preview = _previewBoard.Model.Evaluate(_anchor, _definition);
             if (!IsAllowedBoard(_previewBoard)) preview = new BoardPlacementResult(false, preview.Cells);
-            else if (!preview.IsValid) preview = FindAdjacentPlacement(localPoint, preview);
+            else if (!preview.IsValid) preview = FindNearbyPlacement(localPoint, preview);
             _previewIsValid = preview.IsValid;
             _previewBoard.ShowPreview(preview);
         }
 
-        private BoardPlacementResult FindAdjacentPlacement(Vector3 localPoint, BoardPlacementResult fallback)
+        private BoardPlacementResult FindNearbyPlacement(Vector3 localPoint, BoardPlacementResult fallback)
         {
+            if (!(_maxSnapDistanceCells > 0f)) return fallback;
             var original = _anchor;
             var nearestDistance = float.PositiveInfinity;
+            var maxDistance = _maxSnapDistanceCells * _previewBoard.CellSize;
+            var maxDistanceSquared = maxDistance * maxDistance;
             var best = fallback;
-            // 只尝试原锚点周围八格；每个候选都检查完整形状，不跨棋盘或记忆旧位置。
-            for (var column = -1; column <= 1; column++)
-                for (var row = -1; row <= 1; row++)
-                {
-                    if (column == 0 && row == 0) continue;
-                    var candidate = new BoardCoordinate(original.Column + column, original.Row + row);
-                    var result = _previewBoard.Model.Evaluate(candidate, _definition);
-                    if (!result.IsValid) continue;
-                    var center = _previewBoard.GetCellLocalPosition(candidate) + (Vector3)(_footprintCenter * _previewBoard.CellSize);
-                    var distance = ((Vector2)(center - localPoint)).sqrMagnitude;
-                    if (distance >= nearestDistance) continue;
-                    nearestDistance = distance;
-                    _anchor = candidate;
-                    best = result;
-                }
+            foreach (var offset in _snapAnchorOffsets)
+            {
+                var column = (long)original.Column + offset.Column;
+                var row = (long)original.Row + offset.Row;
+                if (column < int.MinValue || column > int.MaxValue || row < int.MinValue || row > int.MaxValue) continue;
+                var candidate = new BoardCoordinate((int)column, (int)row);
+                var center = _previewBoard.GetCellLocalPosition(candidate) + (Vector3)(_footprintCenter * _previewBoard.CellSize);
+                var distance = ((Vector2)(center - localPoint)).sqrMagnitude;
+                if (distance > maxDistanceSquared || distance >= nearestDistance) continue;
+                var result = _previewBoard.Model.Evaluate(candidate, _definition);
+                if (!result.IsValid) continue;
+                nearestDistance = distance;
+                _anchor = candidate;
+                best = result;
+            }
             return best;
         }
 
@@ -305,6 +338,7 @@ namespace GameLogic
             ClearPreview();
             _dragging = false;
             _definition = null;
+            _snapAnchorOffsets.Clear();
             _requiredSide = null;
         }
 
