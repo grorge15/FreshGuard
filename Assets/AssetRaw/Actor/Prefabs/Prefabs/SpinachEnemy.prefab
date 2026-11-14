@@ -272,3 +272,4 @@ MonoBehaviour:
   _faceMovement: 0
   _spriteFacesRight: 0
   _hitEffect: {fileID: 2291125898820017167}
+  _deathAnimationIncludesHitEffect: 1
