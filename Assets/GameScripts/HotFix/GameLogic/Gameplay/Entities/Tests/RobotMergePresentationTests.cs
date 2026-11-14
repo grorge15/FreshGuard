@@ -1,16 +1,54 @@
+using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using GameConfig;
 using Luban;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace GameLogic.Tests
 {
     public class RobotMergePresentationTests
     {
+        [UnityTest]
+        public IEnumerator ReleasedGhostFlightWaitsUntilMovementCompletes()
+        {
+            var root = new GameObject("ReleaseFlightCanvas", typeof(RectTransform), typeof(Canvas));
+            try
+            {
+                root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                    "Assets/AssetRaw/Actor/Prefabs/UIPrefabs/Shop/RobotDragGhost.prefab");
+                var instance = Object.Instantiate(prefab, root.transform);
+                var widget = new RobotDragGhostWidget();
+                Assert.IsTrue(widget.Create(new MainCombatUI(), instance));
+                Canvas.ForceUpdateCanvases();
+                var start = widget.Move(new Vector2(Screen.width * 0.4f, Screen.height * 0.4f), null);
+                var destination = start + new Vector2(100f, 60f);
+                var fly = typeof(RobotDragGhostWidget).GetMethod("FlyToCenterAsync");
+                Assert.IsNotNull(fly, "松手后的提交应等待图标飞到落点再切换为战场实体。");
+                var flight = (UniTask)fly.Invoke(widget, new object[] { destination, null, CancellationToken.None });
+                Assert.IsFalse(flight.Status.IsCompleted(), "松手后不能立刻隐藏 Sprite。");
+                var deadline = UnityEditor.EditorApplication.timeSinceStartup + 2d;
+                while (!flight.Status.IsCompleted() && UnityEditor.EditorApplication.timeSinceStartup < deadline)
+                {
+                    typeof(UIWidget).GetMethod("InternalUpdate", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(widget, null);
+                    yield return null;
+                }
+                Assert.IsTrue(flight.Status.IsCompleted(), "吸附动画应在短时间内完成。");
+                flight.GetAwaiter().GetResult();
+                var icon = instance.transform.Find("m_img_RobotIcon").GetComponent<RectTransform>();
+                Assert.That(Vector2.Distance(destination, RectTransformUtility.WorldToScreenPoint(null,
+                    icon.TransformPoint(icon.rect.center))), Is.LessThan(0.1f));
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
+
         [TestCase(501)]
         [TestCase(502)]
         [TestCase(503)]
@@ -163,6 +201,54 @@ namespace GameLogic.Tests
                 }
                 finally { Object.DestroyImmediate(instance); }
             }
+        }
+
+        [Test]
+        public void DragGhostSnapMovesInStraightLineWithoutChangingLogicalPointerTarget()
+        {
+            var root = new GameObject("SnapCanvas", typeof(RectTransform), typeof(Canvas));
+            try
+            {
+                root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                    "Assets/AssetRaw/Actor/Prefabs/UIPrefabs/Shop/RobotDragGhost.prefab");
+                var instance = Object.Instantiate(prefab, root.transform);
+                var widget = new RobotDragGhostWidget();
+                Assert.IsTrue(widget.Create(new MainCombatUI(), instance));
+                Canvas.ForceUpdateCanvases();
+                var pointer = new Vector2(Screen.width * 0.4f, Screen.height * 0.4f);
+                var start = widget.Move(pointer, null);
+                var icon = instance.transform.Find("m_img_RobotIcon").GetComponent<RectTransform>();
+                var move = typeof(RobotDragGhostWidget).GetMethod("MoveToCenter");
+                var measure = typeof(RobotDragGhostWidget).GetMethod("GetTargetCenter");
+                Assert.IsNotNull(move, "吸附 Sprite 需要独立于判定位置的直线动画。");
+                Assert.IsNotNull(measure, "判定位置不能读取动画中途的 Sprite 位置。");
+                var destination = start + new Vector2(100f, 60f);
+                move.Invoke(widget, new object[] { destination, null, true, 10f });
+                Assert.That(Vector2.Distance(start, RectTransformUtility.WorldToScreenPoint(null,
+                    icon.TransformPoint(icon.rect.center))), Is.LessThan(0.1f), "吸附开始时不能瞬移。");
+                move.Invoke(widget, new object[] { destination, null, true, 10.075f });
+                var halfway = RectTransformUtility.WorldToScreenPoint(null, icon.TransformPoint(icon.rect.center));
+                Assert.That(Vector2.Distance(start + new Vector2(50f, 30f), halfway), Is.LessThan(0.1f),
+                    "中途必须沿直线移动，重复设置同一目标不能重启动画。");
+                var logical = (Vector2)measure.Invoke(widget, new object[] { pointer, null, 0f });
+                Assert.That(Vector2.Distance(start, logical), Is.LessThan(0.1f));
+                Assert.That(Vector2.Distance(halfway, RectTransformUtility.WorldToScreenPoint(null,
+                    icon.TransformPoint(icon.rect.center))), Is.LessThan(0.1f), "读取判定位置不能移动 Sprite。");
+                move.Invoke(widget, new object[] { destination, null, true, 10.15f });
+                Assert.That(Vector2.Distance(destination, RectTransformUtility.WorldToScreenPoint(null,
+                    icon.TransformPoint(icon.rect.center))), Is.LessThan(0.1f));
+                move.Invoke(widget, new object[] { start, null, false, 10.16f });
+                Assert.That(Vector2.Distance(start, RectTransformUtility.WorldToScreenPoint(null,
+                    icon.TransformPoint(icon.rect.center))), Is.LessThan(0.1f), "离开吸附状态后恢复自由跟随。");
+                // 松手后只剩 UI 帧更新；异步提交期间不再重算拖拽目标。
+                move.Invoke(widget, new object[] { destination, null, true, Time.unscaledTime - 0.15f });
+                typeof(RobotDragGhostWidget).GetMethod("OnUpdate", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(widget, null);
+                Assert.That(Vector2.Distance(destination, RectTransformUtility.WorldToScreenPoint(null,
+                    icon.TransformPoint(icon.rect.center))), Is.LessThan(0.1f), "提交等待期间也必须完成吸附动画。");
+            }
+            finally { Object.DestroyImmediate(root); }
         }
 
         [TestCase("BattleShopUI")]

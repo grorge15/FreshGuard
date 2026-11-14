@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using TEngine;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,7 +9,7 @@ namespace GameLogic
 {
     public sealed partial class BattleShopUI : UIWidget
     {
-        private const float DragLiftCells = 2f;
+        private const float DragLiftCells = 1f;
         private Text _coins;
         private Text _refreshPrice;
         private Button _refreshButton;
@@ -176,19 +178,21 @@ namespace GameLogic
         }
         private Vector2 GetGhostPosition(Vector2 position)
         {
-            // 按拿起前的位置固定偏移；棋盘来源只保持图标底边中心对齐触点。
-            if (Context?.ActiveInteraction?.OriginalLocation == RobotLocation.Board) return position;
             var placement = _host != null ? _host.Placement : null;
             var cellHeight = placement != null ? placement.GetScreenCellHeight(BattleSide.Player) : 0f;
-            // 商店来源在图标底边对齐触点的基础上再抬高两格，随棋盘视图缩放。
+            // 战场和商店来源统一在图标底边对齐触点后再抬高两格，避开手指遮挡。
             return position + Vector2.up * (cellHeight * DragLiftCells);
         }
         private float GhostScreenCellHeight => _host != null && _host.Placement != null
             ? _host.Placement.GetScreenCellHeight(BattleSide.Player) : 0f;
         public void ShowGhost(string icon, string portrait, int level, Vector2 position)
         { _ghost.Show(icon, portrait, level, GetGhostPosition(position), EventCamera, GhostScreenCellHeight); }
-        public Vector2 MoveGhost(Vector2 position) => _ghost != null
-            ? _ghost.Move(GetGhostPosition(position), EventCamera, GhostScreenCellHeight) : position;
+        public Vector2 GetGhostTargetPosition(Vector2 position) => _ghost != null
+            ? _ghost.GetTargetCenter(GetGhostPosition(position), EventCamera, GhostScreenCellHeight) : position;
+        public void MoveGhost(Vector2 center)
+        { _ghost?.MoveToCenter(center, EventCamera, false, Time.unscaledTime); }
+        public UniTask FlyGhostToPlacementAsync(Vector2 center, CancellationToken cancellationToken) => _ghost != null
+            ? _ghost.FlyToCenterAsync(center, EventCamera, cancellationToken) : UniTask.CompletedTask;
         public void HideGhost() { if (_ghost != null && _ghost.gameObject != null) _ghost.Visible = false; }
         public void ShowFailure(ShopOperationResult result)
         {

@@ -107,7 +107,7 @@ namespace GameLogic
 
         private void UpdatePreview()
         {
-            _targetPosition = _ui.MoveGhost(_position);
+            _targetPosition = _ui.GetGhostTargetPosition(_position);
             _host.Placement.UpdateDrag(_targetPosition);
             _ui.UpdateOfferMergeCandidates(_source, _targetPosition);
             var overShop = _ui.IsOverShop(_targetPosition);
@@ -118,6 +118,8 @@ namespace GameLogic
             if (overShop || (_host.Placement.TryGetDragOccupant(out occupant) &&
                 _context.CheckMerge(BattleSide.Player, _source, occupant) == ShopOperationResult.Success))
                 _host.Placement.ClearPlacementPreview();
+            // 拖动期间只跟随触点，绿色预览提前提示松手后的落点。
+            _ui.MoveGhost(_targetPosition);
         }
 
         public void Release(int pointerId, Vector2 position)
@@ -159,13 +161,20 @@ namespace GameLogic
                     purchasing = session.Source.Kind == RobotDragSourceKind.ShopOffer;
                     int targetId;
                     BoardPlacementTarget target;
-                    if (host.Placement.TryGetDragOccupant(out targetId))
+                    if (host.Placement.TryGetDragOccupant(out targetId) &&
+                        context.CheckMerge(BattleSide.Player, _source, targetId) == ShopOperationResult.Success)
                     {
                         merging = true;
                         result = context.TryCommitMerge(session.InteractionId, targetId);
                     }
-                    else if (host.Placement.TryGetDragTarget(out target))
+                    else if (host.Placement.TryGetDragTarget(out target) &&
+                        host.Placement.TryGetPreviewScreenCenter(out var previewCenter))
+                    {
+                        // 松手后冻结预览目标，先飞到落点，再切换为真实机器人。
+                        await _ui.FlyGhostToPlacementAsync(previewCenter, cancellationToken);
+                        if (generation != _generation || host == null || host.Context != context) return;
                         result = await host.DeployDragAsync(session, target, cancellationToken);
+                    }
                 }
             }
             catch (OperationCanceledException) { }

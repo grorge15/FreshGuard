@@ -31,6 +31,7 @@ namespace GameLogic
         private PlaceableDefinition _definition;
         private Vector2 _footprintCenter;
         private PlacementBoardView _previewBoard;
+        private bool _previewIsValid;
         private BoardCoordinate _anchor;
         private BoardCoordinate _pointerCell;
         private BattleSide? _requiredSide;
@@ -221,7 +222,19 @@ namespace GameLogic
 
         public void ClearPlacementPreview()
         {
+            _previewIsValid = false;
             if (_previewBoard != null) _previewBoard.ClearPreview();
+        }
+
+        public bool TryGetPreviewScreenCenter(out Vector2 center)
+        {
+            center = default(Vector2);
+            if (!_dragging || !IsReady || !_previewIsValid || _previewBoard == null) return false;
+            var camera = GetSceneCamera(GetBoardSide(_previewBoard));
+            if (camera == null) return false;
+            var local = _previewBoard.GetCellLocalPosition(_anchor) + (Vector3)(_footprintCenter * _previewBoard.CellSize);
+            center = camera.WorldToScreenPoint(_previewBoard.transform.TransformPoint(local));
+            return true;
         }
 
         private bool IsAllowedBoard(PlacementBoardView board)
@@ -240,11 +253,37 @@ namespace GameLogic
             BoardCoordinate coordinate;
             if (!TryGetPointerCell(screenPosition, out _previewBoard, out coordinate)) return;
             _pointerCell = coordinate;
-            _anchor = MapGridMath.GetCenteredAnchor(_previewBoard.transform.InverseTransformPoint(point),
+            var localPoint = _previewBoard.transform.InverseTransformPoint(point);
+            _anchor = MapGridMath.GetCenteredAnchor(localPoint,
                 _previewBoard.Columns, _previewBoard.Rows, _previewBoard.CellSize, _footprintCenter);
             var preview = _previewBoard.Model.Evaluate(_anchor, _definition);
             if (!IsAllowedBoard(_previewBoard)) preview = new BoardPlacementResult(false, preview.Cells);
+            else if (!preview.IsValid) preview = FindAdjacentPlacement(localPoint, preview);
+            _previewIsValid = preview.IsValid;
             _previewBoard.ShowPreview(preview);
+        }
+
+        private BoardPlacementResult FindAdjacentPlacement(Vector3 localPoint, BoardPlacementResult fallback)
+        {
+            var original = _anchor;
+            var nearestDistance = float.PositiveInfinity;
+            var best = fallback;
+            // 只尝试原锚点周围八格；每个候选都检查完整形状，不跨棋盘或记忆旧位置。
+            for (var column = -1; column <= 1; column++)
+                for (var row = -1; row <= 1; row++)
+                {
+                    if (column == 0 && row == 0) continue;
+                    var candidate = new BoardCoordinate(original.Column + column, original.Row + row);
+                    var result = _previewBoard.Model.Evaluate(candidate, _definition);
+                    if (!result.IsValid) continue;
+                    var center = _previewBoard.GetCellLocalPosition(candidate) + (Vector3)(_footprintCenter * _previewBoard.CellSize);
+                    var distance = ((Vector2)(center - localPoint)).sqrMagnitude;
+                    if (distance >= nearestDistance) continue;
+                    nearestDistance = distance;
+                    _anchor = candidate;
+                    best = result;
+                }
+            return best;
         }
 
         public bool TryCommit(out BoardPlacementTarget target)
@@ -284,6 +323,7 @@ namespace GameLogic
 
         private void ClearPreview()
         {
+            _previewIsValid = false;
             if (_previewBoard != null) _previewBoard.ClearPreview();
             _previewBoard = null;
         }

@@ -46,7 +46,7 @@ namespace GameLogic.Tests
         [TestCase(5, 8)]
         [TestCase(0, 0)]
         [TestCase(10, 8)]
-        public void BorderDragShowsRedAndCannotCommit(int column, int row)
+        public void BorderDragSnapsInwardWithoutOccupyingReservedBorder(int column, int row)
         {
             using (var fixture = new DragFixture())
             {
@@ -54,33 +54,34 @@ namespace GameLogic.Tests
                 var normal = slot.color;
                 Assert.IsTrue(fixture.Controller.BeginDrag(new PlaceableDefinition("One", 1, 1), new BoardCoordinate(0, 0)));
                 fixture.UpdateAt(fixture.Player, column, row);
-                Assert.Greater(slot.color.r, slot.color.g);
+                var expected = new BoardCoordinate(Mathf.Clamp(column, 1, 9), Mathf.Clamp(row, 1, 7));
+                Assert.AreEqual(normal, slot.color, "保留边框本身不应被吸附预览染色。");
+                Assert.Greater(fixture.Player.Slot(expected.Column, expected.Row).color.g,
+                    fixture.Player.Slot(expected.Column, expected.Row).color.r);
                 BoardPlacementTarget target;
-                Assert.IsFalse(fixture.Controller.TryCommit(out target));
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(expected, target.Anchor);
                 Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(column, row)));
                 Assert.AreEqual(normal, slot.color);
             }
         }
 
         [Test]
-        public void FootprintTouchingBorderRejectsEveryCellAtomically()
+        public void FootprintTouchingBorderSnapsWholeShapeInsideWithoutOccupyingBorder()
         {
             using (var fixture = new DragFixture())
             {
                 var shape = new PlaceableDefinition("Square", 2, 2);
                 fixture.Controller.BeginDrag(shape, new BoardCoordinate(0, 0));
                 fixture.UpdateCenteredAt(fixture.Player, 9, 6, new Vector2(0.5f, 0.5f));
-                foreach (var cell in new[] { new BoardCoordinate(9, 6), new BoardCoordinate(10, 6), new BoardCoordinate(9, 7), new BoardCoordinate(10, 7) })
+                foreach (var cell in new[] { new BoardCoordinate(8, 6), new BoardCoordinate(9, 6), new BoardCoordinate(8, 7), new BoardCoordinate(9, 7) })
                 {
                     var color = fixture.Player.Slot(cell.Column, cell.Row).color;
-                    Assert.Greater(color.r, color.g);
+                    Assert.Greater(color.g, color.r);
                 }
                 BoardPlacementTarget target;
-                Assert.IsFalse(fixture.Controller.TryCommit(out target));
-                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(9, 6)));
-                fixture.Controller.BeginDrag(shape, new BoardCoordinate(0, 0));
-                fixture.UpdateCenteredAt(fixture.Player, 8, 6, new Vector2(0.5f, 0.5f));
                 Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(new BoardCoordinate(8, 6), target.Anchor);
                 Assert.IsTrue(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(9, 7)));
                 Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(10, 7)));
             }
@@ -271,6 +272,81 @@ namespace GameLogic.Tests
             }
         }
 
+        [TestCase(-1, -1)]
+        [TestCase(-1, 0)]
+        [TestCase(-1, 1)]
+        [TestCase(0, -1)]
+        [TestCase(0, 1)]
+        [TestCase(1, -1)]
+        [TestCase(1, 0)]
+        [TestCase(1, 1)]
+        public void InvalidAnchorSnapsCompleteFootprintToAdjacentOpening(int dx, int dy)
+        {
+            using (var fixture = new DragFixture())
+            {
+                var expected = new BoardCoordinate(4 + dx, 3 + dy);
+                for (var column = 0; column < 11; column++)
+                    for (var row = 0; row < 9; row++)
+                        fixture.Player.View.Model.SetOpen(new BoardCoordinate(column, row),
+                            row == expected.Row && (column == expected.Column || column == expected.Column + 1));
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Pair", 2, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 4, 3, new Vector2(0.5f, 0f));
+                BoardPlacementTarget preview;
+                Assert.IsTrue(fixture.Controller.TryGetDragTarget(out preview));
+                Assert.AreEqual(expected, preview.Anchor, "预览必须吸附到相邻完整空位。");
+                Assert.Greater(fixture.Player.Slot(expected.Column, expected.Row).color.g,
+                    fixture.Player.Slot(expected.Column, expected.Row).color.r);
+                BoardPlacementTarget committed;
+                Assert.IsTrue(fixture.Controller.TryCommit(out committed));
+                Assert.AreEqual(preview.Anchor, committed.Anchor, "松手必须使用绿色预览的同一锚点。");
+            }
+        }
+
+        [Test]
+        public void AdjacentSnapChoosesClosestShapeCenterRatherThanFirstCandidate()
+        {
+            using (var fixture = new DragFixture())
+            {
+                fixture.Player.View.Model.TryPlace(new BoardCoordinate(4, 3), new PlaceableDefinition("Block", 2, 1));
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Pair", 2, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 4, 3, new Vector2(0.7f, 0.35f));
+                BoardPlacementTarget target;
+                Assert.IsTrue(fixture.Controller.TryGetDragTarget(out target));
+                Assert.AreEqual(new BoardCoordinate(4, 4), target.Anchor);
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+            }
+        }
+
+        [Test]
+        public void SnapDoesNotSearchBeyondAdjacentAnchorsOrRetainOldValidPosition()
+        {
+            using (var fixture = new DragFixture())
+            {
+                for (var column = 0; column < 11; column++)
+                    for (var row = 0; row < 9; row++)
+                        fixture.Player.View.Model.SetOpen(new BoardCoordinate(column, row), column == 2 && row == 3);
+                fixture.Controller.BeginDrag(new PlaceableDefinition("One", 1, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateAt(fixture.Player, 2, 3);
+                fixture.UpdateAt(fixture.Player, 4, 3);
+                BoardPlacementTarget target;
+                Assert.IsFalse(fixture.Controller.TryCommit(out target));
+                Assert.IsFalse(fixture.Player.View.Model.IsOccupied(new BoardCoordinate(2, 3)));
+            }
+        }
+
+        [Test]
+        public void ValidAnchorTakesPriorityOverAdjacentOpenings()
+        {
+            using (var fixture = new DragFixture())
+            {
+                fixture.Controller.BeginDrag(new PlaceableDefinition("Pair", 2, 1), new BoardCoordinate(0, 0));
+                fixture.UpdateCenteredAt(fixture.Player, 4, 3, new Vector2(0.9f, 0.4f));
+                BoardPlacementTarget target;
+                Assert.IsTrue(fixture.Controller.TryCommit(out target));
+                Assert.AreEqual(new BoardCoordinate(4, 3), target.Anchor);
+            }
+        }
+
         [TestCase(4, 1)]
         [TestCase(1, 4)]
         [TestCase(3, 1)]
@@ -331,7 +407,8 @@ namespace GameLogic.Tests
                 BoardPlacementTarget target;
                 int occupant;
                 Assert.IsTrue(fixture.Controller.TryGetDragTarget(out target));
-                Assert.AreEqual(new BoardCoordinate(3, 3), target.Anchor);
+                Assert.IsTrue(fixture.Player.View.Model.Evaluate(target.Anchor, new PlaceableDefinition("Long", 3, 1)).IsValid,
+                    "摆放可吸附到附近空位，但合成命中仍由原始指针所在格决定。");
                 Assert.IsTrue(fixture.Controller.TryGetDragOccupant(out occupant));
                 Assert.AreEqual(123, occupant);
             }
@@ -378,16 +455,16 @@ namespace GameLogic.Tests
         {
             using (var fixture = new DragFixture())
             {
-                var normal = fixture.Player.Slot(0, 0).color;
+                var normal = fixture.Player.Slot(1, 1).color;
                 Assert.IsTrue(fixture.Controller.BeginDrag(new PlaceableDefinition("One", 1, 1), new BoardCoordinate(0, 0)));
-                fixture.UpdateAt(fixture.Player, 0, 0);
-                Assert.AreNotEqual(normal, fixture.Player.Slot(0, 0).color);
-                fixture.UpdateAt(fixture.Enemy, 0, 0);
-                Assert.AreEqual(normal, fixture.Player.Slot(0, 0).color);
+                fixture.UpdateAt(fixture.Player, 1, 1);
+                Assert.AreNotEqual(normal, fixture.Player.Slot(1, 1).color);
+                fixture.UpdateAt(fixture.Enemy, 1, 1);
+                Assert.AreEqual(normal, fixture.Player.Slot(1, 1).color);
                 Assert.IsFalse(fixture.Player.Root.transform.Find("PlacementPreview").gameObject.activeSelf);
-                Assert.AreNotEqual(normal, fixture.Enemy.Slot(0, 0).color);
+                Assert.AreNotEqual(normal, fixture.Enemy.Slot(1, 1).color);
                 fixture.Controller.UpdateDrag(fixture.Camera.WorldToScreenPoint(new Vector3(10f, 10f, 0f)));
-                Assert.AreEqual(normal, fixture.Enemy.Slot(0, 0).color);
+                Assert.AreEqual(normal, fixture.Enemy.Slot(1, 1).color);
                 Assert.IsFalse(fixture.Enemy.Root.transform.Find("PlacementPreview").gameObject.activeSelf);
                 Assert.IsTrue(fixture.Controller.IsDragging);
                 fixture.Controller.CancelDrag();
