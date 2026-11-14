@@ -15,6 +15,7 @@ namespace GameLogic
         [SerializeField] private int _configId;
         [SerializeField] private bool _faceMovement;
         [SerializeField] private bool _spriteFacesRight = true;
+        [SerializeField] private EnemyHitEffect _hitEffect;
         private Animator _animator;
         private BattleEntityRegistry _registry;
         private BattleSide _side;
@@ -162,12 +163,20 @@ namespace GameLogic
             _hitFlashDuration = duration;
             _hitFlashRemaining = duration;
             ApplyHitFlash(true);
+            if (_hitEffect != null)
+            {
+                GetVisualSorting(out var layer, out var order);
+                _hitEffect.Play(GetVisualBounds(), layer, order);
+            }
             return true;
         }
 
         private void AdvanceHitFeedback(float deltaTime)
         {
-            if (_hitFlashRemaining <= 0f || (_animator != null && _animator.speed <= 0f)) return;
+            if (_animator != null && _animator.speed <= 0f) return;
+            // 闪红结束或进入死亡动画后，仍让爆点和火星播完。
+            if (_hitEffect != null) _hitEffect.Advance(deltaTime);
+            if (_hitFlashRemaining <= 0f) return;
             _hitFlashRemaining = Mathf.Max(0f, _hitFlashRemaining - Mathf.Max(0f, deltaTime));
             ApplyHitFlash(_hitFlashRemaining > 0f);
             if (_hitFlashRemaining <= 0f) RemoveHitShake();
@@ -212,7 +221,12 @@ namespace GameLogic
         private void CacheVisuals()
         {
             if (_spriteRenderers != null) return;
-            _spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+            if (_hitEffect == null) _hitEffect = GetComponentInChildren<EnemyHitEffect>(true);
+            var renderers = GetComponentsInChildren<SpriteRenderer>(true);
+            var bodyRenderers = new List<SpriteRenderer>(renderers.Length);
+            foreach (var renderer in renderers)
+                if (_hitEffect == null || !renderer.transform.IsChildOf(_hitEffect.transform)) bodyRenderers.Add(renderer);
+            _spriteRenderers = bodyRenderers.ToArray();
             _baseSpriteColors = new Color[_spriteRenderers.Length];
             _baseSpriteFlipX = new bool[_spriteRenderers.Length];
             var roots = new List<Transform>();
@@ -257,7 +271,8 @@ namespace GameLogic
         {
             CacheVisuals();
             // 越靠下越靠前；同一高度再用实例 ID 保证稳定顺序，避免排序相同导致的闪烁。
-            GetVisualSorting(out _, out var order);
+            GetVisualSorting(out var layer, out var order);
+            if (_hitEffect != null) _hitEffect.SetSorting(layer, order);
             foreach (var renderer in _spriteRenderers)
                 if (renderer != null)
                 {
@@ -303,6 +318,7 @@ namespace GameLogic
             _attacking = false;
             _removing = false;
             ClearHitFeedback();
+            if (_hitEffect != null) _hitEffect.Clear();
             for (var i = 0; i < _spriteRenderers.Length; i++)
                 if (_spriteRenderers[i] != null) _spriteRenderers[i].flipX = _baseSpriteFlipX[i];
         }
