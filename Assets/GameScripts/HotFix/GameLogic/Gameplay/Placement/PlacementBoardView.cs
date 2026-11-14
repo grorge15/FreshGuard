@@ -102,6 +102,9 @@ namespace GameLogic
                     slotRoot.SetParent(transform, false);
                 }
                 slotRoot.gameObject.SetActive(true);
+                // Scene-authored grids may contain more slots than the newly loaded map.
+                // Re-enable only the coordinates generated below, including on first initialization.
+                foreach (Transform child in slotRoot) child.gameObject.SetActive(false);
                 // 直接初始化保留旧边框规则；地图重置随后使用完整分层模型。
                 _model = new BoardModel(_columns, _rows, null, reservedBorderWidth: 1);
                 _slots = new SpriteRenderer[_columns, _rows];
