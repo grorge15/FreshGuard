@@ -44,6 +44,7 @@ public sealed partial class Robot : Luban.BeanBase
         TileWidth = _buf.ReadInt();
         TileHeight = _buf.ReadInt();
         TilePassThroughBall = _buf.ReadBool();
+        AttackCycleSkillId = _buf.ReadInt();
     }
 
     public static Robot DeserializeRobot(ByteBuf _buf)
@@ -160,6 +161,10 @@ public sealed partial class Robot : Luban.BeanBase
     /// true=小球可穿过，不产生实体反弹
     /// </summary>
     public readonly bool TilePassThroughBall;
+    /// <summary>
+    /// 攻击周期子技能ID，0表示不启用
+    /// </summary>
+    public readonly int AttackCycleSkillId;
    
     public const int __ID__ = 1376639430;
     public override int GetTypeId() => __ID__;
@@ -199,6 +204,7 @@ public sealed partial class Robot : Luban.BeanBase
         + "tileWidth:" + TileWidth + ","
         + "tileHeight:" + TileHeight + ","
         + "tilePassThroughBall:" + TilePassThroughBall + ","
+        + "attackCycleSkillId:" + AttackCycleSkillId + ","
         + "}";
     }
 }

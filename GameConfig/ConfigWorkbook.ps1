@@ -279,7 +279,7 @@ function Prepare-ConfigWorkbooks([string]$DataDir) {
             if ($null -eq $shape) { throw "Missing tile shape: $($values['shapeId'])" }
             # Sheet2 is the speed-strip catalog. Classification is independent of numeric IDs.
             return @{
-                qualityId = 0; skillId = 0; minTriggerInterval = 0; attackDamage = 0; damagePerLevel = 0; robotPortrait = ''
+                qualityId = 0; skillId = 0; attackCycleSkillId = 0; minTriggerInterval = 0; attackDamage = 0; damagePerLevel = 0; robotPortrait = ''
                 entityType = 'EffectTile'; tileCanRobotCover = $false; tileEffectKey = 'ball_speed_bonus'
                 tileEndCondition = 'Duration'; tileStackRule = 'Refresh'; tileEnabled = $false
                 tileTargetType = 'NormalBall'; tileSpeedStackRule = 'Additive'; tileLifetimeEndCondition = 'BattleEnd'

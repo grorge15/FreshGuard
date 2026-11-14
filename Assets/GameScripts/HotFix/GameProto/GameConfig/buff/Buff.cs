@@ -22,7 +22,6 @@ public sealed partial class Buff : Luban.BeanBase
         Priority = _buf.ReadInt();
         TickInterval = _buf.ReadFloat();
         TriggerSkillId = _buf.ReadInt();
-        CountSkillId = _buf.ReadInt();
         EffectPrefab = _buf.ReadString();
         Name = _buf.ReadString();
         Icon = _buf.ReadString();
@@ -77,10 +76,6 @@ public sealed partial class Buff : Luban.BeanBase
     /// 被动满足触发条件后释放的技能ID，0表示没有
     /// </summary>
     public readonly int TriggerSkillId;
-    /// <summary>
-    /// 累计攻击次数的技能ID，非周期Buff填0
-    /// </summary>
-    public readonly int CountSkillId;
     /// <summary>
     /// Buff持续表现资源名，非表现Buff留空
     /// </summary>
@@ -190,7 +185,6 @@ public sealed partial class Buff : Luban.BeanBase
         + "priority:" + Priority + ","
         + "tickInterval:" + TickInterval + ","
         + "triggerSkillId:" + TriggerSkillId + ","
-        + "countSkillId:" + CountSkillId + ","
         + "effectPrefab:" + EffectPrefab + ","
         + "name:" + Name + ","
         + "icon:" + Icon + ","
