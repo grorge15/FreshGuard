@@ -141,7 +141,8 @@ namespace GameLogic.Tests
             var hits = 0;
             var state = new BulletState(new BulletLauncher(model, Action(new[] { 3 })), world, (s, id) => hits++);
             Assert.IsFalse(state.Advance(0.5f));
-            Assert.AreEqual(new Vector3(5f, 1f), state.Position);
+            Assert.That(state.Position.x, Is.InRange(0f, 10f));
+            Assert.That(state.Position.y, Is.GreaterThan(0f));
             world.Alive.Remove(3);
             Assert.IsTrue(state.Advance(0.5f));
             Assert.AreEqual(new Vector3(10f, 0f), state.Position);

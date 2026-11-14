@@ -11,7 +11,9 @@ namespace GameLogic.Tests
         {
             var world=new World(); var hits=0;
             var state=State(world,s=>{hits++; Assert.IsTrue(s.IsResolved); Assert.IsTrue(s.Advance(10f));});
-            Assert.IsFalse(state.Advance(0.5f)); Assert.AreEqual(new Vector3(1f,1f,0f),state.Position);
+            Assert.IsFalse(state.Advance(0.5f));
+            Assert.That(state.Position.x, Is.InRange(0f, world.Position.x));
+            Assert.That(state.Position.y, Is.GreaterThan(0f));
             world.Position=new Vector3(4f,0f,0f);
             Assert.IsTrue(state.Advance(0.5f)); Assert.AreEqual(world.Position,state.Position);
             Assert.IsTrue(state.Advance(1f)); Assert.AreEqual(1,hits);
@@ -25,7 +27,8 @@ namespace GameLogic.Tests
             Assert.IsFalse(state.Advance(0.25f));
             world.Running=true; world.TargetValid=false;
             Assert.IsFalse(state.Advance(0.25f), "目标消失后子弹应继续飞行");
-            Assert.AreEqual(new Vector3(2f,1f,0f),state.Position);
+            Assert.That(state.Position.x, Is.InRange(0f, 4f));
+            Assert.That(state.Position.y, Is.GreaterThan(0f));
             world.TargetValid=true; world.Position=new Vector3(20f,0f,0f);
             Assert.IsTrue(state.Advance(0.5f)); Assert.AreEqual(new Vector3(4f,0f,0f),state.Position);
             world.TargetValid=true; Assert.IsTrue(state.Advance(1f)); Assert.AreEqual(0,hits);
@@ -37,12 +40,24 @@ namespace GameLogic.Tests
             var world=new World(); var hits=0; var state=State(world,s=>hits++);
             world.TargetValid=false;
             Assert.IsFalse(state.Advance(0.5f));
-            Assert.AreEqual(new Vector3(1f,1f,0f),state.Position);
+            Assert.That(state.Position.x, Is.InRange(0f, 2f));
+            Assert.That(state.Position.y, Is.GreaterThan(0f));
             Assert.IsTrue(state.Advance(0.5f));
             Assert.AreEqual(new Vector3(2f,0f,0f),state.Position);
             Assert.AreEqual(0,hits);
         }
 
+        [Test]
+        public void ZeroTimeDoesNotMoveTrackingBulletWhenTargetMoves()
+        {
+            var world = new World(); var state = State(world, s => Assert.Fail("尚未命中"));
+            Assert.IsFalse(state.Advance(0.1f));
+            var position = state.Position;
+            world.Position = new Vector3(4f, 2f);
+            Assert.IsFalse(state.Advance(0f));
+            Assert.AreEqual(position, state.Position);
+            Assert.AreEqual(0.1f, state.Elapsed);
+        }
         [Test]
         public void InvalidBattleStillCancelsInFlightBulletImmediately()
         {

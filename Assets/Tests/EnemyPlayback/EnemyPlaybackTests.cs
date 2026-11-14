@@ -11,6 +11,68 @@ namespace GameLogic.Tests
 {
     public sealed class EnemyPlaybackTests
     {
+        [TestCase(2001, 1.1f)]
+        [TestCase(2002, 1.3f)]
+        [TestCase(2003, 1.44f)]
+        [TestCase(2004, 1.3f)]
+        public void BakedDeathPausesCompletesOnceAndRestoresIdleOnReuse(int configId, float completionTime)
+        {
+            Assert.IsTrue(Application.isPlaying);
+            var tables = new Tables(name => new ByteBuf(File.ReadAllBytes(
+                Path.Combine(Application.dataPath, "AssetRaw/Configs/bytes", name + ".bytes"))));
+            var config = tables.TbEnemy.Get(configId);
+            var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/AssetRaw/Actor/Prefabs/Prefabs/" + config.EnemyPrefab + ".prefab"));
+            using (var registry = new BattleEntityRegistry())
+            {
+                try
+                {
+                    var view = root.GetComponent<EnemyView>();
+                    var animator = root.GetComponent<Animator>();
+                    var id = registry.CreateEnemyFromConfig(config, BattleSide.Player);
+                    view.Bind(registry, id);
+                    animator.Update(0f);
+                    var renderer = root.transform.Find("Visual").GetComponent<SpriteRenderer>();
+                    var idle = renderer.sprite;
+                    var completedId = 0;
+                    var completionCount = 0;
+                    view.RemovalAnimationCompleted += value => { completedId = value; completionCount++; };
+                    Assert.IsTrue(view.PlayHitFeedback());
+                    Assert.AreEqual(DamageResult.Killed, registry.ApplyDamage(id, int.MaxValue, out var removal));
+                    Assert.IsTrue(view.PlayRemoval(removal));
+                    animator.Update(0f);
+                    Assert.IsTrue(animator.GetCurrentAnimatorStateInfo(0).IsName("Death"),
+                        "致命命中后应直接进入死亡状态，不能等待移动或攻击动画播完。");
+                    Assert.AreNotSame(idle, renderer.sprite, "致命命中后的首帧应显示死亡序列。");
+                    animator.Update(.4f);
+                    Assert.AreEqual(0, completionCount);
+                    var pausedSprite = renderer.sprite;
+                    animator.speed = 0f;
+                    animator.Update(3f);
+                    Assert.AreSame(pausedSprite, renderer.sprite);
+                    Assert.AreEqual(0, completionCount);
+                    animator.speed = 1f;
+                    animator.Update(completionTime - .42f);
+                    Assert.AreEqual(0, completionCount, "死亡尾段播完前不能提前回收。");
+                    animator.Update(.04f);
+                    Assert.AreEqual(1, completionCount, "真实 Animator 应通过末帧事件完成回收。");
+                    Assert.AreEqual(id, completedId);
+                    Assert.AreEqual(0, view.InstanceId);
+                    animator.Update(1f);
+                    view.OnDeathAnimationComplete();
+                    Assert.AreEqual(1, completionCount);
+                    var nextId = registry.CreateEnemyFromConfig(config, BattleSide.Player);
+                    view.Bind(registry, nextId);
+                    animator.Update(0f);
+                    Assert.AreEqual("Idle", view.AnimationState);
+                    Assert.AreSame(idle, renderer.sprite, "复用后不能保留透明死亡尾帧。");
+                    Assert.IsTrue(view.PlayHitFeedback());
+                    Assert.IsTrue(root.GetComponentInChildren<EnemyHitEffect>(true).IsPlaying);
+                }
+                finally { Object.DestroyImmediate(root); }
+            }
+        }
+
         [TestCase(2001, 1, 100)]
         [TestCase(2002, 1, 350)]
         [TestCase(2003, 1, 1800)]

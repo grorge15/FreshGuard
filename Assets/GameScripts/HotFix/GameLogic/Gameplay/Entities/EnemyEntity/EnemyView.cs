@@ -16,6 +16,8 @@ namespace GameLogic
         [SerializeField] private bool _faceMovement;
         [SerializeField] private bool _spriteFacesRight = true;
         [SerializeField] private EnemyHitEffect _hitEffect;
+        [Tooltip("死亡动画已包含击杀爆闪时，关闭独立受击特效，避免重复叠加。")]
+        [SerializeField] private bool _deathAnimationIncludesHitEffect;
         private Animator _animator;
         private BattleEntityRegistry _registry;
         private BattleSide _side;
@@ -127,7 +129,11 @@ namespace GameLogic
             _removing = true;
             _attacking = false;
             _moving = false;
-            if (removal.RemovalReason == EntityRemovalReason.Killed) PlayState("Death");
+            if (removal.RemovalReason == EntityRemovalReason.Killed)
+            {
+                if (_deathAnimationIncludesHitEffect && _hitEffect != null) _hitEffect.Clear();
+                PlayState("Death");
+            }
             else CompleteRemoval();
             return true;
         }

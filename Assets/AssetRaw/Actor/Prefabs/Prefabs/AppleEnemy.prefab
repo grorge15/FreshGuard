@@ -156,6 +156,7 @@ MonoBehaviour:
   _faceMovement: 0
   _spriteFacesRight: 0
   _hitEffect: {fileID: 4232270369456144162}
+  _deathAnimationIncludesHitEffect: 1
 --- !u!1 &8377687096206604640
 GameObject:
   m_ObjectHideFlags: 0

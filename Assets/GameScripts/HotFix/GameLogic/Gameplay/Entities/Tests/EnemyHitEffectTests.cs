@@ -151,18 +151,21 @@ namespace GameLogic.Tests
             Assert.IsFalse(_effect.IsPlaying, "复用后的怪物不能残留上一只的火花。");
         }
 
-        [Test]
-        public void FatalHitPlaysThroughDeathThenClearsOnAnimationCompletion()
+        [TestCase(2001)]
+        [TestCase(2002)]
+        [TestCase(2003)]
+        [TestCase(2004)]
+        public void FatalHitUsesBakedDeathFlashAndClearsTheIndependentHitOverlay(int configId)
         {
-            CreateView(2003);
+            CreateView(configId);
             _view.PlayHitFeedback();
             Assert.AreEqual(DamageResult.Killed, _registry.ApplyDamage(_id, int.MaxValue, out var removal));
             Assert.IsTrue(_view.PlayRemoval(removal));
             Assert.AreEqual("Death", _view.AnimationState);
             Assert.IsFalse(_view.IsHitFlashing);
-            Assert.IsTrue(_effect.IsPlaying, "致命一击的爆点不能被死亡切换立即截断。");
+            Assert.IsFalse(_effect.IsPlaying, "死亡序列已包含击杀闪光，不能重复叠加独立受击爆点。");
             Advance(.10f);
-            Assert.IsTrue(_effect.IsPlaying);
+            Assert.IsFalse(_effect.IsPlaying);
             _view.OnDeathAnimationComplete();
             Assert.IsFalse(_effect.IsPlaying);
         }

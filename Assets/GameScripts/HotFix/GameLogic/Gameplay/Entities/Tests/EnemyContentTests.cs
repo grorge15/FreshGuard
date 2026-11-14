@@ -111,11 +111,11 @@ namespace GameLogic.Tests
             }
         }
 
-        [TestCase(2001, "Spinach")]
-        [TestCase(2002, "FrozenCan")]
-        [TestCase(2003, "GhostOnion")]
-        [TestCase(2004, "Apple")]
-        public void PrefabContainsAllOrderedFramesAndAnimationCompletionEvents(int configId, string folder)
+        [TestCase(2001, "Spinach", 55)]
+        [TestCase(2002, "FrozenCan", 65)]
+        [TestCase(2003, "GhostOnion", 72)]
+        [TestCase(2004, "Apple", 65)]
+        public void PrefabContainsAllOrderedFramesAndAnimationCompletionEvents(int configId, string folder, int deathFrameCount)
         {
             var config = _tables.TbEnemy.Get(configId);
             Assert.IsEmpty(config.BuffId);
@@ -143,7 +143,8 @@ namespace GameLogic.Tests
                 var keys = AnimationUtility.GetObjectReferenceCurve(clip, binding);
                 Assert.GreaterOrEqual(keys.Length, 2);
                 if (names[i] == "Move" || names[i] == "Death")
-                    Assert.AreEqual(6, keys.Select(k => k.value).Distinct().Count());
+                    Assert.AreEqual(names[i] == "Death" ? deathFrameCount : 6,
+                        keys.Select(k => k.value).Distinct().Count());
                 for (var k = 0; k < keys.Length; k++)
                 {
                     Assert.IsInstanceOf<Sprite>(keys[k].value);

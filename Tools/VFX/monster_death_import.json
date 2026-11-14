@@ -1,0 +1,43 @@
+{
+  "monsters": [
+    {
+      "key": "Spinach",
+      "prefabName": "SpinachEnemy",
+      "animationName": "SpinachEnemy",
+      "frameCount": 55,
+      "frameRate": 50,
+      "frameWidth": 384,
+      "frameHeight": 260,
+      "pivotX": 0.5243445692883895,
+      "pivotY": 0.16351944684528957,
+      "pixelsPerUnit": 266.0674157303371,
+      "completionTime": 1.1
+    },
+    {
+      "key": "FrozenCan",
+      "prefabName": "ExpiredCanEnemy",
+      "animationName": "FrozenCanEnemy",
+      "frameCount": 65,
+      "frameRate": 50,
+      "frameWidth": 384,
+      "frameHeight": 236,
+      "pivotX": 0.5,
+      "pivotY": 0.10762711864406782,
+      "pixelsPerUnit": 240.0,
+      "completionTime": 1.3
+    },
+    {
+      "key": "GhostOnion",
+      "prefabName": "GhostOnionEnemy",
+      "animationName": "GhostOnionEnemy",
+      "frameCount": 72,
+      "frameRate": 50,
+      "frameWidth": 384,
+      "frameHeight": 368,
+      "pivotX": 0.48104956268221577,
+      "pivotY": 0.07212574470782106,
+      "pixelsPerUnit": 414.2274052478134,
+      "completionTime": 1.44
+    }
+  ]
+}
