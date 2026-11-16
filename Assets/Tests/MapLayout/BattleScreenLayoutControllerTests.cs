@@ -50,7 +50,15 @@ namespace GameLogic.Tests
             Set(_layout, "_opponentBoard", _opponent);
             Set(_layout, "_playerFixedRenderers", new[] { Fixed("PlayerTower", new Vector3(2.5f, -1.3f, 0)) });
             Set(_layout, "_opponentFixedRenderers", new[] { Fixed("OpponentTower", new Vector3(-2.5f, 1.3f, 0)) });
-            _panel = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/MainCombat/MainCombatUI.prefab"));
+            _panel = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/MainCombat/MainCombatUI.prefab"));
+            var uiCamera = Child("UICamera").AddComponent<Camera>();
+            uiCamera.orthographic = true;
+            uiCamera.depth = 2;
+            uiCamera.cullingMask = LayerMask.GetMask("UI");
+            var canvas = _panel.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = uiCamera;
+            canvas.planeDistance = 100;
             _window = new MainCombatUI();
             typeof(UIWindow).GetField("_panel", PRIVATE).SetValue(_window, _panel);
             typeof(UIWindow).GetField("_canvas", PRIVATE).SetValue(_window, _panel.GetComponent<Canvas>());
@@ -117,16 +125,21 @@ namespace GameLogic.Tests
         {
             var originalClear = _camera.clearFlags;
             var originalMask = _camera.cullingMask;
-            Set(_layout, "_battleBackground", _sprite);
+            var background = Child("BattleBackground").AddComponent<SpriteRenderer>();
+            background.sprite = _sprite;
+            background.gameObject.layer = LayerMask.NameToLayer("BattleBackground");
+            background.sortingOrder = -10000;
+            Set(_layout, "_battleBackgroundRenderer", background);
             yield return _layout.BindAsync(_window, CancellationToken.None).ToCoroutine();
 
-            var backgroundCamera = _root.transform.Find("BattleBackgroundCamera").GetComponent<Camera>();
-            var background = backgroundCamera.GetComponentInChildren<SpriteRenderer>();
+            Assert.IsNull(_root.transform.Find("BattleBackgroundCamera"), "背景应使用场景对象与已有全屏绘制相机。");
+
+            var backgroundCamera = _root.transform.Find("BattleInfoCamera").GetComponent<Camera>();
             var backgroundMask = 1 << background.gameObject.layer;
             Assert.AreEqual(CameraClearFlags.Depth, _camera.clearFlags);
             Assert.AreEqual(CameraClearFlags.Depth, _layout.OpponentCamera.clearFlags);
             Assert.AreEqual(CameraClearFlags.SolidColor, backgroundCamera.clearFlags);
-            Assert.AreEqual(backgroundMask, backgroundCamera.cullingMask);
+            Assert.AreEqual(backgroundMask | LayerMask.GetMask("BattleInfo"), backgroundCamera.cullingMask);
             Assert.AreEqual(0, _camera.cullingMask & backgroundMask);
             Assert.AreEqual(0, _layout.OpponentCamera.cullingMask & backgroundMask);
             Assert.Less(backgroundCamera.depth, _camera.depth);
@@ -137,14 +150,23 @@ namespace GameLogic.Tests
             Assert.GreaterOrEqual(max.x, 0.999f);
             Assert.GreaterOrEqual(max.y, 0.999f);
             Assert.That(min.z, Is.InRange(backgroundCamera.nearClipPlane, backgroundCamera.farClipPlane));
+            Assert.AreEqual(-10000, background.sortingOrder);
+            Assert.AreSame(_root.transform, background.transform.parent, "背景保留场景层级，不挂到摄像机下。");
+            typeof(BattleScreenLayoutController).GetMethod("SetInformationVisible", PRIVATE).Invoke(_layout, new object[] { false });
+            Assert.IsFalse(background.enabled);
+            typeof(BattleScreenLayoutController).GetMethod("SetInformationVisible", PRIVATE).Invoke(_layout, new object[] { true });
+            Assert.IsTrue(background.enabled);
 
             _layout.Unbind();
             Assert.AreEqual(originalClear, _camera.clearFlags);
             Assert.AreEqual(originalMask, _camera.cullingMask);
+            Assert.IsNotNull(background, "解除绑定时不能销毁场景背景。");
+            Assert.IsFalse(background.enabled);
             Assert.IsNull(_root.transform.Find("BattleBackgroundCamera"));
             yield return _layout.BindAsync(_window, CancellationToken.None).ToCoroutine();
             Assert.AreEqual(1, _root.GetComponentsInChildren<SpriteRenderer>()
                 .Count(renderer => renderer.gameObject.layer == LayerMask.NameToLayer("BattleBackground")));
+            Assert.IsNull(_root.transform.Find("BattleBackgroundCamera"));
         }
 
         [UnityTest]

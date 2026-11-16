@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace GameLogic
 {
-    /// <summary>信息栏独立绘制在环境背景之后、战场之前，让传送带上的敌人可以覆盖信息栏。</summary>
+    /// <summary>背景与信息栏共用全屏绘制通道；战场随后绘制，让传送带上的敌人可以覆盖信息栏。</summary>
     internal sealed class BattleInfoRenderLayer : IDisposable
     {
         private readonly RectTransform _info;
@@ -18,9 +18,17 @@ namespace GameLogic
         private readonly Canvas _canvas;
         private readonly GraphicRaycaster _raycaster;
         private readonly Camera _camera;
+        private readonly SpriteRenderer _background;
+        private readonly Color _clearColor;
         private bool _disposed;
 
+        public Camera Camera => _camera;
+
         public BattleInfoRenderLayer(RectTransform info, Canvas sourceCanvas, Camera uiCamera, Transform cameraParent, float depth)
+            : this(info, sourceCanvas, uiCamera, cameraParent, depth, null, Color.black) { }
+
+        public BattleInfoRenderLayer(RectTransform info, Canvas sourceCanvas, Camera uiCamera, Transform cameraParent,
+            float depth, SpriteRenderer background, Color clearColor)
         {
             var layer = LayerMask.NameToLayer("BattleInfo");
             if (info == null || sourceCanvas == null || uiCamera == null || layer < 0)
@@ -32,6 +40,8 @@ namespace GameLogic
             _sourceCanvas = sourceCanvas;
             _uiCamera = uiCamera;
             _depth = depth;
+            _background = background;
+            _clearColor = clearColor;
             _camera = new GameObject("BattleInfoCamera", typeof(Camera)).GetComponent<Camera>();
             _camera.enabled = false;
             _camera.transform.SetParent(cameraParent, false);
@@ -63,12 +73,15 @@ namespace GameLogic
             _camera.CopyFrom(_uiCamera);
             _camera.transform.SetPositionAndRotation(_uiCamera.transform.position, _uiCamera.transform.rotation);
             _camera.cullingMask = 1 << _canvas.gameObject.layer;
-            _camera.clearFlags = CameraClearFlags.Depth;
+            if (_background != null) _camera.cullingMask |= 1 << _background.gameObject.layer;
+            _camera.clearFlags = _background != null ? CameraClearFlags.SolidColor : CameraClearFlags.Depth;
+            _camera.backgroundColor = _clearColor;
             _camera.depth = _depth;
             var enabled = visible && _originalParent.gameObject.activeInHierarchy;
             _canvas.enabled = enabled;
             _raycaster.enabled = enabled;
             _camera.enabled = enabled;
+            if (_background != null) _background.enabled = enabled;
         }
 
         public void Dispose()
@@ -78,6 +91,7 @@ namespace GameLogic
             _camera.enabled = false;
             _canvas.enabled = false;
             _raycaster.enabled = false;
+            if (_background != null) _background.enabled = false;
             foreach (var pair in _originalLayers)
                 if (pair.Key != null) pair.Key.layer = pair.Value;
             if (_info != null && _originalParent != null)

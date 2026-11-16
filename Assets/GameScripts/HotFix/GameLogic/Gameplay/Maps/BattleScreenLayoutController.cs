@@ -118,8 +118,6 @@ namespace GameLogic
                 _placement?.CancelDrag();
                 if (_placement != null) _placement.ClearScreenViews();
                 DestroyCamera(ref _opponentCamera);
-                DestroyCamera(ref _backgroundCamera);
-                _backgroundRenderer = null;
                 if (_sceneCamera != null)
                 {
                     _sceneCamera.transform.position = _originalPosition;
@@ -133,6 +131,11 @@ namespace GameLogic
             _sceneCamera = null;
             _availableScreenRect = default;
             _layout = default;
+        }
+
+        private void Awake()
+        {
+            if (_battleBackgroundRenderer != null) _battleBackgroundRenderer.enabled = false;
         }
 
         private static Bounds CalculateBounds(PlacementBoardView board, SpriteRenderer[] renderers)
