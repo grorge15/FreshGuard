@@ -12,11 +12,14 @@ namespace GameLogic.Tests
             var snapshot = new MatchAssistSnapshot(new[]
             {
                 new MatchBuff(1802, "加速", "speed", 2, midnight.UtcTicks),
-                new MatchBuff(1803, "增伤", "damage", 1, midnight.AddDays(1).UtcTicks)
-            }, new[] { new MatchBuff(1804, "玻璃", "glass", 1), new MatchBuff(1805, "暴走", "rage", 1) }, midnight);
+                new MatchBuff(1803, "增伤", "damage", 1, midnight.AddDays(1).UtcTicks, MysteriousStoreQuality.Purple)
+            }, new[] { new MatchBuff(1804, "玻璃", "glass", 1, quality: MysteriousStoreQuality.Orange),
+                new MatchBuff(1805, "暴走", "rage", 1) }, midnight);
             Assert.That(snapshot.PlayerBuffs.Count, Is.EqualTo(1));
             Assert.That(snapshot.PlayerBuffs[0].BuffId, Is.EqualTo(1803));
             Assert.That(snapshot.OpponentBuffs.Count, Is.EqualTo(1));
+            Assert.That(snapshot.PlayerBuffs[0].Quality, Is.EqualTo(MysteriousStoreQuality.Purple));
+            Assert.That(snapshot.OpponentBuffs[0].Quality, Is.EqualTo(MysteriousStoreQuality.Orange));
         }
 
         [Test]

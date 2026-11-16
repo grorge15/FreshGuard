@@ -11,10 +11,13 @@ namespace GameLogic
         public string IconLocation { get; }
         public int Layers { get; }
         public long ExpiresUtcTicks { get; }
-        public MatchBuff(int id, string name, string iconLocation, int layers, long expiresUtcTicks = long.MaxValue)
+        public MysteriousStoreQuality Quality { get; }
+        public MatchBuff(int id, string name, string iconLocation, int layers, long expiresUtcTicks = long.MaxValue,
+            MysteriousStoreQuality quality = MysteriousStoreQuality.Green)
         {
             if (id <= 0 || layers <= 0) throw new ArgumentOutOfRangeException(nameof(id));
             BuffId = id; Name = name; IconLocation = iconLocation; Layers = layers; ExpiresUtcTicks = expiresUtcTicks;
+            Quality = quality;
         }
     }
     /// <summary>放行开战时复制有效助力，已开战后不再按墙上时间撤销。</summary>
@@ -27,12 +30,12 @@ namespace GameLogic
             var carried = new List<MatchBuff>();
             foreach (var buff in player ?? throw new ArgumentNullException(nameof(player)))
                 if (buff.ExpiresUtcTicks > now.UtcTicks)
-                    carried.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, buff.Layers, buff.ExpiresUtcTicks));
+                    carried.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, buff.Layers, buff.ExpiresUtcTicks, buff.Quality));
             var enemies = new List<MatchBuff>();
             foreach (var buff in opponent ?? throw new ArgumentNullException(nameof(opponent)))
             {
                 if (enemies.Count >= carried.Count) break;
-                enemies.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1));
+                enemies.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1, quality: buff.Quality));
             }
             PlayerBuffs = carried.AsReadOnly(); OpponentBuffs = enemies.AsReadOnly();
         }
@@ -51,7 +54,7 @@ namespace GameLogic
             {
                 var index = CheckedInt(random, pool.Count);
                 var buff = pool[index];
-                result.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1));
+                result.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1, quality: buff.Quality));
                 pool.RemoveAt(index);
             }
             return result.AsReadOnly();
@@ -112,14 +115,14 @@ namespace GameLogic
                 foreach (var buff in unlockedBuffs)
                 {
                     if (buff == null || !unlockedIds.Add(buff.BuffId)) throw new ArgumentException("真实助力目录重复或无效。");
-                    unlocked.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1));
+                    unlocked.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, 1, quality: buff.Quality));
                 }
                 seen.Clear();
                 foreach (var buff in carriedBuffs)
                 {
                     if (buff == null || !unlockedIds.Contains(buff.BuffId) || !seen.Add(buff.BuffId))
                         throw new ArgumentException("真实携带助力不属于可用目录或重复。");
-                    carried.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, buff.Layers, buff.ExpiresUtcTicks));
+                    carried.Add(new MatchBuff(buff.BuffId, buff.Name, buff.IconLocation, buff.Layers, buff.ExpiresUtcTicks, buff.Quality));
                 }
             }
             else

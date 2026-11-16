@@ -52,14 +52,14 @@ namespace GameLogic
                 if (held.IsExpired(now) || !catalog.TryGetValue(held.BuffId, out var offer)) continue;
                 if (held.Level > offer.MaxLevel)
                     throw new InvalidOperationException("持有助力超过配置最高等级：" + held.BuffId);
-                result.Add(new MatchBuff(held.BuffId, offer.Name, offer.IconLocation, held.Level, held.ExpiresUtcTicks));
+                result.Add(new MatchBuff(held.BuffId, offer.Name, offer.IconLocation, held.Level, held.ExpiresUtcTicks, offer.Quality));
             }
             return result.AsReadOnly();
         }
 
         public static IReadOnlyList<MatchBuff> UnlockedMatchBuffs(Tables tables) => FromTables(tables)
             .Where(offer => !offer.IsInstantReward).GroupBy(offer => offer.BuffId)
-            .Select(group => group.First()).Select(offer => new MatchBuff(offer.BuffId, offer.Name, offer.IconLocation, 1))
+            .Select(group => group.First()).Select(offer => new MatchBuff(offer.BuffId, offer.Name, offer.IconLocation, 1, quality: offer.Quality))
             .ToList().AsReadOnly();
 
         private static MysteriousStoreQuality Quality(int value)

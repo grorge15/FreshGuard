@@ -42,6 +42,12 @@ namespace GameLogic.Tests
             Assert.That(offers.Single(offer => offer.GoodsId == 1802).HasLevel, Is.True);
             CollectionAssert.AreEquivalent(new[] { 1801, 1802, 1803, 1804, 1805 },
                 AssistConfigAdapter.UnlockedMatchBuffs(tables).Select(buff => buff.BuffId));
+            var player = Player();
+            player.ReplaceHeldAssists(offers.Where(offer => !offer.IsInstantReward)
+                .Select((offer, slot) => Held(offer.BuffId, slot: slot)));
+            foreach (var buff in AssistConfigAdapter.UnlockedMatchBuffs(tables)
+                .Concat(AssistConfigAdapter.ToMatchBuffs(player, tables, Noon)))
+                Assert.That(buff.Quality, Is.EqualTo(offers.Single(offer => offer.BuffId == buff.BuffId).Quality));
         }
 
         [Test]

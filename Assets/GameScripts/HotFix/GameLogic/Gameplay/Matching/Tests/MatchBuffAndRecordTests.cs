@@ -13,7 +13,11 @@ namespace GameLogic.Tests
             public int NextInt(int max) => _values.Dequeue();
             public double NextDouble() => throw new InvalidOperationException();
         }
-        private static MatchBuff[] Pool() => new[] {new MatchBuff(1,"a","a",9),new MatchBuff(2,"b","b",7),new MatchBuff(3,"c","c",1)};
+        private static MatchBuff[] Pool() => new[] {
+            new MatchBuff(1,"a","a",9, quality: MysteriousStoreQuality.Green),
+            new MatchBuff(2,"b","b",7, quality: MysteriousStoreQuality.Purple),
+            new MatchBuff(3,"c","c",1, quality: MysteriousStoreQuality.Orange)
+        };
         [Test] public void ZeroPlayerKindsConsumesNoRandomAndCarriesNothing()
             => Assert.That(MatchBuffGenerator.Draw(Pool(),0,new Sequence()),Is.Empty);
         [Test] public void InclusiveMaximumSelectsAllKindsWithoutReplacementAndOneLayer()
@@ -21,6 +25,9 @@ namespace GameLogic.Tests
             var buffs = MatchBuffGenerator.Draw(Pool(),3,new Sequence(2,2,0,0));
             Assert.That(buffs.Select(x=>x.BuffId),Is.EqualTo(new[]{3,1,2}));
             Assert.That(buffs.All(x=>x.Layers==1),Is.True);
+            Assert.That(buffs.Select(x=>x.Quality),Is.EqualTo(new[] {
+                MysteriousStoreQuality.Orange, MysteriousStoreQuality.Green, MysteriousStoreQuality.Purple
+            }));
         }
         [Test] public void CanDrawUnlockedBuffNotCarriedByPlayer()
             => Assert.That(MatchBuffGenerator.Draw(Pool(),1,new Sequence(0,2))[0].BuffId,Is.EqualTo(3));
