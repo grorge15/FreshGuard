@@ -20,6 +20,7 @@ namespace GameLogic
         public long LastEnergyUpdateUtcTicks;
         public string EntryId;
         public string EntryPhase;
+        public int EntryEnergyBeforeSpend;
         public BattleRewardRules EntryRules;
         public BattleSettlementRecord Settlement;
         public List<HeldAssistRecord> HeldAssists = new List<HeldAssistRecord>();
@@ -49,7 +50,7 @@ namespace GameLogic
             {
                 Version = Version, Energy = Energy, Coins = Coins, Trophies = Trophies,
                 PlayerName = PlayerName, LastEnergyUpdateUtcTicks = LastEnergyUpdateUtcTicks,
-                EntryId = EntryId, EntryPhase = EntryPhase,
+                EntryId = EntryId, EntryPhase = EntryPhase, EntryEnergyBeforeSpend = EntryEnergyBeforeSpend,
                 // 候选存档保留杯数账目，并与当前记录隔离可变的结算数据。
                 EntryRules = EntryRules == null ? null :
                     JsonUtility.FromJson<BattleRewardRules>(JsonUtility.ToJson(EntryRules)),
@@ -65,6 +66,7 @@ namespace GameLogic
             if (string.IsNullOrEmpty(entryId)) throw new ArgumentException("缺少入场标识。", nameof(entryId));
             state.Refresh(now);
             if (!state.TrySpendEnergy(MainMenuPlayerState.DefaultEnergyCost)) throw new InvalidOperationException("当前体力不足");
+            EntryEnergyBeforeSpend = state.Energy + MainMenuPlayerState.DefaultEnergyCost;
             EntryId = entryId; EntryPhase = "Matching"; EntryRules = null; Settlement = null; Capture(state);
         }
         public void CommitSuccess(string entryId)
@@ -75,14 +77,14 @@ namespace GameLogic
         public bool RefundMatching(MainMenuPlayerState state, DateTimeOffset now)
         {
             if (EntryPhase != "Matching") return false;
-            state.Refresh(now); state.AddEnergy(MainMenuPlayerState.DefaultEnergyCost);
+            state.Refresh(now); state.RefundEnergy(MainMenuPlayerState.DefaultEnergyCost, EntryEnergyBeforeSpend);
             EntryPhase = "Refunded"; Capture(state);
             return true;
         }
         public bool RefundFailure(MainMenuPlayerState state, string entryId, DateTimeOffset now)
         {
             if (EntryId != entryId || (EntryPhase != "Matching" && EntryPhase != "Success")) return false;
-            state.Refresh(now); state.AddEnergy(MainMenuPlayerState.DefaultEnergyCost);
+            state.Refresh(now); state.RefundEnergy(MainMenuPlayerState.DefaultEnergyCost, EntryEnergyBeforeSpend);
             EntryPhase = "Refunded"; Capture(state); return true;
         }
 

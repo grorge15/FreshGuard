@@ -30,6 +30,28 @@ namespace GameLogic.Tests
     }
     public sealed class MatchRecordTests
     {
+        [TestCase(31, false)]
+        [TestCase(34, false)]
+        [TestCase(35, false)]
+        [TestCase(40, false)]
+        [TestCase(31, true)]
+        [TestCase(34, true)]
+        [TestCase(35, true)]
+        [TestCase(40, true)]
+        public void MatchingRefundPreservesPurchasedOverflowAfterRestart(int energy, bool loading)
+        {
+            var state = new MainMenuPlayerState(energy, TimeSpan.FromMinutes(5), 30, 0, 2500, DateTimeOffset.UtcNow);
+            var record = new MatchPlayerRecord();
+            record.BeginEntry(state, "supply-entry", DateTimeOffset.UtcNow);
+            Assert.That(state.Energy, Is.EqualTo(energy - 5));
+            if (loading) record.CommitSuccess("supply-entry");
+            record = UnityEngine.JsonUtility.FromJson<MatchPlayerRecord>(UnityEngine.JsonUtility.ToJson(record.Copy()));
+            state = record.Restore(30, TimeSpan.FromMinutes(5), DateTimeOffset.UtcNow);
+            record.RecoverPending(state, DateTimeOffset.UtcNow);
+            record.RecoverPending(state, DateTimeOffset.UtcNow);
+            Assert.That(state.Energy, Is.EqualTo(energy));
+        }
+
         [Test] public void RestartRefundsMatchingEntryOnlyOnceAndAtCapacity()
         {
             var type=Type.GetType("GameLogic.MatchPlayerRecord, GameLogic");
