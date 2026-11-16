@@ -31,17 +31,25 @@ namespace GameLogic
     }
     public sealed class MatchBuffWidget : UIWidget
     {
+        private readonly GameObject[] _frames = new GameObject[4];
         private Image _icon;
         private Text _layers;
         protected override void ScriptGenerator()
         {
+            for (var i = 0; i < _frames.Length; i++)
+                _frames[i] = transform.Find("m_img_Frame" + (MysteriousStoreQuality)i).gameObject;
             _icon=FindChildComponent<Image>("m_img_Icon");
             _layers=FindChildComponent<Text>("m_text_Layers");
         }
         public void Render(MatchBuff buff)
         {
-            _layers.text="×"+buff.Layers;
-            _icon.SetSprite(buff.IconLocation,cancellationToken:gameObject.GetCancellationTokenOnDestroy());
+            for (var i = 0; i < _frames.Length; i++) _frames[i].SetActive(i == (int)buff.Quality);
+            var showLevel = buff.Layers > 1;
+            _layers.text = showLevel ? buff.Layers + "级" : string.Empty;
+            _layers.gameObject.SetActive(showLevel);
+            _icon.enabled = !string.IsNullOrEmpty(buff.IconLocation);
+            if (_icon.enabled)
+                _icon.SetSprite(buff.IconLocation,cancellationToken:gameObject.GetCancellationTokenOnDestroy());
         }
     }
 }

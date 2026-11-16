@@ -71,14 +71,15 @@ namespace GameLogic.Tests
                     Assert.AreEqual(row.Id == 1603 ? 1f : 1.2f, bullet.ArcHeight);
                     continue;
                 }
-                Assert.AreEqual("RobotBullet", bullet.Prefab);
-                if (row.Id == 1501 || row.Id == 1502)
+                Assert.AreEqual(row.Id == 1505 ? "FrostIcicleBullet" : "RobotBullet", bullet.Prefab);
+                if (row.Id == 1505) Assert.AreEqual(3503, bullet.Id);
+                if (row.Id == 1501 || row.Id == 1502 || row.Id == 1505)
                 {
                     Assert.AreEqual(BulletFlightType.Straight, bullet.FlightType);
                     Assert.IsFalse(bullet.TrackTarget);
-                    Assert.AreEqual(row.Id == 1501 ? BulletHitMode.FirstEnemy : BulletHitMode.PierceEnemies, bullet.HitMode);
+                    Assert.AreEqual(row.Id == 1502 ? BulletHitMode.PierceEnemies : BulletHitMode.FirstEnemy, bullet.HitMode);
                     Assert.AreEqual(10f, bullet.Speed);
-                    Assert.AreEqual(0.1f, bullet.HitRadius);
+                    Assert.AreEqual(row.Id == 1505 ? 0f : 0.1f, bullet.HitRadius);
                 }
                 else
                 {

@@ -65,8 +65,8 @@ namespace GameLogic.EditorTools
                 timer.rectTransform.sizeDelta=new Vector2(700,160);
                 var robotRect=(RectTransform)root.transform.Find("m_rect_Matching/m_img_Robot");
                 robotRect.anchoredPosition=new Vector2(0,-175);robotRect.sizeDelta=new Vector2(900,725);
-                foreach(var label in root.GetComponentsInChildren<Text>(true))
-                    if(label.name=="m_text_Layers")label.rectTransform.sizeDelta=new Vector2(48,40);
+                foreach (var item in root.GetComponentsInChildren<RectTransform>(true))
+                    if (item.name == "m_item_BuffTemplate") ConfigureBuffTemplate(item);
                 // 独立预览Canvas会驱动根Rect为零，须作为临时Canvas的子节点保存。
                 var rootRect=(RectTransform)root.transform;
                 rootRect.pivot=Vector2.one*.5f;
@@ -99,8 +99,96 @@ namespace GameLogic.EditorTools
             grid.cellSize=new Vector2(64,72); grid.spacing=new Vector2(4,4); grid.childAlignment=TextAnchor.UpperCenter;
             var template=Rect(slots,"m_item_BuffTemplate",Vector2.zero,new Vector2(64,72));
             Image(template,"m_img_Icon",null,new Vector2(0,7),new Vector2(52,52));
-            Text(template,"m_text_Layers","×1",new Vector2(11,-22),new Vector2(48,40),22,Color.white,true);
+            Text(template,"m_text_Layers",string.Empty,Vector2.zero,new Vector2(56,34),20,Color.white,true);
             template.gameObject.SetActive(false);
+        }
+        public static void ConfigureBuffTemplate(Transform template)
+        {
+            var slots = (RectTransform)template.parent;
+            var grid = slots.GetComponent<GridLayoutGroup>();
+            var matching = slots.parent.name == "m_item_Player" || slots.parent.name == "m_item_Opponent";
+            var edge = matching ? 72f : 64f;
+            var gap = matching ? 12f : 10f;
+            slots.anchorMin = slots.anchorMax = slots.pivot = Vector2.one * .5f;
+            slots.localScale = Vector3.one;
+            slots.sizeDelta = new Vector2(edge * 3f + gap * 2f, edge * 2f + gap);
+            grid.cellSize = new Vector2(edge, edge);
+            grid.spacing = new Vector2(gap, gap);
+            grid.padding = new RectOffset();
+            grid.childAlignment = TextAnchor.UpperCenter;
+            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 3;
+            ((RectTransform)template).sizeDelta = grid.cellSize;
+            if (matching)
+            {
+                slots.anchoredPosition = new Vector2(0, -394);
+                foreach (var tipName in new[] { "m_img_TipIcon", "m_text_Tip" })
+                {
+                    var tip = (RectTransform)slots.parent.parent.Find(tipName);
+                    tip.localPosition = new Vector3(tip.localPosition.x, -780, tip.localPosition.z);
+                }
+            }
+            else
+            {
+                slots.anchoredPosition = new Vector2(0, -251);
+                // 两排助力图标放在资料卡下方，奖励区与按钮同步下移留出间距。
+                var content = slots.parent.parent;
+                ((RectTransform)content.Find("m_rect_Rewards")).anchoredPosition = new Vector2(0, -372);
+                foreach (var buttonName in new[] { "m_btn_DoubleReward", "m_btn_ReturnMain" })
+                {
+                    var button = (RectTransform)content.Find(buttonName);
+                    button.anchoredPosition = new Vector2(button.anchoredPosition.x, -567);
+                }
+            }
+            var icon = template.Find("m_img_Icon").GetComponent<Image>();
+            foreach (MysteriousStoreQuality quality in Enum.GetValues(typeof(MysteriousStoreQuality)))
+            {
+                var frameName = "m_img_Frame" + quality;
+                var existing = template.Find(frameName);
+                var frame = existing != null ? existing.GetComponent<Image>() :
+                    Image(template, frameName, null, Vector2.zero, new Vector2(edge, edge));
+                frame.rectTransform.anchorMin = frame.rectTransform.anchorMax = frame.rectTransform.pivot = Vector2.one * .5f;
+                frame.rectTransform.anchoredPosition = Vector2.zero;
+                frame.rectTransform.sizeDelta = new Vector2(edge, edge);
+                frame.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
+                    "Assets/AssetRaw/UI/UISprites/MysteriousStore/shopIcon/Shop_BuffFrame" + quality + ".png");
+                if (frame.sprite == null) throw new InvalidOperationException("缺少助力品质底框：" + quality);
+                frame.color = Color.white;
+                frame.preserveAspect = true;
+                frame.raycastTarget = false;
+                frame.transform.SetSiblingIndex((int)quality);
+                frame.gameObject.SetActive(quality == MysteriousStoreQuality.Green);
+            }
+            icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = icon.rectTransform.pivot = Vector2.one * .5f;
+            icon.rectTransform.anchoredPosition = Vector2.zero;
+            icon.rectTransform.sizeDelta = new Vector2(edge - 8f, edge - 8f);
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            icon.transform.SetAsLastSibling();
+            var level = template.Find("m_text_Layers").GetComponent<Text>();
+            level.rectTransform.anchorMin = level.rectTransform.anchorMax = level.rectTransform.pivot = new Vector2(1, 0);
+            level.rectTransform.anchoredPosition = new Vector2(-4, 4);
+            level.rectTransform.sizeDelta = new Vector2(edge - 8f, 34);
+            level.text = string.Empty;
+            level.color = Color.white;
+            level.alignment = TextAnchor.LowerRight;
+            level.alignByGeometry = true;
+            level.fontSize = 20;
+            level.resizeTextForBestFit = true;
+            level.resizeTextMinSize = 16;
+            level.resizeTextMaxSize = 20;
+            level.horizontalOverflow = HorizontalWrapMode.Wrap;
+            level.verticalOverflow = VerticalWrapMode.Truncate;
+            level.raycastTarget = false;
+            var outline = level.GetComponent<Outline>();
+            if (outline == null) outline = level.gameObject.AddComponent<Outline>();
+            outline.effectColor = Color.black;
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            outline.useGraphicAlpha = true;
+            level.transform.SetAsLastSibling();
+            level.gameObject.SetActive(false);
         }
         private static RectTransform Rect(Transform parent,string name,Vector2 position,Vector2 size)
         {
