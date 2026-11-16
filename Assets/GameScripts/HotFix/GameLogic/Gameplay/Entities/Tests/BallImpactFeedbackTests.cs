@@ -35,6 +35,52 @@ namespace GameLogic.Tests
         public void TearDown() { if (_root != null) Object.DestroyImmediate(_root); }
 
         [Test]
+        public void BallWithoutAuthoredParticleNodeStillSupportsOrdinaryImpacts()
+        {
+            var copy = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/AssetRaw/Actor/Prefabs/PhysicsPrefabs/PhysicalCollisionBall.prefab"));
+            try
+            {
+                Object.DestroyImmediate(copy.transform.Find("BerserkBallImpacts").gameObject);
+                var ball = copy.GetComponent<PhysicalCollisionBall>();
+                typeof(PhysicalCollisionBall).GetMethod("Awake", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(ball, null);
+                var feedback = copy.GetComponent<BallImpactFeedback>();
+                Assert.IsTrue(feedback.IsReady, "缺少可选星芒节点不能禁用普通碰撞表现。");
+                ball.GlobalValueProvider = key => 0f;
+                ball.BindBattle(2, BattleSide.Player, () => true);
+                ball.LaunchAt(Vector2.zero, 45f);
+                feedback.PlayWall(Vector2.zero, Vector2.up);
+                Assert.Greater(copy.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh.vertexCount, 0);
+            }
+            finally { Object.DestroyImmediate(copy); }
+        }
+
+        [Test]
+        public void BerserkStarsEmitWorldParticlesWithoutRebuildingImpactMesh()
+        {
+            _ball.SetBerserk(true);
+            var point = new Vector2(0.35f, 0.28f);
+            _feedback.PlayRobot(point, Vector2.up);
+            var particles = _root.GetComponentsInChildren<ParticleSystem>(true)
+                .SingleOrDefault(system => system.name == "BerserkBallImpacts");
+            Assert.IsNotNull(particles, "暴走星芒应使用预建的粒子系统。");
+            Assert.AreEqual(1, particles.particleCount);
+            Assert.IsTrue(particles.isPaused, "禁止 Emit 恢复自动模拟，动画只由战斗时间推进。");
+            var mesh = _root.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh;
+            Assert.AreEqual(0, mesh.vertexCount, "暴走碰撞不能再构建星芒网格。");
+            _feedback.Advance(0.08f);
+            var buffer = new ParticleSystem.Particle[16];
+            Assert.AreEqual(1, particles.GetParticles(buffer));
+            Assert.Less(Vector3.Distance(buffer[0].position, point), 0.00001f);
+            _root.transform.position += Vector3.right * 3f;
+            _feedback.Advance(0f);
+            particles.GetParticles(buffer);
+            Assert.Less(Vector3.Distance(buffer[0].position, point), 0.00001f,
+                "球移动后星芒必须留在世界碰撞点。");
+            Assert.AreEqual(0, mesh.vertexCount);
+        }
+
+        [Test]
         public void GlassBurstSurvivesFreezeThenExpiresWithoutChangingBallPhysics()
         {
             var body = _ball.GetComponent<Rigidbody2D>();
@@ -118,29 +164,26 @@ namespace GameLogic.Tests
             var scale = _ball.transform.localScale;
             _feedback.PlayRobot(point, Vector2.left);
             _feedback.Advance(0.08f);
-            var node = _root.transform.Find("GoldenBallImpacts");
-            var mesh = node.GetComponent<MeshFilter>().sharedMesh;
-            var world = mesh.vertices.Select(node.TransformPoint).ToArray();
-            Assert.Greater(world.Length, 0);
-            Assert.IsTrue(mesh.colors32.Any(color => color.r > 240 && color.b > 100 && color.g < 100), "应包含示意中的粉色星芒。");
-            Assert.IsTrue(mesh.colors32.Any(color => color.r > 240 && color.g > 230 && color.b > 180), "应保留亮色内芯。");
-            Assert.IsTrue(world.All(vertex => Vector2.Distance(vertex, point) < _ball.WorldRadius * 4.1f));
+            var particles = _root.transform.Find("BerserkBallImpacts").GetComponent<ParticleSystem>();
+            var buffer = new ParticleSystem.Particle[16];
+            Assert.AreEqual(1, particles.GetParticles(buffer));
+            var initial = buffer[0];
+            Assert.Less(Vector2.Distance(initial.position, point), 0.00001f);
+            Assert.IsNotNull(particles.GetComponent<ParticleSystemRenderer>().sharedMaterial.mainTexture);
             _ball.transform.position += Vector3.right * 3f;
             _feedback.Advance(0f);
-            var movedWorld = mesh.vertices.Select(node.TransformPoint).ToArray();
-            for (var i = 0; i < world.Length; i++)
-                Assert.Less(Vector3.Distance(world[i], movedWorld[i]), 0.00001f, "球离开后，星芒应留在世界接触点。");
-            var vertices = mesh.vertices;
-            var colors = mesh.colors32;
+            Assert.AreEqual(1, particles.GetParticles(buffer));
+            Assert.AreEqual(initial.position, buffer[0].position, "球离开后，星芒应留在世界接触点。");
             _ball.SetFrozen(true);
             _feedback.Advance(10f);
-            CollectionAssert.AreEqual(vertices, mesh.vertices);
-            CollectionAssert.AreEqual(colors, mesh.colors32);
+            Assert.AreEqual(1, particles.GetParticles(buffer));
+            Assert.AreEqual(initial.remainingLifetime, buffer[0].remainingLifetime);
+            Assert.IsTrue(particles.isPaused);
             Assert.AreEqual(1, _feedback.ActiveBurstCount);
             _ball.SetFrozen(false);
             _feedback.Advance(BallImpactFeedback.BerserkDuration - 0.08f + 0.01f);
             Assert.AreEqual(0, _feedback.ActiveBurstCount);
-            Assert.IsFalse(node.GetComponent<MeshRenderer>().enabled);
+            Assert.AreEqual(0, particles.particleCount);
             Assert.AreEqual(velocity, _ball.GetComponent<Rigidbody2D>().velocity);
             Assert.AreEqual(scale, _ball.transform.localScale);
         }
@@ -158,8 +201,9 @@ namespace GameLogic.Tests
                 if (glass) _feedback.PlayGlass(Vector2.zero, Vector2.up);
                 else _feedback.PlayWall(Vector2.zero, Vector2.up);
                 _feedback.Advance(0.08f);
-                var mesh = _root.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh;
-                Assert.IsTrue(mesh.colors32.Any(color => color.b > color.r && color.b > color.g), "应有紫色碎光。");
+                var particles = _root.transform.Find("BerserkBallImpacts").GetComponent<ParticleSystem>();
+                Assert.AreEqual(1, particles.particleCount, "暴走撞墙和玻璃都应发射星芒粒子。");
+                Assert.AreEqual(0, _root.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh.vertexCount);
                 var after = Random.value;
                 Random.state = before;
                 Assert.AreEqual(Random.value, after);
@@ -167,12 +211,13 @@ namespace GameLogic.Tests
                 Assert.AreEqual(1, _feedback.ActiveBurstCount, "暴走星芒不能沿用普通墙体或玻璃的较短寿命。");
                 _feedback.Advance(0.04f);
                 Assert.AreEqual(0, _feedback.ActiveBurstCount);
+                Assert.AreEqual(0, particles.particleCount);
             }
             finally { Random.state = saved; }
         }
 
         [Test]
-        public void DenseBerserkStarsReuseMeshesAndStopReleasesAllBursts()
+        public void DenseBerserkStarsReuseParticlesAndStopReleasesAllBursts()
         {
             _ball.SetBerserk(true);
             for (var i = 0; i < 100; i++) _feedback.PlayRobot(Vector2.right * i * 0.001f, Vector2.up);
@@ -180,12 +225,16 @@ namespace GameLogic.Tests
             Assert.AreEqual(BallImpactFeedback.MaximumBursts, _feedback.ActiveBurstCount);
             Assert.AreEqual(2, _root.GetComponentsInChildren<MeshFilter>(true).Length);
             var mesh = _root.transform.Find("GoldenBallImpacts").GetComponent<MeshFilter>().sharedMesh;
-            Assert.Less(mesh.vertexCount, ushort.MaxValue, "密集暴走碰撞也必须保持在移动端16位网格索引范围内。");
-            Assert.IsTrue(mesh.vertices.All(vertex => !float.IsNaN(vertex.x) && !float.IsNaN(vertex.y) &&
-                !float.IsInfinity(vertex.x) && !float.IsInfinity(vertex.y)));
+            var particles = _root.transform.Find("BerserkBallImpacts").GetComponent<ParticleSystem>();
+            Assert.AreEqual(16, particles.particleCount, "密集碰撞应回收最旧粒子，为新星芒保留容量。");
+            var buffer = new ParticleSystem.Particle[16];
+            particles.GetParticles(buffer);
+            Assert.IsTrue(buffer.All(particle => particle.randomSeed >= 85u), "只保留最近16次碰撞。");
+            Assert.AreEqual(0, mesh.vertexCount, "密集暴走也不能生成星芒网格。");
             _ball.Stop();
             Assert.AreEqual(0, _feedback.ActiveBurstCount);
             Assert.AreEqual(0, mesh.vertexCount);
+            Assert.AreEqual(0, particles.particleCount);
         }
 
         [TestCase(false)]
@@ -235,10 +284,10 @@ namespace GameLogic.Tests
                     contact.Invoke(_ball, args);
                     Assert.IsTrue(_ball.IsBerserk);
                     Assert.AreEqual(1, _feedback.ActiveBurstCount, "达到50 Combo的那次接触就要绽放。");
-                    var impacts = _root.transform.Find("GoldenBallImpacts");
-                    var mesh = impacts.GetComponent<MeshFilter>().sharedMesh;
-                    var activation = mesh.vertices.Select(impacts.TransformPoint).ToArray();
-                    var activationRadius = activation.Max(vertex => Vector2.Distance(vertex, point));
+                    var particles = _root.transform.Find("BerserkBallImpacts").GetComponent<ParticleSystem>();
+                    var buffer = new ParticleSystem.Particle[16];
+                    Assert.AreEqual(1, particles.GetParticles(buffer));
+                    var activation = buffer[0];
                     contact.Invoke(_ball, args);
                     Assert.AreEqual(1, _feedback.ActiveBurstCount, "同一接触的重复回调不能叠加星芒。");
                     typeof(PhysicalCollisionBall).GetMethod("AdvanceContactTime", flags).Invoke(_ball,
@@ -249,12 +298,13 @@ namespace GameLogic.Tests
                     _ball.SetFrozen(false);
                     contact.Invoke(_ball, args);
                     Assert.AreEqual(2, _feedback.ActiveBurstCount, "持续接触按有效攻击间隔播放下一次星芒。");
-                    var combined = mesh.vertices.Select(impacts.TransformPoint).ToArray();
-                    Assert.AreEqual(activation.Length * 2, combined.Length);
-                    CollectionAssert.AreEqual(activation, combined.Take(activation.Length).ToArray(),
+                    Assert.AreEqual(2, particles.GetParticles(buffer));
+                    var original = buffer.First(particle => particle.randomSeed == activation.randomSeed);
+                    var followup = buffer.First(particle => particle.randomSeed != 0u && particle.randomSeed != activation.randomSeed);
+                    Assert.AreEqual(activation.startSize, original.startSize,
                         "后续小星芒不能改变50 Combo那次已播放的大星芒。");
-                    var followupRadius = combined.Skip(activation.Length).Max(vertex => Vector2.Distance(vertex, point));
-                    Assert.AreEqual(activationRadius * 0.5f, followupRadius, 0.00001f,
+                    Assert.AreEqual(activation.position, original.position);
+                    Assert.AreEqual(activation.startSize * 0.5f, followup.startSize, 0.00001f,
                         "暴走后续碰撞的特效尺寸应为触发瞬间的一半。");
                     _ball.Stop();
                 }
