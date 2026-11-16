@@ -19,11 +19,11 @@ namespace GameLogic
             }
         }
 
-        public static void PlayPurchasePulse() => PlayLightPulse(18, 48, 0.36f);
+        public static void PlayRepositionPulse() => PlayLightPulse(18, 48, 0.36f);
 
         public static void PlayBerserkStartPulse() => PlayLightPulse(25, 60, 0.48f);
 
-        public static void PlayMergePulse() => PlayLightPulse(35, 90, 0.55f);
+        public static void PlaySettingsPulse() => PlayLightPulse(35, 90, 0.55f);
 
         public static SlotRefreshHaptic BeginSlotRefresh()
         {
@@ -74,7 +74,7 @@ namespace GameLogic
         }
 
 #if UNITY_EDITOR
-        // 编辑器验证真实购买、合并与暴走事件，不调用设备马达。
+        // 编辑器验证真实摆放、刷新与暴走事件，不调用设备马达。
         internal static System.Action<int, int> LightPulseOverride { get; set; }
         internal static System.Action RefreshStopOverride { get; set; }
 #endif

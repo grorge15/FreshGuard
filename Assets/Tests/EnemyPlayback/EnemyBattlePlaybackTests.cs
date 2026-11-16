@@ -3,6 +3,7 @@ using System.Collections;
 using System.Reflection;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using TEngine;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -164,12 +165,12 @@ namespace GameLogic.Tests
                 var center = RectTransformUtility.WorldToScreenPoint(camera, ghost.TransformPoint(ghost.rect.center));
                 var board = host.PlayerGlass.GetComponentInParent<PlacementBoardView>();
                 var boardCamera = host.Placement.GetSceneCamera(BattleSide.Player);
-                var expectedLift = Mathf.Abs(boardCamera.WorldToScreenPoint(board.GetCellWorldPosition(new BoardCoordinate(0, 2))).y -
+                var expectedLift = Mathf.Abs(boardCamera.WorldToScreenPoint(board.GetCellWorldPosition(new BoardCoordinate(0, 1))).y -
                     boardCamera.WorldToScreenPoint(board.GetCellWorldPosition(new BoardCoordinate(0, 0))).y);
                 Assert.Greater(expectedLift, 0f);
                 Assert.That(contact.x, Is.EqualTo(eventData.position.x).Within(1f));
                 Assert.That(contact.y - eventData.position.y, Is.EqualTo(expectedLift).Within(1f),
-                    "图标底边在原有触点上方额外抬高两格地块。");
+                    "商店来源图标底边在触点上方抬高一格地块。");
                 Assert.Greater(center.y, contact.y);
                 var dragOffset = center - eventData.position;
                 host.SendMessage("LateUpdate");
@@ -234,8 +235,7 @@ namespace GameLogic.Tests
                 Assert.AreEqual(anchor, ((RobotEntity)placed).Anchor);
                 Assert.AreEqual(coins - sourceOffer.Price, state.EnergyCoins);
                 Assert.IsNull(state.FindSlot(sourceSlot).Offer);
-                CollectionAssert.AreEqual(new[] { new Vector2Int(18, 48) }, pulses,
-                    "实际购买成功只触发一次短促轻震。");
+                Assert.IsEmpty(pulses, "购买并首次摆放机器人不再震动。");
                 Assert.IsTrue(shop.Drag.Press(instanceId, -1, target, Time.unscaledTime));
                 var boardPointer = target + Vector2.right;
                 shop.Drag.Move(-1, boardPointer);
@@ -243,14 +243,16 @@ namespace GameLogic.Tests
                 var boardBottom = RectTransformUtility.WorldToScreenPoint(camera,
                     ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
                 var boardCenter = RectTransformUtility.WorldToScreenPoint(camera, ghost.TransformPoint(ghost.rect.center));
-                Assert.That(Vector2.Distance(boardPointer, boardBottom), Is.LessThan(1f),
-                    "从棋盘拿起时，触点应对齐图标底边中心，不额外抬高两格。");
+                Assert.That(boardBottom.x, Is.EqualTo(boardPointer.x).Within(1f));
+                Assert.That(boardBottom.y - boardPointer.y, Is.EqualTo(expectedLift).Within(1f),
+                    "棋盘来源沿用当前一格的抬高距离。");
                 var boardDragOffset = boardCenter - boardPointer;
                 shop.Drag.Move(-1, pointer);
                 boardBottom = RectTransformUtility.WorldToScreenPoint(camera,
                     ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
-                Assert.That(Vector2.Distance(pointer, boardBottom), Is.LessThan(1f),
-                    "棋盘来源拖入商店区域后仍保持近距离偏移。");
+                Assert.That(boardBottom.x, Is.EqualTo(pointer.x).Within(1f));
+                Assert.That(boardBottom.y - pointer.y, Is.EqualTo(expectedLift).Within(1f),
+                    "棋盘来源拖入商店区域后仍保持同一偏移。");
                 shop.Drag.Release(-1, target - boardDragOffset);
                 deadline = Time.realtimeSinceStartup + 15f;
                 while (shop.Drag.Phase != RobotDragPhase.Idle && Time.realtimeSinceStartup < deadline) yield return null;
@@ -258,7 +260,51 @@ namespace GameLogic.Tests
                 Assert.AreEqual(instanceId.ToString(), board.Model.GetOccupant(anchor),
                     "棋盘来源松手仍按图标中心落格。");
                 Assert.AreEqual(coins - sourceOffer.Price, state.EnergyCoins);
-                Assert.AreEqual(1, pulses.Count, "移动已有机器人不产生购买反馈。");
+                Assert.IsEmpty(pulses, "拖回原格没有实际换位，不应震动。");
+
+                Assert.IsTrue(shop.Drag.Press(instanceId, -1, target, Time.unscaledTime));
+                shop.Drag.Move(-1, target + Vector2.right);
+                Assert.AreEqual(RobotDragPhase.Dragging, shop.Drag.Phase);
+                var movedAnchor = anchor;
+                var foundMove = false;
+                for (var column = 1; column < board.Model.Columns - shape.Width && !foundMove; column++)
+                    for (var row = 1; row < board.Model.Rows - shape.Height && !foundMove; row++)
+                    {
+                        var candidate = new BoardCoordinate(column, row);
+                        if (candidate.Equals(anchor)) continue;
+                        var allowed = true;
+                        foreach (var cell in shape.Cells)
+                        {
+                            var coordinate = new BoardCoordinate(column + cell.Column, row + cell.Row);
+                            if (board.Model.IsOccupied(coordinate) || (board.Model.IsTerrainMap &&
+                                board.Model.GetBaseTerrain(coordinate) != BaseTerrainType.Empty)) allowed = false;
+                        }
+                        if (allowed) { movedAnchor = candidate; foundMove = true; }
+                    }
+                Assert.IsTrue(foundMove, "测试地图需要另一处能容纳机器人的位置。");
+                foreach (var cell in shape.Cells)
+                {
+                    var coordinate = new BoardCoordinate(movedAnchor.Column + cell.Column, movedAnchor.Row + cell.Row);
+                    while (host.PlayerGlass.TryGetView(coordinate, out var glass))
+                    {
+                        context.Registry.AdvanceTime(1f);
+                        Assert.AreNotEqual(GlassCollisionResult.Ignored,
+                            host.PlayerGlass.ApplyCollision(glass, host.Bootstrap.PlayerBall));
+                    }
+                    if (!board.Model.IsTerrainMap) board.Model.SetOpen(coordinate, true);
+                }
+                var movedTarget = (Vector2)boardCamera.WorldToScreenPoint(board.transform.TransformPoint(
+                    board.GetCellLocalPosition(movedAnchor) + (Vector3)((min + max) * 0.5f * board.CellSize)));
+                shop.Drag.Release(-1, movedTarget - boardDragOffset);
+                deadline = Time.realtimeSinceStartup + 15f;
+                while (shop.Drag.Phase != RobotDragPhase.Idle && Time.realtimeSinceStartup < deadline) yield return null;
+                Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
+                Assert.AreEqual(movedAnchor, ((RobotEntity)placed).Anchor);
+                CollectionAssert.AreEqual(new[] { new Vector2Int(18, 48) }, pulses,
+                    "机器人实际换位成功后仅轻震一次。");
+                GameEvent.Send<long, BattleSide>(BattleShopEvents.MergeSucceeded, context.BattleId, BattleSide.Player);
+                GameEvent.Send<long, BattleSide>(BattleShopEvents.MergeSucceeded, context.BattleId, BattleSide.Opponent);
+                Assert.AreEqual(1, pulses.Count, "双方合成成功通知均不再触发震动。");
                 var second = (ShopRobotItemWidget)items[1];
                 var secondPoint = RectTransformUtility.WorldToScreenPoint(camera, second.transform.position);
                 var secondOffer = state.FindSlot(second.SlotId).Offer;
@@ -267,7 +313,7 @@ namespace GameLogic.Tests
                 contact = RectTransformUtility.WorldToScreenPoint(camera,
                     ghost.TransformPoint(new Vector3(ghost.rect.center.x, ghost.rect.yMin, 0)));
                 Assert.That(contact.y - secondPoint.y, Is.EqualTo(expectedLift).Within(1f),
-                    "下一次从商店拿起时恢复远距离偏移。");
+                    "下一次从商店拿起时沿用当前抬高距离。");
                 shop.Drag.Release(-1, secondPoint - dragOffset);
                 Assert.AreEqual(RobotDragPhase.Idle, shop.Drag.Phase);
                 Assert.AreSame(secondOffer, state.FindSlot(second.SlotId).Offer);
@@ -289,9 +335,9 @@ namespace GameLogic.Tests
                 host.Bootstrap.AdvanceBerserk(host.Bootstrap.BerserkDuration + 0.1f);
                 Assert.AreEqual(2, pulses.Count, "暴走结束不震动。");
                 HapticFeedbackService.Enabled = false;
-                HapticFeedbackService.PlayPurchasePulse();
+                HapticFeedbackService.PlayRepositionPulse();
                 enterBerserk.Invoke(host.Bootstrap, new object[] { host.Bootstrap.PlayerBall });
-                Assert.AreEqual(2, pulses.Count, "关闭震动设置后，购买和暴走均不震动。");
+                Assert.AreEqual(2, pulses.Count, "关闭震动设置后，重新摆放和暴走均不震动。");
                 shop.PressSlot(second.SlotId, -1, secondPoint, Time.unscaledTime);
                 shop.Drag.Move(-1, secondPoint + Vector2.right);
                 Assert.AreEqual(RobotDragPhase.Dragging, shop.Drag.Phase);

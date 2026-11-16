@@ -145,7 +145,6 @@ namespace GameLogic
             var host = _host;
             var result = ShopOperationResult.InvalidPlacement;
             var purchasing = false;
-            var merging = false;
             try
             {
                 if (host == null || !host.CanInteractWithRobots || session == null || !context.IsCurrentInteraction(session.InteractionId)) return;
@@ -157,14 +156,13 @@ namespace GameLogic
                 }
                 else
                 {
-                    // 商品放回或店内免费合成不算购买；实际部署或买入合成才触发购买反馈。
+                    // 商品放回或店内免费合成不算购买；实际部署或买入合成才播放购买音效。
                     purchasing = session.Source.Kind == RobotDragSourceKind.ShopOffer;
                     int targetId;
                     BoardPlacementTarget target;
                     if (host.Placement.TryGetDragOccupant(out targetId) &&
                         context.CheckMerge(BattleSide.Player, _source, targetId) == ShopOperationResult.Success)
                     {
-                        merging = true;
                         result = context.TryCommitMerge(session.InteractionId, targetId);
                     }
                     else if (host.Placement.TryGetDragTarget(out target) &&
@@ -184,8 +182,6 @@ namespace GameLogic
                 if (result == ShopOperationResult.Success && purchasing && host != null && host.Context == context && !context.IsEnded)
                 {
                     GameSoundService.Play(GameSound.Purchase);
-                    // 买入合成由合并成功事件播放一次反馈，避免购买轻震覆盖合并轻震。
-                    if (!merging) HapticFeedbackService.PlayPurchasePulse();
                 }
                 if (generation == _generation)
                 {

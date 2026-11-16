@@ -167,7 +167,6 @@ namespace GameLogic
                     (side, id) => _enemies != null ? _enemies.GetRewardOrigin(side, id) : null);
                 GameEvent.AddEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
                 GameEvent.AddEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
-                GameEvent.AddEventListener<long, BattleSide>(BattleShopEvents.MergeSucceeded, OnMergeSucceeded);
                 _listening = true;
                 var context = Context;
                 var popupRoot = new GameObject("ComboPopups");
@@ -428,6 +427,12 @@ namespace GameLogic
                 var instance = existing != null ? existing : prepared;
                 BindDeployedRobotView(context, robot, instance, target, existing == null);
                 prepared = null;
+                // 仅己方棋盘机器人实际换位成功后轻震；首次购买、合成及放回原位不触发。
+                if (Context == context && !context.IsEnded && !context.IsEndRequested && session.Side == BattleSide.Player &&
+                    session.Source.Kind == RobotDragSourceKind.OwnedRobot && session.OriginalLocation == RobotLocation.Board &&
+                    session.OriginalAnchor.HasValue && (session.OriginalBoard != target.Board.Model ||
+                    !session.OriginalAnchor.Value.Equals(target.Anchor)))
+                    HapticFeedbackService.PlayRepositionPulse();
                 return ShopOperationResult.Success;
             }
             catch (OperationCanceledException) { return ShopOperationResult.ResourceFailed; }
@@ -637,13 +642,6 @@ namespace GameLogic
                 view.GetComponent<RobotView>()?.PlayMergeFeedback(sourcePosition, snapshot.PreviousLevel, snapshot.Level);
         }
 
-        private void OnMergeSucceeded(long battleId, BattleSide side)
-        {
-            if (side != BattleSide.Player || Context == null || Context.BattleId != battleId ||
-                Context.IsEnded || Context.IsEndRequested) return;
-            HapticFeedbackService.PlayMergePulse();
-        }
-
         public void EndBattle()
         {
             var context = Context;
@@ -729,7 +727,6 @@ namespace GameLogic
                 _listening = false;
                 GameEvent.RemoveEventListener<int>(BattleShopEvents.Changed, OnShopChanged);
                 GameEvent.RemoveEventListener<RobotMergeSnapshot>(BattleShopEvents.Merged, OnRobotMerged);
-                GameEvent.RemoveEventListener<long, BattleSide>(BattleShopEvents.MergeSucceeded, OnMergeSucceeded);
             }
             rewards?.Dispose();
             var combat = _combat;
