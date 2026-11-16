@@ -115,7 +115,7 @@ namespace GameLogic
         {
             if (entry == null) return;
             _playerInfo.Render(entry.PlayerName, entry.PlayerAvatar, entry.Trophies, entry.PlayerBuffs);
-            _opponentInfo.Render(entry.OpponentName, entry.OpponentAvatar, entry.Trophies, entry.OpponentBuffs);
+            _opponentInfo.Render(entry.OpponentName, entry.OpponentAvatar, entry.OpponentTrophies, entry.OpponentBuffs);
             if (_reward != null) RefreshTrophies();
         }
 

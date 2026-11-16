@@ -52,7 +52,7 @@ namespace GameLogic
             _soundPhase = BattleMatchPhase.Matching;
             _entering.text=ENTERING_FRAMES[0];
             _player.Render(entry.PlayerName,entry.PlayerAvatar,entry.Trophies,entry.PlayerBuffs);
-            _opponent.Render(entry.OpponentName,entry.OpponentAvatar,entry.Trophies,entry.OpponentBuffs);
+            _opponent.Render(entry.OpponentName,entry.OpponentAvatar,entry.OpponentTrophies,entry.OpponentBuffs);
             Render();
         }
         public void Report(BattleLoadingProgress progress)

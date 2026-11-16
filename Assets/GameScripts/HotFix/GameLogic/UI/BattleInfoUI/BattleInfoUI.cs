@@ -16,7 +16,7 @@ namespace GameLogic
         {
             if (entry == null) return;
             View.SetPlayerInfo(entry.PlayerName, entry.Trophies);
-            View.SetEnemyInfo(entry.OpponentName, entry.Trophies);
+            View.SetEnemyInfo(entry.OpponentName, entry.OpponentTrophies);
         }
 
         public void Bind(BattleProgressSnapshot snapshot)

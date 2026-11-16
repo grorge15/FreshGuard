@@ -80,7 +80,7 @@ namespace GameLogic
         internal void EnsureOpponentTrophies(BattleRewardRules rules)
         {
             if (HasOpponentTrophies || rules == null) return;
-            // 当前匹配双方使用相同的入场杯数，敌方按相反胜负独立结算并保底为0。
+            // 敌方按自身入场杯数和奖励档位结算，胜负与玩家相反；旧存档由调用方回退到玩家规则。
             OpponentTrophiesBefore = rules.StartingTrophies;
             OpponentTrophiesAfter = rules.GetTrophiesAfter(Result == BattleSettlementResult.Victory
                 ? BattleSettlementResult.Defeat : BattleSettlementResult.Victory);
