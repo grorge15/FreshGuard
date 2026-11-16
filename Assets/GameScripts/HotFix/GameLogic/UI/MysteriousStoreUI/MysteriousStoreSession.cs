@@ -89,7 +89,7 @@ namespace GameLogic
                 if (!offer.IsInstantReward && held == null && candidate.HeldAssists.Count >= SlotCount)
                     return MysteriousStorePurchaseResult.SlotsFull;
                 if (!candidate.TrySpendCoins(price)) return MysteriousStorePurchaseResult.InsufficientBalance;
-                if (offer.IsInstantReward) candidate.AddEnergy(10);
+                if (offer.IsInstantReward) candidate.AddSupplyEnergy(10);
                 else
                 {
                     var slot = held?.Slot ?? Enumerable.Range(0, SlotCount)

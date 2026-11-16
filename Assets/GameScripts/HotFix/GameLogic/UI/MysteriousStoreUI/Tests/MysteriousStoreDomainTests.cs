@@ -118,12 +118,71 @@ namespace GameLogic.Tests
         [UnityTest]
         public IEnumerator StaminaIsImmediateAndDoesNotOccupySlot() => UniTask.ToCoroutine(async () =>
         {
-            var player = Player(1000, 25);
-            var session = new MysteriousStoreSession(player, new[] { Offer(1806, 0, instant: true) }, new FirstRandom(),
-                _ => UniTask.CompletedTask, () => DateTimeOffset.UtcNow);
-            Assert.That(await session.TryBuyAsync(0), Is.EqualTo(MysteriousStorePurchaseResult.Success));
+            foreach (var initialEnergy in new[] { 25, 30, 35 })
+            {
+                var player = Player(1000, initialEnergy);
+                MatchPlayerRecord saved = null;
+                var session = new MysteriousStoreSession(player, new[] { Offer(1806, 0, instant: true) }, new FirstRandom(),
+                    candidate => { saved = new MatchPlayerRecord(); saved.Capture(candidate.Clone()); return UniTask.CompletedTask; });
+                Assert.That(await session.TryBuyAsync(0), Is.EqualTo(MysteriousStorePurchaseResult.Success));
+                Assert.That(player.Energy, Is.EqualTo(initialEnergy + 10));
+                Assert.That(player.HeldAssists, Is.Empty);
+                Assert.That(player.Coins, Is.EqualTo(900));
+                var loaded = JsonUtility.FromJson<MatchPlayerRecord>(JsonUtility.ToJson(saved));
+                var restored = loaded.Restore(30, TimeSpan.FromMinutes(5), DateTimeOffset.UtcNow.AddDays(1));
+                Assert.That(restored.Energy, Is.EqualTo(initialEnergy + 10), "重登及离线恢复不能截断已购买体力");
+                var otherSession = new MysteriousStoreSession(player, new[] { Offer(1801, 1801) }, new FirstRandom(),
+                    _ => UniTask.CompletedTask);
+                Assert.That(await otherSession.TryBuyAsync(0), Is.EqualTo(MysteriousStorePurchaseResult.Success));
+                Assert.That(player.Energy, Is.EqualTo(initialEnergy + 10), "购买其他助力时复制状态不能丢失体力");
+            }
+        });
+
+        [TestCase(25, 30)]
+        [TestCase(30, 30)]
+        [TestCase(35, 35)]
+        [TestCase(int.MaxValue, int.MaxValue)]
+        public void OrdinaryEnergyGrantKeepsCapAndExistingPurchasedEnergy(int before, int after)
+        {
+            var player = Player(1000, before);
+            player.AddEnergy(10);
+            Assert.That(player.Energy, Is.EqualTo(after));
+        }
+
+        [Test]
+        public void SupplyPausesRecoveryUntilEnergyDropsBelowCapacity()
+        {
+            var player = Player(1000, 30);
+            player.AddSupplyEnergy(10);
+            player.Refresh(DateTimeOffset.UtcNow.AddDays(1));
+            Assert.That(player.Energy, Is.EqualTo(40));
+            Assert.That(player.TrySpendEnergy(10), Is.True);
             Assert.That(player.Energy, Is.EqualTo(30));
-            Assert.That(player.HeldAssists, Is.Empty);
+            Assert.That(player.TrySpendEnergy(5), Is.True);
+            var recoveryStart = player.LastEnergyUpdateUtc;
+            player.Refresh(recoveryStart.AddMinutes(5).AddTicks(-1));
+            Assert.That(player.Energy, Is.EqualTo(25));
+            player.Refresh(recoveryStart.AddMinutes(5));
+            Assert.That(player.Energy, Is.EqualTo(26));
+            player.Refresh(recoveryStart.AddHours(1));
+            Assert.That(player.Energy, Is.EqualTo(30), "自然恢复仍封顶30");
+        }
+
+        [UnityTest]
+        public IEnumerator SupplySaveFailureCanRetryWithoutSpendingOrGrantingTwice() => UniTask.ToCoroutine(async () =>
+        {
+            var player = Player(1000, 30);
+            var fail = true;
+            var session = new MysteriousStoreSession(player, new[] { Offer(1806, 0, instant: true) }, new FirstRandom(),
+                _ => fail ? UniTask.FromException(new IOException("测试保存失败")) : UniTask.CompletedTask);
+            Assert.That(await session.TryBuyAsync(0), Is.EqualTo(MysteriousStorePurchaseResult.SaveFailed));
+            Assert.That(player.Energy, Is.EqualTo(30));
+            Assert.That(player.Coins, Is.EqualTo(1000));
+            Assert.That(session.HasPurchased, Is.False);
+            fail = false;
+            Assert.That(await session.TryBuyAsync(0), Is.EqualTo(MysteriousStorePurchaseResult.Success));
+            Assert.That(await session.TryBuyAsync(0), Is.EqualTo(MysteriousStorePurchaseResult.SoldOut));
+            Assert.That(player.Energy, Is.EqualTo(40));
             Assert.That(player.Coins, Is.EqualTo(900));
         });
 

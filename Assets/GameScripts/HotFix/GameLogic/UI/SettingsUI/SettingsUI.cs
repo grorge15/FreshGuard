@@ -73,7 +73,7 @@ namespace GameLogic
             HapticFeedbackService.Enabled = !HapticFeedbackService.Enabled;
             RefreshSwitches();
             GameSoundService.Play(GameSound.UiClick);
-            if (HapticFeedbackService.Enabled) HapticFeedbackService.PlayMergePulse();
+            if (HapticFeedbackService.Enabled) HapticFeedbackService.PlaySettingsPulse();
         }
 
         private void OnCloseClicked()

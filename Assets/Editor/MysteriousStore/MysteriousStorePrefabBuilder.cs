@@ -13,9 +13,9 @@ namespace FreshGuard.Editor
     /// <summary>以 720P 示意图坐标制作，整体换算为主菜单的 1080P 设计尺寸。</summary>
     public static class MysteriousStorePrefabBuilder
     {
-        public const string PrefabPath = "Assets/AssetRaw/UI/MysteriousStoreWidget.prefab";
-        private const string Sprites = "Assets/AssetRaw/Actor/UISprites/MysteriousStore/";
-        private const string CoinPath = "Assets/AssetRaw/Actor/UISprites/CheckOutScreen/Sprites/zhuliCoin.png";
+        public const string PrefabPath = "Assets/AssetRaw/Actor/Prefabs/UIPrefabs/MysteriousStoreWidget.prefab";
+        private const string Sprites = "Assets/AssetRaw/UI/UISprites/MysteriousStore/";
+        private const string CoinPath = "Assets/AssetRaw/UI/UISprites/CheckOutScreen/Sprites/zhuliCoin.png";
         private const string FontPath = ModernUIFontTheme.FontPath;
         private const float Scale = 1.5f;
 
@@ -34,6 +34,7 @@ namespace FreshGuard.Editor
             {
                 root = CreateRoot();
                 SceneManager.MoveGameObjectToScene(root, scene);
+                MysteriousStoreBuffFrameSetup.ConfigureLayout(root);
                 var widget = new MysteriousStoreWidget();
                 widget.Create(new UIBase(), root);
                 widget.Bind(CreatePreviewSession(), null);
@@ -122,13 +123,7 @@ namespace FreshGuard.Editor
 
         private static void Icon(RectTransform root)
         {
-            var files = new[] { "Shop_greenBuffIcon", "Shop_blueBuffIcon", "Shop_purpleBuffIcon", "Shop_orangeBuffIcon" };
-            for (var i = 0; i < files.Length; i++)
-            {
-                var icon = Picture("m_img_" + (MysteriousStoreQuality)i, root, "skillIcon/" + files[i],
-                    root.sizeDelta.x / Scale, root.sizeDelta.y / Scale, 0, 0);
-                icon.gameObject.SetActive(i == 2);
-            }
+            MysteriousStoreBuffFrameSetup.ConfigureIcon(root);
         }
 
         private static RectTransform Rect(string name, Transform parent, float w, float h, float x, float y)
@@ -201,7 +196,8 @@ namespace FreshGuard.Editor
             Color? color = null, float outline = 1.5f) => Label(n, p, value, size, w, h, x - 360, y - 640, color ?? Color.white, outline);
 
         /// <summary>在独立预览场景渲染，不保存或污染当前 Main 场景。</summary>
-        public static void Capture(string path, int width = 720, int height = 1280, bool removal = false)
+        public static void Capture(string path, int width = 720, int height = 1280, bool removal = false,
+            MysteriousStorePreviewSession session = null, Action<GameObject> prepare = null)
         {
             var scene = EditorSceneManager.NewPreviewScene();
             RenderTexture target = null;
@@ -232,8 +228,9 @@ namespace FreshGuard.Editor
                 var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath), canvasObject.transform, false);
                 var widget = new MysteriousStoreWidget();
                 widget.Create(new UIBase(), root);
-                widget.Bind(CreatePreviewSession(), null);
+                widget.Bind(session ?? CreatePreviewSession(), null);
                 if (removal) root.transform.Find("m_rect_Content/m_item_Held1/m_go_Content/m_btn_Remove").GetComponent<Button>().onClick.Invoke();
+                prepare?.Invoke(root);
                 target = new RenderTexture(width, height, 24);
                 camera.targetTexture = target;
                 Canvas.ForceUpdateCanvases();

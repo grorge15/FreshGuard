@@ -25,7 +25,8 @@ namespace GameLogic
             if (energyCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(energyCapacity));
             _recoveryInterval = recoveryInterval;
             _energyCapacity = energyCapacity;
-            Energy = Clamp(energy, 0, energyCapacity);
+            // 体力上限仅限制自然恢复；读取存档和复制购买候选时须保留补给产生的溢出体力。
+            Energy = Math.Max(0, energy);
             Coins = Math.Max(0, coins);
             Trophies = Math.Max(0, trophies);
             _lastEnergyUpdateUtc = utcNow.ToUniversalTime();
@@ -52,10 +53,26 @@ namespace GameLogic
         }
 
         public void AddEnergy(int amount)
+            => AddEnergyUpTo(amount, _energyCapacity);
+
+        /// <summary>体力补给完整发放，可超过自然恢复上限。</summary>
+        public void AddSupplyEnergy(int amount)
         {
             if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
             Refresh(DateTimeOffset.UtcNow);
-            Energy = Clamp(Energy + amount, 0, _energyCapacity);
+            Energy = checked(Energy + amount);
+        }
+
+        /// <summary>退还本次入场消耗，保留入场前已有的溢出体力。</summary>
+        public void RefundEnergy(int amount, int energyBeforeSpend)
+            => AddEnergyUpTo(amount, Math.Max(_energyCapacity, energyBeforeSpend));
+
+        private void AddEnergyUpTo(int amount, int limit)
+        {
+            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+            Refresh(DateTimeOffset.UtcNow);
+            // 普通补充仍封顶，但不能扣掉玩家已购买的溢出体力。
+            Energy = (int)Math.Min((long)Energy + amount, Math.Max(Energy, limit));
         }
 
         public void AddCoins(int amount)
