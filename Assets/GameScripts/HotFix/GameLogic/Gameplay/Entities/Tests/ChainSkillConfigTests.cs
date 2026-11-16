@@ -18,7 +18,7 @@ namespace GameLogic.Tests
             var catalog = SkillConfigAdapter.FromTables(tables);
             Assert.AreEqual(16, tables.TbSkill.DataList.Count);
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count);
-            Assert.AreEqual(8, tables.TbBullet.DataList.Count);
+            Assert.AreEqual(9, tables.TbBullet.DataList.Count);
             CollectionAssert.AreEquivalent(new[] { 1800, 1801, 1802, 1803, 1804, 1805, 2505, 2507, 2600 },
                 tables.TbBuff.DataList.Select(row => row.Id));
             Assert.AreEqual(7, tables.TbShopGoods.DataList.Count);
@@ -37,7 +37,7 @@ namespace GameLogic.Tests
                     catalog.TryGetLevel(row.SkillId, row.Level, out _), "等级记录 " + row.Id);
             Assert.AreEqual(16, tables.TbSkill.DataList.Count(row => catalog.TryGet(row.Id, out _)));
             Assert.AreEqual(80, tables.TbSkillLevel.DataList.Count(row => catalog.TryGetLevel(row.SkillId, row.Level, out _)));
-            CollectionAssert.AreEquivalent(new[] { 3500, 3501, 3502, 3600, 3602, 3603, 3604, 3605 },
+            CollectionAssert.AreEquivalent(new[] { 3500, 3501, 3502, 3503, 3600, 3602, 3603, 3604, 3605 },
                 tables.TbBullet.DataList.Where(row => catalog.TryGetBullet(row.Id, out _)).Select(row => row.Id));
             CollectionAssert.AreEquivalent(new[] { 2505, 2507, 2600 },
                 tables.TbBuff.DataList.Where(row => catalog.TryGetBuff(row.Id, out _)).Select(row => row.Id));
