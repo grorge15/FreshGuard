@@ -187,6 +187,7 @@ namespace GameLogic
 
         internal void CancelSlotRefresh()
         {
+            _autoRefreshElapsed = 0f;
             for (var i = 0; i < _reelTargets.Length; i++)
             {
                 _reelTargets[i]?.Dispose();

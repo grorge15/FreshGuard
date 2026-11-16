@@ -41,9 +41,24 @@ namespace GameLogic.Tests
             robotBuffer.WriteInt(20);
             robotBuffer.WriteInt(10);
             robotBuffer.WriteString("RobotPortrait");
-            robotBuffer.WriteFloat(0.6f);
-            robotBuffer.WriteFloat(1f);
-            robotBuffer.WriteString("RobotBullet");
+            // 与生成的 Robot 表结构保持一致；这些测试只需要普通机器人。
+            robotBuffer.WriteString("Robot");
+            robotBuffer.WriteString("");
+            robotBuffer.WriteBool(false);
+            robotBuffer.WriteString("");
+            robotBuffer.WriteFloat(0f);
+            robotBuffer.WriteString("");
+            robotBuffer.WriteString("");
+            robotBuffer.WriteBool(false);
+            robotBuffer.WriteFloat(0f);
+            robotBuffer.WriteString("");
+            robotBuffer.WriteString("");
+            robotBuffer.WriteString("");
+            robotBuffer.WriteString("");
+            robotBuffer.WriteInt(0);
+            robotBuffer.WriteInt(0);
+            robotBuffer.WriteBool(false);
+            robotBuffer.WriteInt(0);
             return new Robot(robotBuffer) { ShapeId_Ref = new RobotShape(shapeBuffer) };
         }
 
