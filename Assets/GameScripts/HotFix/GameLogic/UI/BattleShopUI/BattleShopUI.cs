@@ -10,6 +10,8 @@ namespace GameLogic
     public sealed partial class BattleShopUI : UIWidget
     {
         private const float DragLiftCells = 1f;
+        private const float AutoRefreshDelay = 5f;
+        private float _autoRefreshElapsed;
         private Text _coins;
         private Text _refreshPrice;
         private Button _refreshButton;
@@ -24,6 +26,9 @@ namespace GameLogic
         private int _hoveredOfferSlot = -1;
         public BattleShopContext Context { get; private set; }
         public RobotDragController Drag { get; private set; }
+        private bool AutoRefreshInteractionReady => _host != null && _host.CanInteractWithRobots &&
+            gameObject != null && gameObject.activeInHierarchy && OwnerWindow != null && OwnerWindow.Visible &&
+            Drag != null && Drag.Phase == RobotDragPhase.Idle;
         private Camera EventCamera
         {
             get
@@ -85,6 +90,8 @@ namespace GameLogic
         }
         public void RefreshView()
         {
+            // 状态通知也立即取消计时，避免回店、余额变化或按下手势在两帧间被漏过。
+            if (!CanAutoRefresh(AutoRefreshInteractionReady)) _autoRefreshElapsed = 0f;
             // 场景卸载时Unity对象可能先于窗口包装销毁，终局通知不再访问展示组件。
             if (Context == null || Context.IsEnded || gameObject == null || _items == null ||
                 _coins == null || _refreshPrice == null || _offers == null) return;
@@ -122,6 +129,7 @@ namespace GameLogic
         {
             if (IsRefreshing || _host == null || !_host.CanInteractWithRobots || Context == null || Context.IsBusy ||
                 Drag.Phase != RobotDragPhase.Idle) return;
+            _autoRefreshElapsed = 0f;
             BeginSlotRefresh();
             var result = Context.TryRefresh(BattleSide.Player);
             if (result != ShopOperationResult.Success)
@@ -133,6 +141,30 @@ namespace GameLogic
             }
             SetSlotRefreshTargets();
             RefreshView();
+        }
+
+        private bool CanAutoRefresh(bool canInteract)
+        {
+            if (!canInteract || IsRefreshing || Context == null || Context.IsEnded || Context.IsEndRequested || Context.IsBusy)
+                return false;
+            var state = Context.GetState(BattleSide.Player);
+            if (state.EnergyCoins < Context.RefreshPrice) return false;
+            foreach (var slot in state.Slots) if (!slot.IsEmpty) return false;
+            return true;
+        }
+
+        private bool AdvanceAutoRefresh(float deltaTime, bool canInteract)
+        {
+            if (!CanAutoRefresh(canInteract))
+            {
+                _autoRefreshElapsed = 0f;
+                return false;
+            }
+            _autoRefreshElapsed += Mathf.Max(0f, deltaTime);
+            if (_autoRefreshElapsed < AutoRefreshDelay) return false;
+            // 先清零再提交，失败时也需重新等待，不能每帧重试刷新。
+            _autoRefreshElapsed = 0f;
+            return true;
         }
         public bool IsOverShop(Vector2 position) => RectTransformUtility.RectangleContainsScreenPoint(m_rect_ShopPanel, position, EventCamera);
 
@@ -220,6 +252,8 @@ namespace GameLogic
             UpdateSlotRefresh();
             RefreshBerserkBar();
             Drag.Advance(Time.unscaledTime);
+            // 使用游戏时间；暂停不累计，手动与自动共用扣费、生成和转轮动画。
+            if (AdvanceAutoRefresh(Time.deltaTime, AutoRefreshInteractionReady)) OnClick_RefreshBtn();
             var flashing = Time.unscaledTime < _flashUntil && Mathf.Repeat(Time.unscaledTime * 10f, 1f) < 0.5f;
             _coins.color = flashing ? new Color(1f, 0.25f, 0.15f) : Color.white;
             if (!_refreshHintShown && _host != null && _host.CanInteractWithRobots && Context != null)
