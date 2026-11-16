@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -13,26 +14,51 @@ namespace GameLogic
         private sealed class IconView
         {
             private readonly GameObject[] _qualities = new GameObject[4];
+            private readonly Image[] _icons = new Image[4];
+            private CancellationTokenSource _loadCancellation;
             private string _location;
             private int _quality = -1;
             public IconView(Transform root)
             {
                 for (var i = 0; i < _qualities.Length; i++)
+                {
                     _qualities[i] = root.Find("m_img_" + (MysteriousStoreQuality)i).gameObject;
+                    _icons[i] = _qualities[i].transform.Find("m_img_Icon").GetComponent<Image>();
+                }
             }
             public void Render(MysteriousStoreQuality quality, string location = null)
             {
                 for (var i = 0; i < _qualities.Length; i++) _qualities[i].SetActive(i == (int)quality);
-                if (!string.IsNullOrEmpty(location) && (_location != location || _quality != (int)quality))
+                if (_location != location || _quality != (int)quality)
                 {
+                    CancelLoad();
                     _location = location; _quality = (int)quality;
-                    var image = _qualities[(int)quality].GetComponent<Image>();
-                    image.SetSprite(location, cancellationToken: image.gameObject.GetCancellationTokenOnDestroy());
+                    // 品质底板保留在父 Image，异步加载只替换前景图标。
+                    var image = _icons[(int)quality];
+                    image.sprite = null;
+                    image.enabled = !string.IsNullOrEmpty(location);
+                    if (image.enabled)
+                    {
+                        _loadCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                            image.gameObject.GetCancellationTokenOnDestroy());
+                        image.SetSprite(location, cancellationToken: _loadCancellation.Token);
+                    }
                 }
             }
             public void Clear()
             {
+                CancelLoad();
+                _location = null;
+                _quality = -1;
                 foreach (var quality in _qualities) quality.SetActive(false);
+                foreach (var icon in _icons) { icon.sprite = null; icon.enabled = false; }
+            }
+            private void CancelLoad()
+            {
+                if (_loadCancellation == null) return;
+                _loadCancellation.Cancel();
+                _loadCancellation.Dispose();
+                _loadCancellation = null;
             }
         }
 
@@ -296,6 +322,7 @@ namespace GameLogic
             if (_session?.IsBusy == true) return;
             if (_confirmation.activeSelf) GameSoundService.Play(GameSound.UiClose);
             _removeBuffId = 0;
+            _removeIcon.Clear();
             _confirmation.SetActive(false);
         }
 
@@ -327,6 +354,9 @@ namespace GameLogic
         protected override void OnDestroy()
         {
             _disposed = true;
+            foreach (var offer in _offers) offer?.Icon.Clear();
+            foreach (var held in _held) held?.Icon.Clear();
+            _removeIcon?.Clear();
             foreach (var listener in _listeners)
                 if (listener.button != null) listener.button.onClick.RemoveListener(listener.action);
             _listeners.Clear();

@@ -84,6 +84,74 @@ namespace GameLogic.Tests
             Assert.That(TextAt("m_rect_Content/m_item_Held0/m_go_Content/m_text_Level"), Is.EqualTo("2级"));
         }
 
+        [TestCase(MysteriousStoreQuality.Green)]
+        [TestCase(MysteriousStoreQuality.Blue)]
+        [TestCase(MysteriousStoreQuality.Purple)]
+        [TestCase(MysteriousStoreQuality.Orange)]
+        public void QualityFrameSurvivesRefreshAndFollowsPurchaseAndRemoval(MysteriousStoreQuality quality)
+        {
+            var offer = new MysteriousStoreOfferData(1801, "暴走扩容", "增加暴走球", quality, 40, 60, 80);
+            _widget.Bind(new MysteriousStorePreviewSession(MysteriousStorePreviewTests.Player(120), new[] { offer }), null);
+            const string offerIcon = "m_rect_Content/m_item_Offer0/m_rect_Icon";
+            const string heldContent = "m_rect_Content/m_item_Held0/m_go_Content";
+            const string removalIcon = "m_go_RemoveConfirmation/m_rect_Content/m_rect_Icon";
+            var foreground = AssertQualityFrame(offerIcon, quality);
+            // 直接提供已加载的图标，避免 EditMode 测试启动全局资源系统。
+            var buffSprite = AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Assets/AssetRaw/UI/UISprites/MysteriousStore/shopIcon/Shop_BerserkExpansionBuffIcon.png");
+            Assert.That(buffSprite, Is.Not.Null);
+            foreground.sprite = buffSprite;
+            foreground.enabled = true;
+            _widget.RefreshView();
+            Assert.That(AssertQualityFrame(offerIcon, quality).sprite, Is.SameAs(buffSprite));
+
+            Click("m_rect_Content/m_item_Offer0/m_btn_Buy");
+            Assert.That(_root.transform.Find(heldContent).gameObject.activeSelf, Is.True);
+            AssertQualityFrame(heldContent + "/m_rect_Icon", quality);
+            Assert.That(TextAt(heldContent + "/m_text_Level"), Is.EqualTo("1级"));
+            Assert.That(_root.transform.Find(heldContent + "/m_img_LevelBadge").GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(_root.transform.Find(heldContent + "/m_btn_Remove").GetComponent<Image>().raycastTarget, Is.True);
+
+            Click(heldContent + "/m_btn_Remove");
+            AssertQualityFrame(removalIcon, quality);
+            Assert.That(TextAt(removalIcon + "/m_text_Level"), Is.EqualTo("1级"));
+            Click("m_go_RemoveConfirmation/m_btn_Outside");
+            AssertEmptyIcon(removalIcon);
+            Click(heldContent + "/m_btn_Remove");
+            AssertQualityFrame(removalIcon, quality);
+            Click("m_go_RemoveConfirmation/m_rect_Content/m_btn_Remove");
+            Assert.That(_root.transform.Find(heldContent).gameObject.activeSelf, Is.False);
+            AssertEmptyIcon(heldContent + "/m_rect_Icon");
+            AssertEmptyIcon(removalIcon);
+        }
+
+        private Image AssertQualityFrame(string path, MysteriousStoreQuality quality)
+        {
+            var icon = _root.transform.Find(path);
+            foreach (MysteriousStoreQuality candidate in Enum.GetValues(typeof(MysteriousStoreQuality)))
+            {
+                var frame = icon.Find("m_img_" + candidate).GetComponent<Image>();
+                Assert.That(frame.gameObject.activeSelf, Is.EqualTo(candidate == quality));
+                Assert.That(frame.sprite, Is.Not.Null);
+                Assert.That(frame.sprite.name, Is.EqualTo("Shop_BuffFrame" + candidate));
+                Assert.That(frame.raycastTarget, Is.False);
+                Assert.That(frame.transform.Find("m_img_Icon").GetComponent<Image>().raycastTarget, Is.False);
+            }
+            return icon.Find("m_img_" + quality + "/m_img_Icon").GetComponent<Image>();
+        }
+
+        private void AssertEmptyIcon(string path)
+        {
+            foreach (MysteriousStoreQuality quality in Enum.GetValues(typeof(MysteriousStoreQuality)))
+            {
+                var frame = _root.transform.Find(path + "/m_img_" + quality);
+                Assert.That(frame.gameObject.activeSelf, Is.False);
+                var foreground = frame.Find("m_img_Icon").GetComponent<Image>();
+                Assert.That(foreground.enabled, Is.False);
+                Assert.That(foreground.sprite, Is.Null);
+            }
+        }
+
         private sealed class FirstRandom : IShopRandom
         {
             public int NextInt(int maxExclusive) => 0;
