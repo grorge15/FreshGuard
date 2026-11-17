@@ -252,6 +252,32 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void FullComboBoardCanRefreshForDirectUpgrade()
+        {
+            var deploy = Execute(Plan());
+            _load.TrySetResult(View());
+            Assert.AreEqual(ShopOperationResult.Success, deploy.GetAwaiter().GetResult());
+            var board = _board.Model;
+            for (var row = 0; row < board.Rows; row++)
+                for (var column = 0; column < board.Columns; column++)
+                {
+                    var cell = new BoardCoordinate(column, row);
+                    if (!board.CanPlaceUnit(cell) || board.GetOccupant(cell) != null) continue;
+                    Assert.IsTrue(board.TryPlace(cell, new PlaceableDefinition("fill:" + column + ":" + row,
+                        new[] { new BoardCoordinate(0, 0) })));
+                }
+            var live = (OpponentAiSnapshot)typeof(BattleShopSceneController)
+                .GetMethod("CaptureOpponentAiSnapshot", Private).Invoke(_host, null);
+            Assert.AreEqual(OpponentAiStrategyPhase.ComboControl, live.StrategyPhase);
+            Assert.IsTrue(OpponentAiPlanner.CanRefresh(live), "满盘仍能购买同级商品直接升级");
+            var coins = _context.GetState(BattleSide.Opponent).EnergyCoins;
+            Assert.AreEqual(ShopOperationResult.Success, Execute(new OpponentAiAction(OpponentAiActionKind.Refresh,
+                battleId: _context.BattleId)).GetAwaiter().GetResult());
+            Assert.AreEqual(coins - _context.Rules.RefreshPrice, _context.GetState(BattleSide.Opponent).EnergyCoins);
+            Assert.IsFalse(_context.IsBusy);
+        }
+
+        [Test]
         public void CoinChangeDuringLoadIsRecheckedBeforeDragBegins()
         {
             var task = Execute(Plan());

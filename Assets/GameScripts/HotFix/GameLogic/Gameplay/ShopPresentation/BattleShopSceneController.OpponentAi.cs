@@ -16,14 +16,23 @@ namespace GameLogic
         private void InitializeOpponentAi()
         {
             DisposeOpponentAi();
+            ObserveOpponentAiWorld();
             _opponentAi = new OpponentAiController(_opponentAiSettings,
-                () => Context == null || _opponentBoard == null || !_opponentBoard.IsInitialized
-                    ? null : Context.CreateOpponentAiSnapshot(_opponentBoard.Model),
-                ExecuteOpponentAiActionAsync, logException: e => Debug.LogException(e, this));
+                CaptureOpponentAiSnapshot,
+                ExecuteOpponentAiActionAsync, logException: e => Debug.LogException(e, this),
+                runSearchInBackground: Application.isPlaying);
         }
 
         private void AdvanceOpponentAi(float deltaTime)
-            => _opponentAi?.Advance(deltaTime, CanInteractWithRobots);
+        {
+            UnityEngine.Profiling.Profiler.BeginSample("OpponentAI.MainThread");
+            try
+            {
+                _opponentAi?.Advance(deltaTime, CanInteractWithRobots);
+                if (_opponentAi != null) OpponentAiDiagnostics.LastAction = _opponentAi.LastAction;
+            }
+            finally { UnityEngine.Profiling.Profiler.EndSample(); }
+        }
 
         private ShopOperationResult CheckOpponentAiBattle(BattleShopContext context, OpponentAiAction action,
             CancellationToken cancellationToken)
@@ -45,7 +54,7 @@ namespace GameLogic
             if (action.Kind == OpponentAiActionKind.Refresh)
             {
                 // 再检查快照中的已购槽，避免刷新销毁已购买但未部署的机器人。
-                var snapshot = context.CreateOpponentAiSnapshot(_opponentBoard.Model);
+                var snapshot = CaptureOpponentAiSnapshot();
                 if (!OpponentAiPlanner.CanRefresh(snapshot)) return ShopOperationResult.InvalidLocation;
                 return context.TryRefresh(BattleSide.Opponent);
             }
@@ -53,6 +62,10 @@ namespace GameLogic
                 ? RobotDragSource.Offer(action.SlotId, action.OfferId) : RobotDragSource.Owned(action.SourceInstanceId);
             if (action.Kind == OpponentAiActionKind.PurchaseAndMerge || action.Kind == OpponentAiActionKind.Merge)
             {
+                var safe = await IsOpponentAiActionStillSafeAsync(action, null, cancellationToken);
+                gate = CheckOpponentAiBattle(context, action, cancellationToken);
+                if (gate != ShopOperationResult.Success) return gate;
+                if (!safe) return ShopOperationResult.InvalidLocation;
                 var mergeCheck = context.CheckMerge(BattleSide.Opponent, source, action.TargetInstanceId);
                 if (mergeCheck != ShopOperationResult.Success) return mergeCheck;
                 RobotDragSession mergeSession;
@@ -72,6 +85,10 @@ namespace GameLogic
             PlaceableDefinition definition;
             gate = context.GetDragContent(BattleSide.Opponent, source, out config, out level, out definition);
             if (gate != ShopOperationResult.Success) return gate;
+            var hasToken = action.Kind == OpponentAiActionKind.Move;
+            RobotActionToken actionToken = default(RobotActionToken);
+            if (hasToken && !context.TryCreateActionToken(action.SourceInstanceId, out actionToken))
+                return ShopOperationResult.InvalidSource;
             GameObject existing = null;
             if (action.Kind == OpponentAiActionKind.Move) _views.TryGetValue(action.SourceInstanceId, out existing);
             GameObject prepared = null;
@@ -97,6 +114,19 @@ namespace GameLogic
                 gate = context.GetDragContent(BattleSide.Opponent, source, out currentConfig, out currentLevel, out definition);
                 if (gate != ShopOperationResult.Success) return gate;
                 if (currentConfig.Id != config.Id || currentLevel != level) return ShopOperationResult.InvalidLocation;
+                if (hasToken && !context.IsActionTokenValid(actionToken)) return ShopOperationResult.InvalidSource;
+                if (action.Kind == OpponentAiActionKind.PurchaseAndDeploy)
+                {
+                    var shop = context.GetState(BattleSide.Opponent);
+                    var slot = shop.FindSlot(action.SlotId);
+                    if (slot?.Offer == null || slot.Offer.OfferId != action.OfferId) return ShopOperationResult.StaleOffer;
+                    if (shop.EnergyCoins < slot.Offer.Price) return ShopOperationResult.InsufficientFunds;
+                }
+                var safe = await IsOpponentAiActionStillSafeAsync(action, prepared, cancellationToken);
+                gate = CheckOpponentAiBattle(context, action, cancellationToken);
+                if (gate != ShopOperationResult.Success) return gate;
+                if (hasToken && !context.IsActionTokenValid(actionToken)) return ShopOperationResult.InvalidSource;
+                if (!safe) return ShopOperationResult.InvalidLocation;
                 gate = context.TryBeginDrag(BattleSide.Opponent, source, out session);
                 if (gate != ShopOperationResult.Success) return gate;
                 gate = CheckOpponentAiCommit(context, action, session, cancellationToken);
@@ -138,6 +168,7 @@ namespace GameLogic
 
         private void DisposeOpponentAi()
         {
+            UnobserveOpponentAiWorld();
             _opponentAi?.Dispose();
             _opponentAi = null;
         }
