@@ -12,15 +12,13 @@ namespace GameLogic
         [SerializeField, Range(0.01f, 1f)] private float _opponentMaxSizeRatio = 1f;
         [SerializeField] private Color _playerClearColor = new Color32(33, 174, 216, 255);
         [SerializeField] private Color _opponentClearColor = new Color32(234, 178, 79, 255);
-        [SerializeField] private Sprite _battleBackground;
-        [SerializeField, Min(0.01f), Tooltip("9:16竖屏的环境背景缩放，以背景相机半高5为基准。")]
+        [SerializeField] private SpriteRenderer _battleBackgroundRenderer;
+        [SerializeField, Min(0.01f), Tooltip("9:16竖屏的环境背景缩放，以可视区域高度10为基准。")]
         private float _battleBackgroundScale9By16 = 0.57f;
-        [SerializeField, Min(0.01f), Tooltip("9:18竖屏的环境背景缩放，以背景相机半高5为基准。")]
+        [SerializeField, Min(0.01f), Tooltip("9:18竖屏的环境背景缩放，以可视区域高度10为基准。")]
         private float _battleBackgroundScale9By18 = 0.52f;
         private const float BACKGROUND_REFERENCE_CAMERA_HEIGHT = 10f;
         private Camera _opponentCamera;
-        private Camera _backgroundCamera;
-        private SpriteRenderer _backgroundRenderer;
         private BattleInfoRenderLayer _infoRenderLayer;
         private CameraState _cameraState;
         private BattleScreenLayoutResult _layout;
@@ -88,42 +86,24 @@ namespace GameLogic
         private void EnsureCameras()
         {
             if (_opponentCamera != null) return;
-            var backgroundMask = _battleBackground != null ? LayerMask.GetMask("BattleBackground") : 0;
-            if (_battleBackground != null && backgroundMask == 0)
-                throw new System.InvalidOperationException("战斗背景需要 BattleBackground 显示层。");
+            var backgroundMask = _battleBackgroundRenderer != null ? 1 << _battleBackgroundRenderer.gameObject.layer : 0;
             _opponentCamera = CreateCamera("OpponentBattleCamera");
-            _backgroundCamera = CreateCamera("BattleBackgroundCamera");
             var ui = _window.Canvas.rootCanvas.worldCamera;
             var depth = ui != null ? Mathf.Min(_cameraState.Depth, ui.depth - 2f) : _cameraState.Depth;
-            _backgroundCamera.rect = new Rect(0, 0, 1, 1);
-            _backgroundCamera.cullingMask = backgroundMask;
-            _backgroundCamera.clearFlags = CameraClearFlags.SolidColor;
-            _backgroundCamera.backgroundColor = _cameraState.Background;
-            _backgroundCamera.depth = depth - 1f;
-            if (_battleBackground != null)
-            {
-                var background = new GameObject("BattleBackground");
-                background.layer = LayerMask.NameToLayer("BattleBackground");
-                background.transform.SetParent(_backgroundCamera.transform, false);
-                background.transform.localPosition = Vector3.forward *
-                    Mathf.Lerp(_backgroundCamera.nearClipPlane, _backgroundCamera.farClipPlane, 0.5f);
-                _backgroundRenderer = background.AddComponent<SpriteRenderer>();
-                _backgroundRenderer.sprite = _battleBackground;
-            }
             _sceneCamera.depth = depth;
             _opponentCamera.depth = depth + 0.1f;
             _sceneCamera.cullingMask &= ~((1 << LayerMask.NameToLayer("UI")) | backgroundMask | LayerMask.GetMask("BattleInfo"));
             _opponentCamera.cullingMask = _sceneCamera.cullingMask;
-            // 背景相机先清屏，战场仅清深度，保留环境和先绘制的信息栏。
+            // 已有信息栏绘制通道负责背景和清屏；战场仅清深度，保留底图与信息栏。
             _sceneCamera.clearFlags = _opponentCamera.clearFlags = CameraClearFlags.Depth;
             if (_renderRegistry == null) _renderRegistry = GetComponent<BattleSideRenderRegistry>();
             if (_renderRegistry == null) _renderRegistry = gameObject.AddComponent<BattleSideRenderRegistry>();
             _renderRegistry.BindCameras(_sceneCamera, _opponentCamera);
             RegisterStatic(_playerWorldRoot, _playerBoard, _playerFixedRenderers, BattleSide.Player);
             RegisterStatic(_opponentWorldRoot, _opponentBoard, _opponentFixedRenderers, BattleSide.Opponent);
-            _backgroundCamera.enabled = true;
             _opponentCamera.enabled = true;
-            _infoRenderLayer = new BattleInfoRenderLayer(_window.Info.rectTransform, _window.Canvas, ui, transform, depth - 0.5f);
+            _infoRenderLayer = new BattleInfoRenderLayer(_window.Info.rectTransform, _window.Canvas, ui, transform,
+                depth - 0.5f, _battleBackgroundRenderer, _cameraState.Background);
             _infoRenderLayer.Refresh(_window.Visible);
         }
 
@@ -143,19 +123,23 @@ namespace GameLogic
 
         private void RefreshBackground(Vector2 screen)
         {
-            if (_backgroundRenderer == null) return;
-            var size = _battleBackground.bounds.size;
-            var height = _backgroundCamera.orthographicSize * 2f;
-            _backgroundCamera.aspect = screen.x / screen.y;
+            if (_battleBackgroundRenderer == null || _battleBackgroundRenderer.sprite == null || _infoRenderLayer == null) return;
+            var camera = _infoRenderLayer.Camera;
+            var size = _battleBackgroundRenderer.sprite.bounds.size;
+            var height = camera.orthographicSize * 2f;
+            var aspect = screen.x / screen.y;
             // 按屏幕高宽比在两种已确认的构图之间过渡；相机高度变化时保持相同的屏幕构图。
             var ratio = screen.y / screen.x;
             var blend = Mathf.InverseLerp(16f / 9f, 18f / 9f, ratio);
             var calibratedScale = Mathf.Lerp(_battleBackgroundScale9By16, _battleBackgroundScale9By18, blend) *
                 height / BACKGROUND_REFERENCE_CAMERA_HEIGHT;
             // 更宽或更长的屏幕也必须铺满，避免背景边缘露底。
-            var coverScale = Mathf.Max(height * _backgroundCamera.aspect / size.x, height / size.y);
+            var coverScale = Mathf.Max(height * aspect / size.x, height / size.y);
             var scale = Mathf.Max(coverScale, calibratedScale);
-            _backgroundRenderer.transform.localScale = new Vector3(scale, scale, 1f);
+            // 场景对象与信息栏共用现有全屏相机；放在裁剪范围内，由排序层级铺底。
+            _battleBackgroundRenderer.transform.SetPositionAndRotation(camera.ViewportToWorldPoint(
+                new Vector3(0.5f, 0.5f, Mathf.Lerp(camera.nearClipPlane, camera.farClipPlane, 0.5f))), camera.transform.rotation);
+            _battleBackgroundRenderer.transform.localScale = new Vector3(scale, scale, 1f);
         }
 
         private Camera CreateCamera(string cameraName)
