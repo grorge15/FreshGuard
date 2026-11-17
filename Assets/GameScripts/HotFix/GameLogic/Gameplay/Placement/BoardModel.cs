@@ -110,6 +110,20 @@ namespace GameLogic
             _occupants = new string[Columns, Rows];
         }
 
+        private BoardModel(BoardModel source)
+        {
+            Columns = source.Columns;
+            Rows = source.Rows;
+            _reservedBorderWidth = source._reservedBorderWidth;
+            _occupants = (string[,])source._occupants.Clone();
+            _open = source._open == null ? null : (bool[,])source._open.Clone();
+            _map = source._map?.Clone();
+            _highlighted.UnionWith(source._highlighted);
+        }
+
+        /// <summary>直接复制已有状态；所有可变容器独立，不经逐格放置或重新校验地图。</summary>
+        public BoardModel Clone() => new BoardModel(this);
+
         public MapData CaptureMap() => _map?.Clone();
         public BaseTerrainType GetBaseTerrain(BoardCoordinate coordinate) => RequireMap().GetBaseTerrain(coordinate);
         public ObstacleType GetObstacle(BoardCoordinate coordinate) => RequireMap().GetObstacle(coordinate);

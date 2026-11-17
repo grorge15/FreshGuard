@@ -63,7 +63,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void DeploymentRanksDamagePerCoinBeforePosition()
+        public void BoundaryPotentialCanOutweighDamagePerCoin()
         {
             var board = new BoardModel(5, 5);
             var expensive = Profile(501, 30, 1f, 1);
@@ -72,7 +72,7 @@ namespace GameLogic.Tests
                 new OpponentAiOfferSnapshot(0, 11, expensive, 1, 30, false),
                 new OpponentAiOfferSnapshot(1, 12, efficient, 1, 5, false)
             }, new OpponentAiRobotSnapshot[0], expensive, efficient);
-            Assert.AreEqual(12, OpponentAiPlanner.Plan(snapshot).OfferId);
+            Assert.AreEqual(11, OpponentAiPlanner.Plan(snapshot).OfferId);
         }
 
         [Test]
@@ -87,7 +87,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void DirectOfferMergeStartsAfterCoverageAndStopsAtLevelFive()
+        public void GlassStageDeploysInsteadOfUpgradingEvenAfterCoverage()
         {
             var p = Profile(501, 10, 1f, 1);
             var board = new BoardModel(5, 5);
@@ -96,16 +96,16 @@ namespace GameLogic.Tests
             foreach (var robot in robots) board.TryPlace(robot.Anchor.Value, robot.Definition);
             var offers = new[] { new OpponentAiOfferSnapshot(0, 11, p, 1, 6, false) };
             var action = OpponentAiPlanner.Plan(Snapshot(board, 20, offers, robots, p));
-            Assert.AreEqual(OpponentAiActionKind.PurchaseAndMerge, action.Kind);
-            Assert.AreEqual(1, action.TargetInstanceId);
+            Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy, action.Kind);
+            Assert.AreEqual(11, action.OfferId);
             var maxOffers = new[] { new OpponentAiOfferSnapshot(0, 12, p, 5, 6, false) };
             Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy,
                 OpponentAiPlanner.Plan(Snapshot(board, 20, maxOffers, robots, p)).Kind);
         }
 
         [TestCase(0, OpponentAiActionKind.Wait)]
-        [TestCase(20, OpponentAiActionKind.Merge)]
-        public void BoardMergeUsesLinearDamageGrowthAndKeepsThreeRobots(int growth, OpponentAiActionKind expected)
+        [TestCase(20, OpponentAiActionKind.Wait)]
+        public void GlassStageDoesNotMergeForDamageGrowthAlone(int growth, OpponentAiActionKind expected)
         {
             var p = new OpponentAiRobotProfile(501, 1, 10, 1f, new PlaceableDefinition("p", 1, 1), growth);
             var board = new BoardModel(5, 5);
@@ -122,7 +122,7 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void MoveFreesBlockedOfferWithinTenPercentOutputLossWithoutTouchingLiveBoard()
+        public void PlanningAUsefulMoveDoesNotMutateLiveBoard()
         {
             var low = Profile(501, 10, 1f, 1);
             var high = Profile(502, 100, 1f, 1);
@@ -133,22 +133,15 @@ namespace GameLogic.Tests
             var action = OpponentAiPlanner.Plan(Snapshot(board, 20,
                 new[] { new OpponentAiOfferSnapshot(0, 19, square, 1, 6, false) }, robots, low, high, square));
             Assert.AreEqual(OpponentAiActionKind.Move, action.Kind);
-            Assert.AreEqual(19, action.FreedOfferId);
             Assert.AreEqual(robots[0].Definition.Id, board.GetOccupant(new BoardCoordinate(1, 1)));
-            board.Release(robots[0].Definition.Id);
-            Assert.IsTrue(board.TryPlace(action.Anchor, robots[0].Definition));
-            var moved = new OpponentAiRobotSnapshot(1, low, 1, 5, 10, 1f, RobotLocation.Board, action.Anchor, robots[0].Definition);
-            var next = OpponentAiPlanner.Plan(Snapshot(board, 20,
-                new[] { new OpponentAiOfferSnapshot(0, 19, square, 1, 6, false) }, new[] { moved, robots[1] }, square),
-                new OpponentAiPlanningOptions { PreferredOfferId = action.FreedOfferId });
-            Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy, next.Kind);
-            Assert.AreEqual(19, next.OfferId);
+            Assert.AreEqual(robots[1].Definition.Id, board.GetOccupant(new BoardCoordinate(0, 0)));
+            Assert.IsFalse(board.IsOccupied(action.Anchor), "规划只模拟目标位置，不能提前写入真实棋盘");
         }
 
         [Test]
         [TestCase(3)]
         [TestCase(4)]
-        public void MergeCanFreeBlockedOfferWithSmallOutputLoss(int count)
+        public void FreeMovementPrecedesSpaceClearingMerge(int count)
         {
             var low = Profile(501, 10, 1f, 1);
             var high = Profile(502, 200, 1f, 1);
@@ -161,9 +154,8 @@ namespace GameLogic.Tests
             foreach (var robot in robots) board.TryPlace(robot.Anchor.Value, robot.Definition);
             var action = OpponentAiPlanner.Plan(Snapshot(board, 20,
                 new[] { new OpponentAiOfferSnapshot(0, 19, square, 1, 6, false) }, robots, low, high, square));
-            Assert.AreEqual(OpponentAiActionKind.Merge, action.Kind);
+            Assert.AreEqual(OpponentAiActionKind.Move, action.Kind);
             Assert.AreEqual(1, action.SourceInstanceId);
-            Assert.AreEqual(19, action.FreedOfferId);
         }
 
         [Test]
