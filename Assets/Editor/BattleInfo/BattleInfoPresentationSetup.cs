@@ -23,7 +23,8 @@ namespace FreshGuard.Editor
                 "Backgrounds/BattleInfo_TimerPlate.png", "Backgrounds/BattleInfo_FriendlyIdentityBadge.png",
                 "Backgrounds/BattleInfo_EnemyIdentityBadge.png", "Backgrounds/BattleInfo_FriendlyBuffTray6.png",
                 "Backgrounds/BattleInfo_EnemyBuffTray6.png", "Buttons/BattleInfo_ExitButton.png",
-                "Buttons/BattleInfo_SettingsButton.png", "Icons/BattleInfo_TrophyIcon.png" })
+                "Buttons/BattleInfo_SettingsButton.png", "Buttons/BattleInfo_ButtonBase.png",
+                "Icons/BattleInfo_ExitIcon.png", "Icons/BattleInfo_SettingsIcon.png", "Icons/BattleInfo_TrophyIcon.png" })
             {
                 var destination = SpriteFolder + "/" + Path.GetFileName(source);
                 WriteTrimmedSprite(Path.Combine(sourceFolder, source), destination);
@@ -69,8 +70,8 @@ namespace FreshGuard.Editor
                 Style(elapsed, new Vector2(144, 52), new Vector2(0, -4), 34, new Color32(49, 77, 93, 255));
                 elapsed.resizeTextMinSize = 20;
                 elapsed.text = "00:00";
-                Button(panel, "m_btn_Leave", "BattleInfo_ExitButton", -482);
-                Button(panel, "m_btn_Settings", "BattleInfo_SettingsButton", 482);
+                Button(panel, "m_btn_Leave", "BattleInfo_ExitIcon", -482);
+                Button(panel, "m_btn_Settings", "BattleInfo_SettingsIcon", 482);
                 BindQualitySprites(refs);
                 refs.ApplyModifiedPropertiesWithoutUndo();
                 if (PrefabUtility.SaveAsPrefabAsset(root, PrefabPath) == null)
@@ -186,14 +187,36 @@ namespace FreshGuard.Editor
             }
         }
 
-        private static void Button(RectTransform panel, string name, string sprite, float x)
+        [MenuItem("FreshGuard/Battle Info/Apply Separate Button Icons")]
+        public static void ApplyButtonIcons()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+                throw new InvalidOperationException("请在非运行且编译完成时更新战斗信息栏按钮。");
+            var root = PrefabUtility.LoadPrefabContents(PrefabPath);
+            try
+            {
+                var panel = (RectTransform)root.transform.Find("m_rect_BattleInfo");
+                Button(panel, "m_btn_Leave", "BattleInfo_ExitIcon", -482);
+                Button(panel, "m_btn_Settings", "BattleInfo_SettingsIcon", 482);
+                if (PrefabUtility.SaveAsPrefabAsset(root, PrefabPath) == null)
+                    throw new InvalidOperationException("战斗信息栏按钮保存失败。");
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        private static void Button(RectTransform panel, string name, string iconSprite, float x)
         {
             var button = (RectTransform)panel.Find(name);
             Layout(button, new Vector2(116, 130), new Vector2(x, 0) * ArtScale);
             button.localScale = Vector3.one * ArtScale;
             foreach (Transform child in button) child.gameObject.SetActive(false);
-            var graphic = Graphic(button, sprite);
+            var graphic = Graphic(button, "BattleInfo_ButtonBase");
             graphic.raycastTarget = true;
+            // 背景与点击区域保留原尺寸，两个前景图标使用相同边长并各自保持宽高比。
+            var icon = Rect(button, "m_img_Icon", new Vector2(84, 84), Vector2.zero);
+            icon.gameObject.SetActive(true);
+            Graphic(icon, iconSprite).preserveAspect = true;
+            icon.SetAsLastSibling();
             button.GetComponent<UnityEngine.UI.Button>().targetGraphic = graphic;
             var group = button.GetComponent<CanvasGroup>() ?? button.gameObject.AddComponent<CanvasGroup>();
             group.interactable = group.blocksRaycasts = group.ignoreParentGroups = true;
