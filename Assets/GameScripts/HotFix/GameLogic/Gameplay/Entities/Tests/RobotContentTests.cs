@@ -146,7 +146,7 @@ namespace GameLogic.Tests
         }
 
         [TestCase(501, "0,0;1,0")]
-        [TestCase(502, "0,0;1,0;0,1")]
+        [TestCase(502, "0,0;1,0;1,1")]
         [TestCase(503, "0,0;0,1;0,2")]
         [TestCase(504, "0,0;0,1")]
         [TestCase(505, "0,0;1,0;2,0;1,1")]
