@@ -35,6 +35,7 @@ namespace FreshGuard.Editor
                 root = CreateRoot();
                 SceneManager.MoveGameObjectToScene(root, scene);
                 MysteriousStoreBuffFrameSetup.ConfigureLayout(root);
+                ConfigureOfferTextLayout(root);
                 var widget = new MysteriousStoreWidget();
                 widget.Create(new UIBase(), root);
                 widget.Bind(CreatePreviewSession(), null);
@@ -89,6 +90,41 @@ namespace FreshGuard.Editor
             coin.sprite = RequiredSprite(CoinPath);
             Label("m_text_Price", button.transform, "60", 29, 87, 55, 23, 0, Color.white, 1.5f);
             Label("m_text_SoldOut", button.transform, "已售罄", 30, 145, 65, 0, 0, Color.white, 1.7f).gameObject.SetActive(false);
+        }
+
+        /// <summary>统一商品文字区域，为当前等级的效果说明留出完整的多行空间。</summary>
+        public static void ConfigureOfferTextLayout(GameObject root)
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                var row = root.transform.Find("m_rect_Content/m_item_Offer" + i);
+                var name = row.Find("m_text_Name").GetComponent<Text>();
+                name.rectTransform.anchoredPosition = new Vector2(-54, 62);
+                name.rectTransform.sizeDelta = new Vector2(216, 52);
+                name.fontSize = 34;
+                name.resizeTextForBestFit = true;
+                name.resizeTextMinSize = 32;
+                name.resizeTextMaxSize = 34;
+                name.alignment = TextAnchor.MiddleLeft;
+
+                var level = row.Find("m_text_Level").GetComponent<Text>();
+                level.rectTransform.anchoredPosition = new Vector2(92, 62);
+                level.rectTransform.sizeDelta = new Vector2(54, 42);
+                level.fontSize = 21;
+                level.alignment = TextAnchor.MiddleCenter;
+
+                var description = row.Find("m_text_Description").GetComponent<Text>();
+                description.rectTransform.anchoredPosition = new Vector2(-21, -33);
+                description.rectTransform.sizeDelta = new Vector2(282, 128);
+                description.fontSize = 22;
+                description.resizeTextForBestFit = true;
+                description.resizeTextMinSize = 20;
+                description.resizeTextMaxSize = 22;
+                description.lineSpacing = 1;
+                description.alignment = TextAnchor.UpperLeft;
+                description.horizontalOverflow = HorizontalWrapMode.Wrap;
+                description.verticalOverflow = VerticalWrapMode.Truncate;
+            }
         }
 
         private static void Held(Transform parent, int index)
