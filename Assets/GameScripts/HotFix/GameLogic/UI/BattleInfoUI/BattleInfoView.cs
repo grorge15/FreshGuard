@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,6 +25,18 @@ namespace GameLogic
         [Header("Battle")]
         [SerializeField] private Text _wave;
         [SerializeField] private Text _elapsedTime;
+        [Header("Assists (left to right)")]
+        [SerializeField] private Sprite[] _buffQualityFrames = new Sprite[4];
+        [SerializeField] private Image[] _playerBuffFrames = new Image[0];
+        [SerializeField] private Image[] _playerBuffIcons = new Image[0];
+        [SerializeField] private Text[] _playerBuffLevels = new Text[0];
+        [SerializeField] private Image[] _enemyBuffFrames = new Image[0];
+        [SerializeField] private Image[] _enemyBuffIcons = new Image[0];
+        [SerializeField] private Text[] _enemyBuffLevels = new Text[0];
+        private CancellationTokenSource _buffLoads;
+
+        public const int BUFF_CAPACITY = 6;
+        private const float BUFF_SPACING = 49f;
 
         private void Awake() { FindPanel(); }
 
@@ -65,6 +80,49 @@ namespace GameLogic
             _wave.text = "波次 " + Mathf.Max(1, currentWave);
             _elapsedTime.text = FormatElapsedTime(totalElapsedSeconds);
         }
+
+        /// <summary>显示本局携带助力的图标、品质底框及大于一级的等级；空槽不显示。</summary>
+        public void SetAssistBuffs(IReadOnlyList<MatchBuff> player, IReadOnlyList<MatchBuff> enemy)
+        {
+            CancelBuffLoads();
+            _buffLoads = CancellationTokenSource.CreateLinkedTokenSource(gameObject.GetCancellationTokenOnDestroy());
+            RenderBuffs(_playerBuffFrames, _playerBuffIcons, _playerBuffLevels, player, _buffLoads.Token);
+            RenderBuffs(_enemyBuffFrames, _enemyBuffIcons, _enemyBuffLevels, enemy, _buffLoads.Token);
+        }
+
+        private void RenderBuffs(Image[] frames, Image[] icons, Text[] levels, IReadOnlyList<MatchBuff> buffs, CancellationToken token)
+        {
+            var count = Mathf.Min(buffs != null ? buffs.Count : 0, icons.Length);
+            var startX = -(count - 1) * BUFF_SPACING * .5f;
+            for (var i = 0; i < icons.Length; i++)
+            {
+                var buff = buffs != null && i < buffs.Count ? buffs[i] : null;
+                var quality = buff != null ? (int)buff.Quality : -1;
+                var frame = frames[i];
+                frame.sprite = quality >= 0 && quality < _buffQualityFrames.Length ? _buffQualityFrames[quality] : null;
+                frame.enabled = frame.sprite != null;
+                var icon = icons[i];
+                var slot = (RectTransform)icon.transform.parent;
+                slot.anchoredPosition = new Vector2(startX + i * BUFF_SPACING, slot.anchoredPosition.y);
+                icon.sprite = null;
+                icon.enabled = buff != null && !string.IsNullOrEmpty(buff.IconLocation);
+                if (icon.enabled) icon.SetSprite(buff.IconLocation, cancellationToken: token);
+                var level = levels[i];
+                var showLevel = buff != null && buff.Layers > 1;
+                level.text = showLevel ? buff.Layers + "级" : string.Empty;
+                level.gameObject.SetActive(showLevel);
+            }
+        }
+
+        private void CancelBuffLoads()
+        {
+            if (_buffLoads == null) return;
+            _buffLoads.Cancel();
+            _buffLoads.Dispose();
+            _buffLoads = null;
+        }
+
+        private void OnDestroy() { CancelBuffLoads(); }
         public static string FormatElapsedTime(float seconds)
         {
             if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "00:00";

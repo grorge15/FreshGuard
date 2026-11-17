@@ -11,6 +11,7 @@ namespace GameLogic
         private float _operationalWait;
         private bool _checkingOperational;
         private MatchAssistSnapshot _battleAssists;
+        public MatchAssistSnapshot BattleAssists => _battleAssists;
         public bool IsWaitingForMatch => _matchEntry != null && !_matchReleased;
         public string MatchEntryId => _matchEntry?.EntryId;
 
@@ -26,6 +27,7 @@ namespace GameLogic
         {
             if (_matchEntry?.EntryId != entryId || _matchReleased || !IsReady) return false;
             _battleAssists = new MatchAssistSnapshot(_matchEntry.PlayerBuffs, _matchEntry.OpponentBuffs, DateTimeOffset.UtcNow);
+            _battleInfoWindow?.BindAssists(_battleAssists);
             _matchReleased = true;
             _checkingOperational = true;
             _operationalWait = 0;

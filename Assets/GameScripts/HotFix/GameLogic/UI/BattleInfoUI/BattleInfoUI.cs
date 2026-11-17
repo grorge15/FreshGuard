@@ -14,9 +14,19 @@ namespace GameLogic
         public BattleInfoView View { get; private set; }
         public void BindMatch(MatchEntrySnapshot entry)
         {
-            if (entry == null) return;
+            if (entry == null)
+            {
+                View.SetAssistBuffs(null, null);
+                return;
+            }
             View.SetPlayerInfo(entry.PlayerName, entry.Trophies);
             View.SetEnemyInfo(entry.OpponentName, entry.OpponentTrophies);
+            View.SetAssistBuffs(entry.PlayerBuffs, entry.OpponentBuffs);
+        }
+
+        public void BindAssists(MatchAssistSnapshot assists)
+        {
+            if (assists != null) View.SetAssistBuffs(assists.PlayerBuffs, assists.OpponentBuffs);
         }
 
         public void Bind(BattleProgressSnapshot snapshot)
