@@ -6,12 +6,12 @@ namespace GameLogic.Tests
     public sealed class OpponentAiPlannerTests
     {
         [Test]
-        public void PlansPurchaseAndDeployWhenBoardHasFewerThanThreeRobots()
+        public void PlansSafeRecruitmentPurchase()
         {
             var board = new BoardModel(5, 5);
             var profile = Profile(501, 10, 1f, 1);
             var offer = new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false);
-            var snapshot = Snapshot(board, 20, new[] { offer }, new OpponentAiRobotSnapshot[0], profile);
+            var snapshot = Snapshot(board, 20, new[] { offer }, new OpponentAiRobotSnapshot[0], profile).WithArmyState(false);
 
             var action = OpponentAiPlanner.Plan(snapshot);
 
@@ -21,13 +21,13 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void EstablishesThreeRobotsBeforeOfferMerge()
+        public void RecruitmentDeploysBeforeOfferMerge()
         {
             var board = new BoardModel(5, 5);
             var profile = Profile(501, 20, 1f, 1);
             var existing = Robot(7, profile, 1, new BoardCoordinate(1, 1));
             var offer = new OpponentAiOfferSnapshot(0, 11, profile, 1, 6, false);
-            var snapshot = Snapshot(board, 20, new[] { offer }, new[] { existing }, profile);
+            var snapshot = Snapshot(board, 20, new[] { offer }, new[] { existing }, profile).WithArmyState(false);
             board.TryPlace(existing.Anchor.Value, existing.Definition);
 
             var action = OpponentAiPlanner.Plan(snapshot);

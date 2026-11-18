@@ -20,7 +20,7 @@ namespace GameLogic
             _opponentAi = new OpponentAiController(_opponentAiSettings,
                 CaptureOpponentAiSnapshot,
                 ExecuteOpponentAiActionAsync, logException: e => Debug.LogException(e, this),
-                runSearchInBackground: Application.isPlaying);
+                runSearchInBackground: Application.isPlaying, splitScheduling: true);
         }
 
         private void AdvanceOpponentAi(float deltaTime)
@@ -60,6 +60,29 @@ namespace GameLogic
             }
             var source = action.Kind == OpponentAiActionKind.PurchaseAndDeploy || action.Kind == OpponentAiActionKind.PurchaseAndMerge
                 ? RobotDragSource.Offer(action.SlotId, action.OfferId) : RobotDragSource.Owned(action.SourceInstanceId);
+            if (action.Kind == OpponentAiActionKind.ReturnToShop)
+            {
+                RobotActionToken token;
+                if (!context.TryCreateActionToken(action.SourceInstanceId, out token)) return ShopOperationResult.InvalidSource;
+                var safe = await IsOpponentAiActionStillSafeAsync(action, null, cancellationToken);
+                gate = CheckOpponentAiBattle(context, action, cancellationToken);
+                if (gate != ShopOperationResult.Success) return gate;
+                if (!safe || !OpponentAiArmyRules.Allows(CaptureOpponentAiSnapshot(), action)) return ShopOperationResult.InvalidLocation;
+                if (!context.IsActionTokenValid(token)) return ShopOperationResult.InvalidSource;
+                RobotDragSession returnSession;
+                gate = context.TryBeginDrag(BattleSide.Opponent, source, out returnSession);
+                if (gate != ShopOperationResult.Success) return gate;
+                try
+                {
+                    gate = CheckOpponentAiCommit(context, action, returnSession, cancellationToken);
+                    return gate == ShopOperationResult.Success
+                        ? context.TryCommitShopDrop(returnSession.InteractionId, action.SlotId) : gate;
+                }
+                finally
+                {
+                    if (context.IsCurrentInteraction(returnSession.InteractionId)) context.CancelInteraction(returnSession.InteractionId);
+                }
+            }
             if (action.Kind == OpponentAiActionKind.PurchaseAndMerge || action.Kind == OpponentAiActionKind.Merge)
             {
                 var safe = await IsOpponentAiActionStillSafeAsync(action, null, cancellationToken);
@@ -77,7 +100,8 @@ namespace GameLogic
                 if (mergeResult != ShopOperationResult.Success) context.CancelInteraction(mergeSession.InteractionId);
                 return mergeResult;
             }
-            if (action.Kind != OpponentAiActionKind.PurchaseAndDeploy && action.Kind != OpponentAiActionKind.Move)
+            if (action.Kind != OpponentAiActionKind.PurchaseAndDeploy && action.Kind != OpponentAiActionKind.Move &&
+                action.Kind != OpponentAiActionKind.DeployOwned)
                 return ShopOperationResult.InvalidArgument;
 
             GameConfig.robot.Robot config;
@@ -85,12 +109,13 @@ namespace GameLogic
             PlaceableDefinition definition;
             gate = context.GetDragContent(BattleSide.Opponent, source, out config, out level, out definition);
             if (gate != ShopOperationResult.Success) return gate;
-            var hasToken = action.Kind == OpponentAiActionKind.Move;
+            var hasToken = action.Kind == OpponentAiActionKind.Move || action.Kind == OpponentAiActionKind.DeployOwned;
             RobotActionToken actionToken = default(RobotActionToken);
-            if (hasToken && !context.TryCreateActionToken(action.SourceInstanceId, out actionToken))
+            if (hasToken && !context.TryCreateActionToken(action.SourceInstanceId, out actionToken,
+                allowStored: action.Kind == OpponentAiActionKind.DeployOwned))
                 return ShopOperationResult.InvalidSource;
             GameObject existing = null;
-            if (action.Kind == OpponentAiActionKind.Move) _views.TryGetValue(action.SourceInstanceId, out existing);
+            if (hasToken) _views.TryGetValue(action.SourceInstanceId, out existing);
             GameObject prepared = null;
             RobotDragSession session = null;
             try

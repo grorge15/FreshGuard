@@ -87,7 +87,8 @@ namespace GameLogic
             var colliders = new List<OpponentAiColliderSnapshot>();
             unchecked
             {
-                var signature = state.EnergyCoins * 397;
+                // 布局版本只描述碰撞/机器人结构；纯金币或刷新商品不应使拖拽搜索失效。
+                var signature = 17;
                 for (var row = 0; row < board.Rows; row++)
                     for (var column = 0; column < board.Columns; column++)
                     {
@@ -102,11 +103,10 @@ namespace GameLogic
                         Context.Rules.GlassRewards.TryGetValue(kind, out reward);
                         glass.Add(new OpponentAiGlassState(cell, value.CurrentDurability, value.HitDurabilityLoss, reward));
                     }
-                foreach (var offer in state.Offers)
-                    signature = signature * 31 + offer.OfferId.GetHashCode() + offer.Price + offer.SlotId;
                 foreach (var robot in state.Robots)
                 {
-                    signature = signature * 31 + robot.InstanceId + robot.Level * 17 + robot.Anchor.GetHashCode();
+                    signature = signature * 31 + robot.InstanceId + robot.Level * 17 +
+                        robot.Anchor.GetHashCode() + (int)robot.Location * 397;
                     if (!robot.IsOnBoard) continue;
                     GameObject instance;
                     if (!_views.TryGetValue(robot.InstanceId, out instance) || instance == null) continue;
@@ -137,7 +137,8 @@ namespace GameLogic
                     localVelocity.magnitude / _opponentBoard.CellSize, localRadius / _opponentBoard.CellSize,
                     ball.IsLaunched, ball.IsBerserk, ball.ComboCount, ball.RecoveryState);
             }
-            return state.WithWorld(new OpponentAiWorldSnapshot(ballState, glass, colliders, _aiRevision, _aiPhase, _opponentAiStrategy));
+            return state.WithWorld(new OpponentAiWorldSnapshot(ballState, glass, colliders, _aiRevision, _aiPhase, _opponentAiStrategy))
+                .WithArmyState(_opponentAi != null && _opponentAi.ArmyEstablished);
         }
 
         private bool IsOpponentAiActionStillSafe(OpponentAiAction action, GameObject prepared = null)
@@ -176,8 +177,10 @@ namespace GameLogic
         {
             var state = CaptureOpponentAiSnapshot();
             if (state == null) return null;
+            if (prepared == null && action.Kind == OpponentAiActionKind.DeployOwned)
+                _views.TryGetValue(action.SourceInstanceId, out prepared);
             // 新购视图加载后用其真实内缩轮廓复核，不能只依赖占格形状的近似。
-            if (prepared != null && action.Kind == OpponentAiActionKind.PurchaseAndDeploy)
+            if (prepared != null && (action.Kind == OpponentAiActionKind.PurchaseAndDeploy || action.Kind == OpponentAiActionKind.DeployOwned))
             {
                 var view = prepared.GetComponent<RobotView>();
                 var target = new BoardPlacementTarget(_opponentBoard, action.Anchor);
@@ -186,7 +189,11 @@ namespace GameLogic
                 prepared.transform.localRotation = Quaternion.identity;
                 view.ApplyBoardScale(_opponentBoard);
                 var paths = new List<OpponentAiColliderSnapshot>(state.World.Colliders);
-                var captured = CaptureAiCollider(view, "ai:offer:" + action.OfferId, action.Anchor);
+                var definitionId = "ai:offer:" + action.OfferId;
+                if (action.Kind == OpponentAiActionKind.DeployOwned)
+                    foreach (var owned in state.Robots)
+                        if (owned.InstanceId == action.SourceInstanceId) { definitionId = owned.Definition.Id; break; }
+                var captured = CaptureAiCollider(view, definitionId, action.Anchor);
                 if (captured != null) paths.Add(captured);
                 state = state.WithWorld(new OpponentAiWorldSnapshot(state.World.Ball, state.World.Glass,
                     paths, state.BoardRevision, state.StrategyPhase, state.World.Settings));

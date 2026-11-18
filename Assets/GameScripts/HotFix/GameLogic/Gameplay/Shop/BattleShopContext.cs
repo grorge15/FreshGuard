@@ -105,9 +105,11 @@ namespace GameLogic
             if (opponentBoard == null) throw new ArgumentNullException(nameof(opponentBoard));
             var state = GetState(BattleSide.Opponent);
             var offers = new List<OpponentAiOfferSnapshot>(state.Slots.Count);
+            var returnSlots = new List<int>();
             var hasPurchased = false;
             foreach (var slot in state.Slots)
             {
+                if (slot.IsEmpty) returnSlots.Add(slot.SlotId);
                 hasPurchased |= slot.IsPurchased;
                 if (slot.Offer == null) continue;
                 Robot config;
@@ -135,7 +137,8 @@ namespace GameLogic
                 if (_configs.TryGetValue(id, out config)) candidates.Add(CreateOpponentAiProfile(config, "candidate:" + id));
             }
             return new OpponentAiSnapshot(BattleSide.Opponent, state.EnergyCoins, opponentBoard,
-                offers, robots, candidates, RefreshPrice, BattleId, hasPurchased);
+                offers, robots, candidates, RefreshPrice, BattleId, hasPurchased, returnSlotIds: returnSlots,
+                army: new OpponentAiArmyState(false));
         }
 
         private OpponentAiRobotProfile CreateOpponentAiProfile(Robot config, string definitionId)

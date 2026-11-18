@@ -252,6 +252,94 @@ namespace GameLogic.Tests
         }
 
         [Test]
+        public void StoredRobotRedeploysSameViewWithoutChargingOrLoadingAgain()
+        {
+            var task = Execute(Plan());
+            var instance = View();
+            _load.TrySetResult(instance);
+            Assert.AreEqual(ShopOperationResult.Success, task.GetAwaiter().GetResult());
+            var id = instance.GetComponent<RobotView>().InstanceId;
+            var state = _context.GetState(BattleSide.Opponent);
+            var coins = state.EnergyCoins;
+            RobotDragSession session;
+            Assert.AreEqual(ShopOperationResult.Success, _context.TryBeginDrag(BattleSide.Opponent, RobotDragSource.Owned(id), out session));
+            Assert.AreEqual(ShopOperationResult.Success, _context.TryCommitShopDrop(session.InteractionId, null));
+            RobotActionToken token;
+            Assert.IsFalse(_context.TryCreateActionToken(id, out token), "店内机器人不能获得战斗技能操作令牌");
+            Func<string, Transform, CancellationToken, UniTask<GameObject>> loader = (name, parent, cancellation) => {
+                Assert.Fail("重新部署店内机器人不应重复加载已有视图"); return default(UniTask<GameObject>); };
+            typeof(BattleShopSceneController).GetProperty("OpponentViewLoader", Private).SetValue(_host, loader);
+            Assert.AreEqual(ShopOperationResult.Success, Execute(new OpponentAiAction(OpponentAiActionKind.DeployOwned,
+                sourceInstanceId: id, anchor: new BoardCoordinate(1, 1), battleId: _context.BattleId)).GetAwaiter().GetResult());
+            Entity entity;
+            Assert.IsTrue(_context.Registry.TryGet(id, out entity));
+            Assert.AreEqual(RobotLocation.Board, ((RobotEntity)entity).Location);
+            Assert.AreEqual(coins, state.EnergyCoins);
+            Assert.AreEqual(id, instance.GetComponent<RobotView>().InstanceId);
+            Assert.IsFalse(_context.IsBusy);
+        }
+
+        [Test]
+        public void EconomyAndRefreshDoNotChangeGeometryRevision()
+        {
+            var method = typeof(BattleShopSceneController).GetMethod("CaptureOpponentAiSnapshot", Private);
+            var before = (OpponentAiSnapshot)method.Invoke(_host, null);
+            Assert.AreEqual(ShopOperationResult.Success, _context.TryRefresh(BattleSide.Opponent));
+            var after = (OpponentAiSnapshot)method.Invoke(_host, null);
+            Assert.AreEqual(before.BoardRevision, after.BoardRevision);
+            Assert.AreNotEqual(before.EnergyCoins, after.EnergyCoins);
+            using (var purchase = OpponentAiPlanner.BeginSearch(before, new OpponentAiPlanningOptions { Lane = OpponentAiActionLane.Purchase }))
+                Assert.IsFalse(purchase.MatchesShop(after));
+            using (var drag = OpponentAiPlanner.BeginSearch(before, new OpponentAiPlanningOptions { Lane = OpponentAiActionLane.Drag }))
+                Assert.IsTrue(drag.MatchesShop(after));
+        }
+
+        [Test]
+        public void AiReturnUsesRealShopTransactionAndRejectsRemovingSeventhRobot()
+        {
+            var shop = _context.GetState(BattleSide.Opponent);
+            typeof(BattleShopState).GetProperty("EnergyCoins").SetValue(shop, 1000);
+            var robots = new List<RobotEntity>();
+            for (var i = 0; i < 8; i++)
+            {
+                var slot = shop.Slots[i % shop.Slots.Count];
+                if (slot.Offer == null)
+                    Assert.AreEqual(ShopOperationResult.Success, _context.TryRefresh(BattleSide.Opponent));
+                slot = shop.Slots[i % shop.Slots.Count]; // 刷新会创建新的槽位对象及SlotId。
+                GameConfig.robot.Robot config;
+                int level;
+                PlaceableDefinition definition;
+                var source = RobotDragSource.Offer(slot.SlotId, slot.Offer.OfferId);
+                Assert.AreEqual(ShopOperationResult.Success, _context.GetDragContent(BattleSide.Opponent, source, out config, out level, out definition));
+                var found = false;
+                var anchor = default(BoardCoordinate);
+                for (var y = 0; y < _board.Rows && !found; y++)
+                    for (var x = 0; x < _board.Columns && !found; x++)
+                        if (_board.Model.Evaluate(new BoardCoordinate(x, y), definition).IsValid)
+                        { anchor = new BoardCoordinate(x, y); found = true; }
+                Assert.IsTrue(found);
+                RobotDragSession session;
+                RobotEntity robot;
+                Assert.AreEqual(ShopOperationResult.Success, _context.TryBeginDrag(BattleSide.Opponent, source, out session));
+                Assert.AreEqual(ShopOperationResult.Success, _context.TryCommitDeploy(session.InteractionId,
+                    BattleSide.Opponent, _board.Model, anchor, out robot));
+                robots.Add(robot);
+            }
+            var before = _context.CreateOpponentAiSnapshot(_board.Model);
+            var coins = shop.EnergyCoins;
+            var first = robots[0];
+            Assert.AreEqual(ShopOperationResult.Success, Execute(new OpponentAiAction(OpponentAiActionKind.ReturnToShop,
+                slotId: before.ReturnSlotIds[0], sourceInstanceId: first.InstanceId, battleId: _context.BattleId)).GetAwaiter().GetResult());
+            Assert.AreEqual(RobotLocation.PurchasedShopSlot, first.Location);
+            Assert.AreEqual(7, OpponentAiArmyRules.Count(_context.CreateOpponentAiSnapshot(_board.Model)));
+            Assert.AreEqual(ShopOperationResult.InvalidLocation, Execute(new OpponentAiAction(OpponentAiActionKind.ReturnToShop,
+                slotId: _context.CreateOpponentAiSnapshot(_board.Model).ReturnSlotIds[0],
+                sourceInstanceId: robots[1].InstanceId, battleId: _context.BattleId)).GetAwaiter().GetResult());
+            Assert.AreEqual(coins, shop.EnergyCoins);
+            Assert.IsFalse(_context.IsBusy);
+        }
+
+        [Test]
         public void FullComboBoardCanRefreshForDirectUpgrade()
         {
             var deploy = Execute(Plan());

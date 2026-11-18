@@ -11,6 +11,141 @@ namespace GameLogic.Tests
 {
     public sealed class OpponentAiControllerTests
     {
+        [TestCase(OpponentAiActionKind.PurchaseAndDeploy)]
+        [TestCase(OpponentAiActionKind.Move)]
+        public void SplitLanePendingExecutionDoesNotBlockOtherLane(OpponentAiActionKind pendingKind)
+        {
+            var pending = new UniTaskCompletionSource<ShopOperationResult>();
+            var purchases = 0;
+            var moves = 0;
+            using (var ai = new OpponentAiController(new OpponentAiSettings(),
+                () => Snapshot(robotAnchor: new BoardCoordinate(0, 0)),
+                (action, token) => {
+                    if (action.Kind == OpponentAiActionKind.Move) moves++; else purchases++;
+                    return action.Kind == pendingKind ? pending.Task : UniTask.FromResult(ShopOperationResult.Success);
+                }, planning: (state, options) => Action(state, options.Lane == OpponentAiActionLane.Purchase
+                    ? OpponentAiActionKind.PurchaseAndDeploy : OpponentAiActionKind.Move), splitScheduling: true))
+            {
+                ai.Advance(.81f, true);
+                Assert.AreEqual(1, purchases);
+                Assert.AreEqual(1, moves, "购买等待和移动等待不能互锁");
+                ai.Advance(3.1f, true);
+                Assert.AreEqual(pendingKind == OpponentAiActionKind.Move ? 2 : 1, purchases);
+                Assert.AreEqual(pendingKind == OpponentAiActionKind.Move ? 1 : 2, moves);
+                pending.TrySetResult(ShopOperationResult.Success);
+            }
+        }
+
+        [Test]
+        public void SplitPurchaseIgnoresDragCooldownAndBothPauseTogether()
+        {
+            var purchases = 0;
+            var moves = 0;
+            using (var ai = new OpponentAiController(new OpponentAiSettings(), () => Snapshot(robotAnchor: new BoardCoordinate(0, 0)),
+                (action, token) => { if (action.Kind == OpponentAiActionKind.Move) moves++; else purchases++;
+                    return UniTask.FromResult(ShopOperationResult.Success); },
+                planning: (state, options) => options.Lane == OpponentAiActionLane.Purchase
+                    ? options.AllowPurchase ? Action(state, OpponentAiActionKind.PurchaseAndDeploy) : OpponentAiAction.Wait()
+                    : options.AllowMove ? Action(state, OpponentAiActionKind.Move) : OpponentAiAction.Wait(), splitScheduling: true))
+            {
+                ai.Advance(.81f, true);
+                ai.Advance(.81f, true);
+                Assert.AreEqual(2, purchases);
+                Assert.AreEqual(1, moves);
+                ai.Advance(100f, false);
+                Assert.AreEqual(2, purchases);
+                Assert.AreEqual(1, moves);
+            }
+        }
+
+        [Test]
+        public void ArmyEstablishmentSurvivesAdjustmentFromEightToSeven()
+        {
+            var state = ArmySnapshot(8);
+            using (var ai = new OpponentAiController(new OpponentAiSettings(), () => state,
+                (action, token) => UniTask.FromResult(ShopOperationResult.Success),
+                planning: (snapshot, options) => OpponentAiAction.Wait(), splitScheduling: true))
+            {
+                ai.Advance(.81f, true);
+                Assert.IsTrue(ai.ArmyEstablished);
+                state = ArmySnapshot(7);
+                ai.MarkDirty();
+                ai.Advance(.51f, true);
+                Assert.IsTrue(ai.ArmyEstablished);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator SplitBackgroundRecruitmentCommitsPurchaseBeforeDrag() => VerifySplitPriority(4, OpponentAiActionKind.PurchaseAndDeploy);
+
+        [UnityTest]
+        public IEnumerator SplitBackgroundEstablishedArmyCommitsDragBeforePurchase() => VerifySplitPriority(5, OpponentAiActionKind.Move);
+
+        private static IEnumerator VerifySplitPriority(int extras, OpponentAiActionKind first)
+        {
+            var actions = new List<OpponentAiActionKind>();
+            var state = OpponentAiV2Tests.ArmyRing(extras);
+            using (var ai = new OpponentAiController(new OpponentAiSettings(), () => state,
+                (action, token) => { actions.Add(action.Kind); return UniTask.FromResult(ShopOperationResult.Success); },
+                runSearchInBackground: true, splitScheduling: true))
+            {
+                ai.Advance(.81f, true);
+                var timeout = DateTime.UtcNow.AddSeconds(15);
+                while ((!actions.Contains(OpponentAiActionKind.Move) || !actions.Contains(OpponentAiActionKind.PurchaseAndDeploy)) && DateTime.UtcNow < timeout)
+                { ai.Advance(.016f, true); yield return null; }
+                Assert.That(actions.Count, Is.GreaterThanOrEqualTo(2));
+                Assert.AreEqual(first, actions[0], "后台结果完成顺序不能覆盖阶段提交优先级");
+                CollectionAssert.Contains(actions, OpponentAiActionKind.Move, "公平工作器不能让拖拽通道饿死");
+                CollectionAssert.Contains(actions, OpponentAiActionKind.PurchaseAndDeploy);
+            }
+        }
+
+        [Test]
+        public void SplitMoveRoutesPurchaseFollowUpToPurchaseLane()
+        {
+            var observed = false;
+            var moves = 0;
+            var purchases = 0;
+            using (var ai = new OpponentAiController(new OpponentAiSettings(), () => ArmySnapshot(8),
+                (action, token) => { if (action.Kind == OpponentAiActionKind.Move) moves++; else purchases++;
+                    return UniTask.FromResult(ShopOperationResult.Success); },
+                planning: (state, options) => {
+                    if (options.Lane == OpponentAiActionLane.Purchase)
+                    {
+                        observed |= options.PendingFollowUp.HasValue;
+                        return options.PendingFollowUp?.ToAction() ?? OpponentAiAction.Wait();
+                    }
+                    if (moves > 0) return OpponentAiAction.Wait();
+                    var follow = new OpponentAiFollowUp(Action(state, OpponentAiActionKind.PurchaseAndDeploy), true);
+                    return new OpponentAiAction(OpponentAiActionKind.Move, sourceInstanceId: 1,
+                        anchor: new BoardCoordinate(1, 1), battleId: state.BattleId, followUp: follow);
+                }, splitScheduling: true))
+            {
+                ai.Advance(.81f, true);
+                ai.Advance(.51f, true);
+                Assert.IsTrue(observed);
+                Assert.AreEqual(1, moves);
+                Assert.AreEqual(1, purchases);
+            }
+        }
+
+        private static OpponentAiSnapshot ArmySnapshot(int count)
+        {
+            var original = Snapshot();
+            var board = new BoardModel(12, 4);
+            var robots = new List<OpponentAiRobotSnapshot>();
+            var profile = original.Offers[0].Profile;
+            for (var i = 0; i < count; i++)
+            {
+                var definition = new PlaceableDefinition("army:" + i, 1, 1);
+                var cell = new BoardCoordinate(i, 0);
+                board.TryPlace(cell, definition);
+                robots.Add(new OpponentAiRobotSnapshot(i + 1, profile, 1, 5, 10, 1, RobotLocation.Board, cell, definition));
+            }
+            return new OpponentAiSnapshot(original.Side, original.EnergyCoins, board, original.Offers, robots,
+                original.CandidateProfiles, battleId: original.BattleId);
+        }
+
         [UnityTest]
         public IEnumerator BackgroundSearchKeepsCaptureAndCommitOnMainThreadAndFreezesSubmissionOnPause()
         {
@@ -80,12 +215,6 @@ namespace GameLogic.Tests
             }
         }
 
-        private sealed class NeverUsedRandom : IOpponentAiRandom
-        {
-            public float Range(float min, float max)
-                => throw new InvalidOperationException("V2 不再使用旧的随机轮次间隔");
-        }
-
         private static OpponentAiSnapshot Snapshot(long battleId = 123, int coins = 100,
             BoardCoordinate? robotAnchor = null, OpponentAiWorldSnapshot world = null, bool blocked = false)
         {
@@ -130,7 +259,7 @@ namespace GameLogic.Tests
             var calls = 0;
             using (var ai = new OpponentAiController(new OpponentAiSettings(), () => Snapshot(),
                 (action, token) => { calls++; return UniTask.FromResult(ShopOperationResult.Success); },
-                new NeverUsedRandom(), planning: Plan(OpponentAiActionKind.Merge)))
+                planning: Plan(OpponentAiActionKind.Merge)))
             {
                 ai.Advance(0.5f, true);
                 ai.Advance(100f, false);
@@ -191,15 +320,13 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void LegacyRoundAndRandomFieldsCannotLimitSuccessfulActions()
+        public void ConsecutiveActionsUseFixedSuccessInterval()
         {
             var calls = 0;
-            var settings = new OpponentAiSettings { ThinkMin = 100f, ThinkMax = 100f,
-                ActionMin = 100f, ActionMax = 100f, ActionsPerRound = 1, PurchasesPerRound = 0,
-                InitialRobotTarget = 99 };
+            var settings = new OpponentAiSettings();
             using (var ai = new OpponentAiController(settings, () => Snapshot(),
                 (action, token) => { calls++; return UniTask.FromResult(ShopOperationResult.Success); },
-                new NeverUsedRandom(), planning: Plan(OpponentAiActionKind.Merge)))
+                planning: Plan(OpponentAiActionKind.Merge)))
             {
                 for (var i = 0; i < 4; i++) ai.Advance(0.81f, true);
                 Assert.AreEqual(4, calls, "不再存在三动作一轮或随机轮次等待");
@@ -211,12 +338,12 @@ namespace GameLogic.Tests
         public void PurchasesUseTwoTokensAndRefillEveryThreeActiveSeconds(OpponentAiActionKind kind)
         {
             var calls = 0;
-            using (var ai = new OpponentAiController(new OpponentAiSettings { PurchasesPerRound = 0 }, () => Snapshot(),
+            using (var ai = new OpponentAiController(new OpponentAiSettings(), () => Snapshot(),
                 (action, token) => { calls++; return UniTask.FromResult(ShopOperationResult.Success); }, planning: Plan(kind)))
             {
                 ai.Advance(0.81f, true);
                 ai.Advance(0.81f, true);
-                Assert.AreEqual(2, calls, "初始两枚额度不受旧购买上限影响");
+                Assert.AreEqual(2, calls, "初始可用两枚购买额度");
                 ai.Advance(100f, false);
                 ai.Advance(0.81f, true);
                 Assert.AreEqual(2, calls, "暂停不恢复购买额度");
@@ -293,8 +420,7 @@ namespace GameLogic.Tests
         {
             var completion = new UniTaskCompletionSource<ShopOperationResult>();
             var calls = 0;
-            using (var ai = new OpponentAiController(new OpponentAiSettings { ActionMin = 0f, ActionMax = 0f,
-                    MinimumActionInterval = 0.01f }, () => Snapshot(),
+            using (var ai = new OpponentAiController(new OpponentAiSettings { MinimumActionInterval = 0.01f }, () => Snapshot(),
                 (action, token) => ++calls == 1 ? completion.Task : UniTask.FromResult(ShopOperationResult.Success),
                 planning: Plan(OpponentAiActionKind.Merge)))
             {
@@ -312,10 +438,10 @@ namespace GameLogic.Tests
 
         [TestCase(OpponentAiActionKind.Move, 3f)]
         [TestCase(OpponentAiActionKind.Refresh, 8f)]
-        public void IndependentCooldownsIgnoreOldMovementValueAndFreezeDuringPause(OpponentAiActionKind kind, float cooldown)
+        public void IndependentCooldownsFreezeDuringPause(OpponentAiActionKind kind, float cooldown)
         {
             var calls = 0;
-            using (var ai = new OpponentAiController(new OpponentAiSettings { MoveCooldown = 100f }, () => Snapshot(),
+            using (var ai = new OpponentAiController(new OpponentAiSettings(), () => Snapshot(),
                 (action, token) => { calls++; return UniTask.FromResult(ShopOperationResult.Success); }, planning: Plan(kind)))
             {
                 ai.Advance(0.81f, true);
