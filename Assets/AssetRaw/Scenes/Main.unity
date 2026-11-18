@@ -248,17 +248,27 @@ MonoBehaviour:
   _opponentAiSettings:
     Enabled: 1
     InitialDelay: 0.8
-    ThinkMin: 2
-    ThinkMax: 4
-    ActionMin: 0.8
-    ActionMax: 1.5
+    ScanInterval: 0.5
+    FastScanInterval: 0.15
+    MinimumActionInterval: 0.8
+    MovementInterval: 3
+    PurchaseRefillInterval: 3
+    PurchaseCapacity: 2
+    SearchCandidatesPerFrame: 64
+    SearchMillisecondsPerFrame: 2
+    SearchWindow: 0.5
     BusyRetryDelay: 0.5
-    ActionsPerRound: 3
-    PurchasesPerRound: 2
-    InitialRobotTarget: 3
-    MoveCooldown: 10
     RefreshCooldown: 8
     ResourceRetryDelay: 5
+  _opponentAiStrategy:
+    GlassWeights: {x: 0.45, y: 0.2, z: 0.25, w: 0.1}
+    ComboWeights: {x: 0.05, y: 0.35, z: 0.45, w: 0.15}
+    MinimumScoreGain: 0.05
+    LowGlassRatio: 0.2
+    LowGlassMinimum: 2
+    PredictionSeconds: 0.12
+    ReverseMoveBlock: 6
+    FinalistCount: 8
   _playerTowerView: {fileID: 436032437}
   _opponentTowerView: {fileID: 1519177346}
   _towerConfigId: 3001
