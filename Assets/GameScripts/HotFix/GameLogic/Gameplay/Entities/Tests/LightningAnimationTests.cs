@@ -11,7 +11,7 @@ namespace GameLogic.Tests
         private const string Folder = "Assets/AssetRaw/Actor/Prefabs/bullets/";
 
         [TestCase("LightningSpark", 10)]
-        [TestCase("LightningArc", 5)]
+        [TestCase("LightningArc", 8)]
         public void ClipsContainEverySourceFrameInOrder(string name, int frameCount)
         {
             var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/AssetRaw/Actor/Animations/Effects/" + name + ".anim");
