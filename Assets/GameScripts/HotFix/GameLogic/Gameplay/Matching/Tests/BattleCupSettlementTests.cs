@@ -21,13 +21,60 @@ namespace GameLogic.Tests
         private static MainMenuPlayerState Player(int trophies) =>
             new MainMenuPlayerState(30, TimeSpan.FromMinutes(5), 30, 100, trophies, DateTimeOffset.UtcNow);
 
-        private static MatchPlayerRecord Started(MainMenuPlayerState state, string id = "battle")
+        private static MatchPlayerRecord Started(MainMenuPlayerState state, string id = "battle", int? opponentTrophies = null)
         {
             var record = new MatchPlayerRecord();
             record.BeginEntry(state, id, DateTimeOffset.UtcNow);
             record.CommitSuccess(id);
-            record.StartBattle(state, id, BattleRewardRules.FromTables(LoadTables(), state.Trophies));
+            record.StartBattle(state, id, BattleRewardRules.FromTables(LoadTables(), state.Trophies),
+                opponentTrophies.HasValue ? BattleRewardRules.FromTables(LoadTables(), opponentTrophies.Value) : null);
             return record;
+        }
+
+        private sealed class MaximumRandom : IShopRandom
+        {
+            public double NextDouble() => 0;
+            public int NextInt(int maxExclusive) => maxExclusive - 1;
+        }
+
+        [TestCase(399, 400, true, 427, 390)]
+        [TestCase(400, 399, true, 420, 394)]
+        [TestCase(400, 399, false, 390, 427)]
+        [TestCase(400, 0, true, 420, 0)]
+        public void OpponentUsesItsOwnEntryTrophiesAndRewardBand(int before, int opponentBefore, bool win,
+            int after, int opponentAfter)
+        {
+            var player = Player(before);
+            var record = Started(player, opponentTrophies: opponentBefore);
+            var candidate = record.Copy();
+            Assert.AreNotSame(record.OpponentEntryRules, candidate.OpponentEntryRules);
+            candidate.OpponentEntryRules.StartingTrophies = 123;
+            Assert.AreEqual(opponentBefore, record.OpponentEntryRules.StartingTrophies);
+
+            record = JsonUtility.FromJson<MatchPlayerRecord>(JsonUtility.ToJson(record));
+            player = record.Restore(30, TimeSpan.FromMinutes(5), DateTimeOffset.UtcNow);
+            var result = win ? BattleSettlementResult.Victory : BattleSettlementResult.Defeat;
+            var settlement = record.SettleBattle(player, "battle", result, false);
+            Assert.AreEqual(after, player.Trophies);
+            Assert.AreEqual(opponentBefore, settlement.OpponentTrophiesBefore);
+            Assert.AreEqual(opponentAfter, settlement.OpponentTrophiesAfter);
+            record.RecoverPending(player, DateTimeOffset.UtcNow);
+            Assert.AreSame(settlement, record.SettleBattle(player, "battle", result, false));
+            Assert.AreEqual(opponentAfter, settlement.OpponentTrophiesAfter);
+        }
+
+        [Test]
+        public void RestartOfUnfinishedBattleKeepsOpponentTrophiesAndOwnRewardBand()
+        {
+            var player = Player(400);
+            var record = JsonUtility.FromJson<MatchPlayerRecord>(JsonUtility.ToJson(Started(player, opponentTrophies: 399)));
+            player = record.Restore(30, TimeSpan.FromMinutes(5), DateTimeOffset.UtcNow);
+            record.RecoverPending(player, DateTimeOffset.UtcNow);
+            record.RecoverPending(player, DateTimeOffset.UtcNow);
+            Assert.AreEqual(390, player.Trophies);
+            Assert.AreEqual(399, record.Settlement.OpponentTrophiesBefore);
+            Assert.AreEqual(427, record.Settlement.OpponentTrophiesAfter);
+            Assert.AreEqual(100, player.Coins);
         }
 
         [TestCase(false)]
@@ -206,7 +253,7 @@ namespace GameLogic.Tests
             var player = Player(3);
             player.PlayerName = "杯数测试";
             var profile = AssetDatabase.LoadAssetAtPath<DemoBattleProfile>("Assets/AssetRaw/Configs/DemoBattleProfile.asset");
-            var entry = new MatchEntrySnapshot(profile, player, ShopRules.FromTables(LoadTables()));
+            var entry = new MatchEntrySnapshot(profile, player, ShopRules.FromTables(LoadTables()), new MaximumRandom());
             player.ChangeTrophies(-3);
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/UIPrefabs/BattleInfo/BattleInfoUI.prefab");
             var root = UnityEngine.Object.Instantiate(prefab);
@@ -219,7 +266,7 @@ namespace GameLogic.Tests
                 typeof(BattleInfoUI).GetMethod("ScriptGenerator", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(widget, null);
                 widget.BindMatch(entry);
                 Assert.AreEqual("3", root.transform.Find("m_rect_BattleInfo/m_rect_Player/m_img_InfoBackground/m_text_Trophies").GetComponent<Text>().text);
-                Assert.AreEqual("3", root.transform.Find("m_rect_BattleInfo/m_rect_Enemy/m_img_InfoBackground/m_text_Trophies").GetComponent<Text>().text);
+                Assert.AreEqual("503", root.transform.Find("m_rect_BattleInfo/m_rect_Enemy/m_img_InfoBackground/m_text_Trophies").GetComponent<Text>().text);
                 Assert.AreEqual("杯数测试", root.transform.Find("m_rect_BattleInfo/m_rect_Player/m_img_InfoBackground/m_text_Name").GetComponent<Text>().text);
             }
             finally { UnityEngine.Object.DestroyImmediate(root); }

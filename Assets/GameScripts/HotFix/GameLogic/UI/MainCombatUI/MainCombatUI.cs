@@ -59,6 +59,7 @@ namespace GameLogic
             Context = context;
             Info.BindMatch(context?.Entry);
             Host = UserDatas != null && UserDatas.Length > 1 ? UserDatas[1] as BattleShopSceneController : null;
+            Info.BindAssists(Host?.BattleAssists);
             Shop.Bind(Context, Host);
             CurrencyFlight.Bind(Context, Host != null && Host.Placement != null ? Host.Placement.SceneCamera : null,
                 Shop.transform.Find("m_rect_ShopPanel/EnergyBalance/m_img_EnergyCoin") as UnityEngine.RectTransform);

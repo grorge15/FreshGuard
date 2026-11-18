@@ -7,6 +7,49 @@ namespace GameLogic.Tests
 {
     public sealed class MatchSnapshotTests
     {
+        private sealed class TrophyRandom : IShopRandom
+        {
+            private readonly bool _maximum;
+            public int Calls { get; private set; }
+            public TrophyRandom(bool maximum) { _maximum = maximum; }
+            public double NextDouble() => 0;
+            public int NextInt(int maxExclusive)
+            {
+                Calls++;
+                return _maximum ? maxExclusive - 1 : 0;
+            }
+        }
+
+        [TestCase(0, false, 0)]
+        [TestCase(0, true, 500)]
+        [TestCase(200, false, 0)]
+        [TestCase(200, true, 700)]
+        [TestCase(500, false, 0)]
+        [TestCase(500, true, 1000)]
+        [TestCase(2500, false, 2000)]
+        [TestCase(2500, true, 3000)]
+        [TestCase(int.MaxValue, false, int.MaxValue - 500)]
+        [TestCase(int.MaxValue, true, int.MaxValue)]
+        public void OpponentTrophiesUseInclusiveValidRangeAndStayFrozen(int trophies, bool maximum, int expected)
+        {
+            var profile = ScriptableObject.CreateInstance<DemoBattleProfile>();
+            try
+            {
+                foreach (var id in ShopTestData.Candidates)
+                    profile.Robots.Add(new DemoRobotReference { RobotId = id });
+                var player = new MainMenuPlayerState(30, TimeSpan.FromMinutes(5), 30, 0, trophies, DateTimeOffset.UtcNow);
+                var random = new TrophyRandom(maximum);
+                var entry = new MatchEntrySnapshot(profile, player, ShopTestData.Rules(), random);
+                Assert.That(entry.OpponentTrophies, Is.EqualTo(expected));
+                Assert.That(random.Calls, Is.EqualTo(1));
+                player.ChangeTrophies(-1);
+                Assert.That(entry.Trophies, Is.EqualTo(trophies));
+                Assert.That(entry.OpponentTrophies, Is.EqualTo(expected));
+                Assert.That(random.Calls, Is.EqualTo(1), "显示或玩家杯数变化不能重新抽取敌方杯数。");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(profile); }
+        }
+
         [Test] public void FilteringPreservesOriginalDropOrdinalsOnBothSidesAndSnapshotCopiesInput()
         {
             var profile=ScriptableObject.CreateInstance<DemoBattleProfile>();

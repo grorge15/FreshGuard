@@ -22,11 +22,14 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void InductionPortraitIsIndependentFromSharedFrostBackground()
+        public void FrostAndInductionKeepDistinctFootprintsAndPortraits()
         {
             var induction = _tables.TbRobot.Get(701);
             var frost = _tables.TbRobot.Get(601);
-            Assert.AreEqual(frost.RobotIcon, induction.RobotIcon, "同形状的机器人允许复用底板。");
+            Assert.AreEqual(1315, induction.ShapeId, "电磁炉保留2×2方形占格。");
+            Assert.AreEqual("RobotFrostIcon", induction.RobotIcon, "保留电磁炉现有方形底板。");
+            Assert.AreEqual(1324, frost.ShapeId, "冰霜炮改为下排三格、上排中央一格。");
+            Assert.AreNotEqual(frost.RobotIcon, induction.RobotIcon, "不同占格需要对应的底板。");
             Assert.AreEqual("RobotInductionCookerPortrait", induction.RobotPortrait);
             Assert.AreNotEqual(frost.RobotPortrait, induction.RobotPortrait);
             var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(
@@ -143,13 +146,14 @@ namespace GameLogic.Tests
         }
 
         [TestCase(501, "0,0;1,0")]
-        [TestCase(502, "0,0;1,0;0,1")]
+        [TestCase(502, "0,0;1,0;1,1")]
         [TestCase(503, "0,0;0,1;0,2")]
         [TestCase(504, "0,0;0,1")]
         [TestCase(505, "0,0;1,0;2,0;1,1")]
-        [TestCase(601, "0,0;1,0;0,1;1,1")]
+        [TestCase(601, "0,0;1,0;2,0;1,1")]
         [TestCase(602, "0,0;0,1;1,1")]
         [TestCase(603, "0,0;1,0;1,1;2,1")]
+        [TestCase(701, "0,0;1,0;0,1;1,1")]
         [TestCase(702, "0,0;1,0;2,0")]
         [TestCase(703, "0,0;1,0")]
         [TestCase(704, "0,0;0,1")]
@@ -183,7 +187,7 @@ namespace GameLogic.Tests
                 Assert.IsNull(cell.GetComponent<Collider2D>(), "格子只负责显示，不再保留独立碰撞体。");
             }
             Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Sprite>(
-                "Assets/AssetRaw/Actor/Sprites/Robots/Robots/" + config.RobotIcon + ".png"));
+                "Assets/AssetRaw/Actor/Sprites/Robots/RobotsIcon/" + config.RobotIcon + ".png"));
             var body = prefab.GetComponent<PolygonCollider2D>();
             Assert.IsNotNull(body, "机器人需要根据占格生成整体实体碰撞轮廓。");
             Assert.IsTrue(body.enabled);

@@ -22,6 +22,8 @@ namespace GameLogic
         public string EntryPhase;
         public int EntryEnergyBeforeSpend;
         public BattleRewardRules EntryRules;
+        public bool HasOpponentEntryRules;
+        public BattleRewardRules OpponentEntryRules;
         public BattleSettlementRecord Settlement;
         public List<HeldAssistRecord> HeldAssists = new List<HeldAssistRecord>();
 
@@ -54,6 +56,9 @@ namespace GameLogic
                 // 候选存档保留杯数账目，并与当前记录隔离可变的结算数据。
                 EntryRules = EntryRules == null ? null :
                     JsonUtility.FromJson<BattleRewardRules>(JsonUtility.ToJson(EntryRules)),
+                HasOpponentEntryRules = HasOpponentEntryRules,
+                OpponentEntryRules = OpponentEntryRules == null ? null :
+                    JsonUtility.FromJson<BattleRewardRules>(JsonUtility.ToJson(OpponentEntryRules)),
                 Settlement = Settlement == null ? null :
                     JsonUtility.FromJson<BattleSettlementRecord>(JsonUtility.ToJson(Settlement)),
                 HeldAssists = HeldAssists?.Select(record => record.Copy()).ToList() ?? new List<HeldAssistRecord>()
@@ -67,7 +72,8 @@ namespace GameLogic
             state.Refresh(now);
             if (!state.TrySpendEnergy(MainMenuPlayerState.DefaultEnergyCost)) throw new InvalidOperationException("当前体力不足");
             EntryEnergyBeforeSpend = state.Energy + MainMenuPlayerState.DefaultEnergyCost;
-            EntryId = entryId; EntryPhase = "Matching"; EntryRules = null; Settlement = null; Capture(state);
+            EntryId = entryId; EntryPhase = "Matching"; EntryRules = null;
+            HasOpponentEntryRules = false; OpponentEntryRules = null; Settlement = null; Capture(state);
         }
         public void CommitSuccess(string entryId)
         {
@@ -88,12 +94,14 @@ namespace GameLogic
             EntryPhase = "Refunded"; Capture(state); return true;
         }
 
-        public void StartBattle(MainMenuPlayerState state, string entryId, BattleRewardRules rules)
+        public void StartBattle(MainMenuPlayerState state, string entryId, BattleRewardRules rules,
+            BattleRewardRules opponentRules = null)
         {
             if (EntryId != entryId || EntryPhase != "Success") throw new InvalidOperationException("开战记录归属变化。");
             if (rules == null || rules.StartingTrophies != state.Trophies)
                 throw new InvalidOperationException("开战杯数与入场快照不一致。");
-            EntryRules = rules; Settlement = null; EntryPhase = "Playing"; Capture(state);
+            EntryRules = rules; HasOpponentEntryRules = opponentRules != null; OpponentEntryRules = opponentRules;
+            Settlement = null; EntryPhase = "Playing"; Capture(state);
         }
 
         /// <summary>独立运行战斗场景时也使用相同账目；正式匹配通过 StartBattle 入场。</summary>
@@ -116,7 +124,7 @@ namespace GameLogic
             if (string.IsNullOrEmpty(entryId) || EntryId != entryId) throw new InvalidOperationException("结算记录归属变化。");
             if (EntryPhase == "Settled" && Settlement != null)
             {
-                Settlement.EnsureOpponentTrophies(EntryRules);
+                Settlement.EnsureOpponentTrophies(OpponentRules);
                 return Settlement;
             }
             if (EntryPhase != "Playing" || EntryRules == null) throw new InvalidOperationException("本局尚未正式开战。");
@@ -130,7 +138,7 @@ namespace GameLogic
                 BaseCoins = abandoned ? 0 : outcome == BattleSettlementResult.Victory ? EntryRules.WinCoins : EntryRules.LoseCoins,
                 ItemName = EntryRules.ItemName
             };
-            data.EnsureOpponentTrophies(EntryRules);
+            data.EnsureOpponentTrophies(OpponentRules);
             state.ChangeTrophies(data.TrophyDelta);
             Settlement = data; EntryPhase = "Settled"; Capture(state);
             return data;
@@ -154,11 +162,15 @@ namespace GameLogic
             if (EntryPhase == "Matching" || EntryPhase == "Success") RefundFailure(state, EntryId, now);
             else if (EntryPhase == "Playing") SettleBattle(state, EntryId, BattleSettlementResult.Defeat, true);
             // 兼容尚未记录敌方杯数的旧账目，只补齐展示数据，不重复改变玩家余额。
-            if (EntryPhase == "Settled" && Settlement != null) Settlement.EnsureOpponentTrophies(EntryRules);
+            if (EntryPhase == "Settled" && Settlement != null) Settlement.EnsureOpponentTrophies(OpponentRules);
             // 已确定胜负但未点击领取的基础金币，在重启时补领一次。
             if (EntryPhase == "Settled" && Settlement != null && Settlement.ClaimedMultiplier == 0)
                 ClaimSettlement(state, EntryId, 1);
         }
+
+        // JsonUtility 可能将缺失的嵌套规则恢复为空对象，用标记区分旧存档与真实的0杯对手。
+        private BattleRewardRules OpponentRules => HasOpponentEntryRules && OpponentEntryRules != null
+            ? OpponentEntryRules : EntryRules;
     }
 
     /// <summary>只在同一串行队列写入；临时文件与目标同目录，替换提交体力与入场状态。</summary>

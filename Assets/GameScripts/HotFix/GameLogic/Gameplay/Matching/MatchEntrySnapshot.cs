@@ -69,12 +69,14 @@ namespace GameLogic
     /// <summary>复制所有可变配置；原始候选序号用于保留Drop权重映射。</summary>
     public sealed class MatchEntrySnapshot
     {
+        private const int OPPONENT_TROPHY_RANGE = 500;
         public string EntryId { get; }
         public string PlayerName { get; }
         public string PlayerAvatar { get; }
         public string OpponentName { get; }
         public string OpponentAvatar { get; }
         public int Trophies { get; }
+        public int OpponentTrophies { get; }
         public IReadOnlyList<int> Candidates { get; }
         public IReadOnlyDictionary<int, int> CandidateOrdinals { get; }
         public IReadOnlyDictionary<int, int> OpponentLevelCaps { get; }
@@ -147,7 +149,19 @@ namespace GameLogic
             OpponentName = profile.OpponentName; OpponentAvatar = profile.OpponentAvatar; Trophies = player.Trophies;
             Candidates = ids.AsReadOnly(); CandidateOrdinals = new ReadOnlyDictionary<int, int>(ordinals);
             OpponentLevelCaps = new ReadOnlyDictionary<int, int>(caps); PlayerBuffs = carried.AsReadOnly();
-            OpponentBuffs = MatchBuffGenerator.Draw(unlocked, carried.Count, random ?? new ShopRandom());
+            var matchRandom = random ?? new ShopRandom();
+            OpponentBuffs = MatchBuffGenerator.Draw(unlocked, carried.Count, matchRandom);
+            OpponentTrophies = DrawOpponentTrophies(Trophies, matchRandom);
+        }
+
+        private static int DrawOpponentTrophies(int trophies, IShopRandom random)
+        {
+            var minimum = (int)Math.Max(0L, (long)trophies - OPPONENT_TROPHY_RANGE);
+            var maximum = (int)Math.Min(int.MaxValue, (long)trophies + OPPONENT_TROPHY_RANGE);
+            var count = maximum - minimum + 1;
+            var offset = random.NextInt(count);
+            if (offset < 0 || offset >= count) throw new InvalidOperationException("敌方杯数随机数越界。");
+            return minimum + offset;
         }
     }
 }

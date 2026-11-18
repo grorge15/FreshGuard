@@ -9,7 +9,8 @@ public partial class GameApp
     private static async UniTask PrepareBattleSettlementAsync(MatchEntrySnapshot entry)
     {
         _playerRecord.StartBattle(PlayerState, entry.EntryId,
-            BattleRewardRules.FromTables(ConfigSystem.Instance.Tables, entry.Trophies));
+            BattleRewardRules.FromTables(ConfigSystem.Instance.Tables, entry.Trophies),
+            BattleRewardRules.FromTables(ConfigSystem.Instance.Tables, entry.OpponentTrophies));
         // 确认所有资源就绪后先保存开战账目，再放行战斗，避免强退绕过失败结算。
         await SavePlayerStateAsync();
     }

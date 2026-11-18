@@ -9,7 +9,7 @@ namespace GameLogic.Tests
 {
     public sealed class BattleInfoViewTests
     {
-        private const string PREFAB_PATH = "Assets/AssetRaw/UI/BattleInfo/BattleInfoUI.prefab";
+        private const string PREFAB_PATH = "Assets/AssetRaw/Actor/Prefabs/UIPrefabs/BattleInfo/BattleInfoUI.prefab";
         private const BindingFlags PRIVATE_INSTANCE = BindingFlags.NonPublic | BindingFlags.Instance;
 
         [TestCase(-0.5f, 0f)]
@@ -48,7 +48,7 @@ namespace GameLogic.Tests
                 Assert.That(root.GetComponent<CanvasGroup>().interactable, Is.False);
                 Assert.That(root.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
                 foreach (var graphic in root.GetComponentsInChildren<Graphic>(true))
-                    Assert.That(graphic.raycastTarget, Is.False);
+                    Assert.That(graphic.raycastTarget, Is.EqualTo(graphic.GetComponent<Button>() != null));
             }
             finally { Object.DestroyImmediate(root); }
         }
@@ -72,7 +72,7 @@ namespace GameLogic.Tests
             Assert.That(prefab.GetComponent<CanvasGroup>().interactable, Is.False);
             Assert.That(prefab.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
             foreach (var graphic in prefab.GetComponentsInChildren<Graphic>(true))
-                Assert.That(graphic.raycastTarget, Is.False);
+                Assert.That(graphic.raycastTarget, Is.EqualTo(graphic.GetComponent<Button>() != null));
         }
 
         [Test]
@@ -175,7 +175,7 @@ namespace GameLogic.Tests
         [Test]
         public void PrefabRendersBothSidesAndKeepsWholeBattleTimeAcrossWaves()
         {
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/UI/BattleInfo/BattleInfoUI.prefab");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PREFAB_PATH);
             Assert.That(prefab, Is.Not.Null);
             var root = Object.Instantiate(prefab);
             var texture = new Texture2D(4, 4);
@@ -204,7 +204,7 @@ namespace GameLogic.Tests
                 Assert.That(root.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
                 foreach (var graphic in root.GetComponentsInChildren<Graphic>(true))
                 {
-                    Assert.That(graphic.raycastTarget, Is.False);
+                    Assert.That(graphic.raycastTarget, Is.EqualTo(graphic.GetComponent<Button>() != null));
                     Assert.That(graphic.GetComponent<CanvasRenderer>(), Is.Not.Null);
                 }
             }
@@ -215,6 +215,64 @@ namespace GameLogic.Tests
                 Object.DestroyImmediate(texture);
             }
         }
+        [Test]
+        public void AssistRowsKeepQualityAndLevelsSeparateAndClearEmptySlotsWhenRebound()
+        {
+            var root = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(PREFAB_PATH));
+            try
+            {
+                var view = root.GetComponent<BattleInfoView>();
+                view.SetAssistBuffs(new[] {
+                    new MatchBuff(1801, "开局", "", 1, quality: MysteriousStoreQuality.Green),
+                    new MatchBuff(1802, "加速", "", 3, quality: MysteriousStoreQuality.Blue),
+                    new MatchBuff(1803, "增伤", "", 1, quality: MysteriousStoreQuality.Purple),
+                    new MatchBuff(1804, "破碎", "", 2, quality: MysteriousStoreQuality.Orange) },
+                    new[] { new MatchBuff(1803, "增伤", "", 2, quality: MysteriousStoreQuality.Orange) });
+                for (var i = 0; i < 4; i++)
+                {
+                    Assert.That(BuffFrame(root, "Player", i).enabled, Is.True);
+                    Assert.That(BuffFrame(root, "Player", i).sprite, Is.SameAs(QualitySprite((MysteriousStoreQuality)i)));
+                }
+                Assert.That(BuffFrame(root, "Enemy", 0).sprite, Is.SameAs(QualitySprite(MysteriousStoreQuality.Orange)));
+                Assert.That(BuffFrame(root, "Enemy", 1).enabled, Is.False);
+                Assert.That(BuffLevel(root, "Player", 0).gameObject.activeSelf, Is.False);
+                Assert.That(BuffLevel(root, "Player", 1).text, Is.EqualTo("3级"));
+                Assert.That(BuffLevel(root, "Enemy", 0).text, Is.EqualTo("2级"));
+                Assert.That(BuffLevel(root, "Enemy", 1).gameObject.activeSelf, Is.False);
+                view.SetAssistBuffs(new[] { new MatchBuff(1802, "加速", "", 1, quality: MysteriousStoreQuality.Purple) }, null);
+                Assert.That(BuffFrame(root, "Player", 0).sprite, Is.SameAs(QualitySprite(MysteriousStoreQuality.Purple)));
+                foreach (var side in new[] { "Player", "Enemy" })
+                    for (var i = 0; i < BattleInfoView.BUFF_CAPACITY; i++)
+                    {
+                        var level = BuffLevel(root, side, i);
+                        Assert.That(level.gameObject.activeSelf, Is.False);
+                        Assert.That(level.text, Is.Empty);
+                        var occupied = side == "Player" && i == 0;
+                        Assert.That(BuffFrame(root, side, i).enabled, Is.EqualTo(occupied));
+                        if (!occupied) Assert.That(BuffFrame(root, side, i).sprite, Is.Null);
+                    }
+                view.SetAssistBuffs(null, null);
+                Assert.That(BuffFrame(root, "Player", 0).enabled, Is.False);
+                Assert.That(BuffFrame(root, "Player", 0).sprite, Is.Null);
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
+
+        private static Text BuffLevel(GameObject root, string side, int index)
+        {
+            return root.transform.Find("m_rect_BattleInfo/m_rect_" + side + "/m_rect_BuffSlots/m_rect_Buff" + index + "/m_text_Level").GetComponent<Text>();
+        }
+
+        private static Image BuffFrame(GameObject root, string side, int index)
+        {
+            return root.transform.Find("m_rect_BattleInfo/m_rect_" + side + "/m_rect_BuffSlots/m_rect_Buff" + index + "/m_img_QualityFrame").GetComponent<Image>();
+        }
+
+        private static Sprite QualitySprite(MysteriousStoreQuality quality)
+        {
+            return AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/UI/UISprites/MysteriousStore/shopIcon/Shop_BuffFrame" + quality + ".png");
+        }
+
         private static string Label(GameObject root, string path)
         { return root.transform.Find("m_rect_BattleInfo/" + path).GetComponent<Text>().text; }
     }
