@@ -238,7 +238,7 @@ namespace GameLogic.Tests
             var state = bullet.State;
             if (!beforeFirstTick) _combat.AdvanceExistingBullets(0.1f);
             _f.Advance(0.1f); // 敌人移动到子弹尚未采样的新位置后死亡。
-            var deathPosition = victim.transform.position;
+            var deathPosition = victim.GetVisualBounds().center;
             Assert.AreEqual(DamageResult.Killed, _f.Context.Registry.ApplyDamage(victimId, int.MaxValue, out var removal));
             ((EnemyBattleController)_f.Controller).NotifyKilled(removal);
             victim.OnDeathAnimationComplete();

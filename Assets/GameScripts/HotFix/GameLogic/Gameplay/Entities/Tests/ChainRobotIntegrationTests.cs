@@ -117,7 +117,7 @@ namespace GameLogic.Tests
             if (chain) for (var i = 0; i < 4; i++) Shoot(robot).Cancel();
             var shot = Shoot(robot);
             var target = _f.Views.Single(v => v.InstanceId == shot.Action.TargetInstanceIds[0]);
-            var hitPosition = target.transform.position;
+            var hitPosition = target.GetVisualBounds().center;
             // 连线起点使用发射快照，不随机器人在弹丸飞行期间移动。
             _views[robot.InstanceId].transform.position += Vector3.right * 2;
             var damage = new List<int>();
