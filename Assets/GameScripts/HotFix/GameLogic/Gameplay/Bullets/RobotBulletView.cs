@@ -19,7 +19,12 @@ namespace GameLogic
         public bool IsResolved => State == null || State.IsResolved;
         public CombatActionSnapshot Action => State?.Action;
         public void Bind(BulletState state)
-        { State = state ?? throw new ArgumentNullException(nameof(state)); Present(state); }
+        {
+            State = state ?? throw new ArgumentNullException(nameof(state));
+            Present(state);
+            // Reset the trail after positioning a newly spawned or reused projectile.
+            if (TryGetComponent<TrailRenderer>(out var trail)) trail.Clear();
+        }
         public void Present(BulletState state)
         {
             if (this == null || state == null) return;
