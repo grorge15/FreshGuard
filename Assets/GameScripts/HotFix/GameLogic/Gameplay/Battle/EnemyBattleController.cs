@@ -45,8 +45,8 @@ namespace GameLogic
         private readonly Dictionary<int, MoveEntry> _active = new Dictionary<int, MoveEntry>();
         private readonly Dictionary<int, DeathEntry> _dying = new Dictionary<int, DeathEntry>();
         // 只保存本局的值快照，死亡表现回收后仍供在途子弹查询。
-        private readonly Dictionary<int, (BattleSide Side, Vector3 Position)> _deathPositions =
-            new Dictionary<int, (BattleSide Side, Vector3 Position)>();
+        private readonly Dictionary<int, (BattleSide Side, Vector3 Position, Vector3 AttackTarget)> _deathPositions =
+            new Dictionary<int, (BattleSide Side, Vector3 Position, Vector3 AttackTarget)>();
         private readonly List<DamageNumberView> _damageNumbers = new List<DamageNumberView>();
         private BattleShopSceneController _host;
         private BattleShopContext _context;
@@ -419,7 +419,7 @@ namespace GameLogic
             foreach (var pair in _active)
                 if (pair.Value.Group.Side == side && pair.Value.View != null &&
                     _context.Registry.TryGet(pair.Key, out var entity) && entity is EnemyEntity enemy && enemy.IsAlive)
-                    targets.Add(new BulletTarget(pair.Key, pair.Value.View.transform.position, enemy.Configuration?.HitRadius ?? 0.3f));
+                    targets.Add(new BulletTarget(pair.Key, pair.Value.View.AttackTargetPosition, enemy.Configuration?.HitRadius ?? 0.3f));
             return targets;
         }
 
@@ -633,15 +633,15 @@ namespace GameLogic
                 entry.View == null || !entry.View.isActiveAndEnabled || entry.View.InstanceId != instanceId ||
                 !_context.Registry.TryGet(instanceId, out var entity) || !(entity is EnemyEntity enemy) ||
                 !enemy.IsAlive || enemy.Side != side) return false;
-            position = entry.View.transform.position;
+            position = entry.View.AttackTargetPosition;
             return true;
         }
 
-        internal bool TryGetDeathPosition(BattleSide side, int instanceId, out Vector3 position)
+        internal bool TryGetDeathPosition(BattleSide side, int instanceId, out Vector3 position, bool attackTarget = false)
         {
             position = default;
             if (!OwnsBattle || !_deathPositions.TryGetValue(instanceId, out var death) || death.Side != side) return false;
-            position = death.Position;
+            position = attackTarget ? death.AttackTarget : death.Position;
             return true;
         }
 
@@ -665,7 +665,7 @@ namespace GameLogic
             ReleaseIsolationEffect(snapshot.InstanceId);
             _active.Remove(snapshot.InstanceId);
             if (entry.View == null) return;
-            _deathPositions[snapshot.InstanceId] = (snapshot.Side, entry.View.transform.position);
+            _deathPositions[snapshot.InstanceId] = (snapshot.Side, entry.View.transform.position, entry.View.AttackTargetPosition);
             _dying.Add(snapshot.InstanceId, new DeathEntry { View = entry.View });
             entry.View.RemovalAnimationCompleted += OnDeathCompleted;
             try

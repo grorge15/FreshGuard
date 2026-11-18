@@ -48,6 +48,22 @@ namespace GameLogic
             }
             if (context.Request.SkillId != _robot.SkillId) return;
             context.AttackCycleVersion = Version;
+            if (_robot is InductionRobotEntity)
+            {
+                var threshold = PositiveInteger(context.Parameters, "attackCycleCount");
+                if (AttackCount >= threshold - 1)
+                {
+                    if (!_battle.Catalog.TryGet(TriggerSkillId, out var chain) ||
+                        !_battle.Catalog.TryGetLevel(TriggerSkillId, context.Level, out var level))
+                        throw new InvalidOperationException("缺少电磁炉连锁攻击配置。");
+                    // 保留普攻的身份、伤害和即时发射时机，只替换这一发的命中行为。
+                    context.BulletId = chain.BulletId;
+                    context.Parameters["chainRange"] = level.Parameters["chainRange"];
+                    context.Parameters["chainTargetCount"] = level.Parameters["chainTargetCount"];
+                    context.Parameters["chainDamageRatio"] = level.Parameters["chainDamageRatio"];
+                }
+                return;
+            }
             if (_robot.UsesProjectileAttackCycle || Pending) return;
             var required = PositiveInteger(context.Parameters, "attackCycleCount");
             var version = Version;
@@ -66,6 +82,11 @@ namespace GameLogic
                 !cast.Owner.Equals(_robot.OwnerRef) || cast.SkillId != _robot.SkillId ||
                 cast.Level != _robot.Level || cast.AttackCycleVersion != Version || !cast.TryCountAttackCycle()) return;
             var required = PositiveInteger(cast.Parameters, "attackCycleCount");
+            if (_robot is InductionRobotEntity)
+            {
+                AttackCount = AttackCount >= required - 1 ? 0 : AttackCount + 1;
+                return;
+            }
             AttackCount = checked(AttackCount + 1);
             if (Pending)
             {

@@ -2,7 +2,7 @@ using GameConfig.robot;
 
 namespace GameLogic
 {
-    /// <summary>散射机器人；技能行为后续实现。</summary>
+    /// <summary>散射机器人；单局控制器按成功碰撞攻击循环发射1、2、3道穿透激光。</summary>
     public sealed class ScatterRobotEntity : RobotEntity
     {
         public const int CONFIG_ID = 502;

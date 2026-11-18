@@ -888,7 +888,7 @@ namespace GameLogic
             try
             {
                 var glass = collision.collider.GetComponent<GlassView>();
-                if (glass != null && (glass.Owner == null || !glass.Owner.IsRunning ||
+                if (glass != null && (glass.Owner == null || !glass.Owner.CanCollide ||
                     glass.Owner.Side != Side || glass.Owner.BattleId != BattleId)) return;
                 ValidateConfig();
                 var bounced = false;
@@ -1025,13 +1025,20 @@ namespace GameLogic
 
         private void ApplyGlassCollision(GlassView glass, Vector2? contactPoint = null, Vector2? contactNormal = null)
         {
-            if (glass == null || glass.Owner == null || !glass.Owner.IsRunning || glass.Owner.Side != Side ||
+            if (glass == null || glass.IsBroken || glass.Owner == null || !glass.Owner.CanCollide || glass.Owner.Side != Side ||
                 glass.Owner.BattleId != BattleId || !_glassHitsThisStep.Add(glass.InstanceId)) return;
             var center = (Vector2)_collider.bounds.center;
             var point = contactPoint ?? glass.GetComponent<Collider2D>().ClosestPoint(center);
             var normal = contactNormal ?? (center - point).normalized;
-            var result = glass.Collide(this);
-            if (result == GlassCollisionResult.Ignored) return;
+            if (glass.Owner.IsRunning)
+            {
+                if (glass.Collide(this) == GlassCollisionResult.Ignored) return;
+            }
+            else
+            {
+                // 准备阶段只反弹并播放碰撞反馈，不提交耐久扣除或消耗受击间隔。
+                GameSoundService.PlayForSide(GameSound.GlassHit, Side);
+            }
             ResetComboCount();
             _impactFeedback?.PlayGlass(point, normal);
             SecondsSinceEffectiveInteraction = 0f;

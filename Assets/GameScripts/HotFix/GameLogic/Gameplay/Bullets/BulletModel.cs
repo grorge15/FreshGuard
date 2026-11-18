@@ -27,7 +27,8 @@ namespace GameLogic
             EntityValidation.RequirePositive(id, nameof(id));
             if (string.IsNullOrWhiteSpace(prefab)) throw new ArgumentException(nameof(prefab));
             if (string.IsNullOrWhiteSpace(behaviorKey)) throw new ArgumentException(nameof(behaviorKey));
-            if (flightType != BulletFlightType.Straight && flightType != BulletFlightType.Parabolic)
+            if (flightType != BulletFlightType.Straight && flightType != BulletFlightType.Parabolic &&
+                flightType != BulletFlightType.Beam)
                 throw new ArgumentOutOfRangeException(nameof(flightType));
             if (hitMode != BulletHitMode.LockedTarget && hitMode != BulletHitMode.FirstEnemy &&
                 hitMode != BulletHitMode.PierceEnemies && hitMode != BulletHitMode.AreaAtLanding) throw new ArgumentOutOfRangeException(nameof(hitMode));
@@ -41,6 +42,9 @@ namespace GameLogic
                 throw new ArgumentOutOfRangeException(nameof(speed));
             if (flightType == BulletFlightType.Parabolic && flightTime <= 0f)
                 throw new ArgumentOutOfRangeException(nameof(flightTime));
+            if (flightType == BulletFlightType.Beam &&
+                (trackTarget || hitMode != BulletHitMode.PierceEnemies || flightTime <= 0f || speed != 0f || arcHeight != 0f))
+                throw new ArgumentException("光束需要固定方向、全穿透及有效表现时长，不使用飞行速度或弧高。");
             Id = id; Prefab = prefab; FlightType = flightType; TrackTarget = trackTarget;
             HitMode = hitMode; Speed = speed; FlightTime = flightTime; ArcHeight = arcHeight; HitRadius = hitRadius;
             BehaviorKey = behaviorKey; HitEffectPrefab = hitEffectPrefab ?? string.Empty;
@@ -91,8 +95,9 @@ namespace GameLogic
         public CombatActionSnapshot Action { get; }
         public Vector3 Direction { get; }
         public int MaxHitTargets { get; }
+        public float BeamHitDelay { get; }
         public BulletLauncher(BulletModel model, CombatActionSnapshot action, Vector3? direction = null,
-            int maxHitTargets = 1)
+            int maxHitTargets = 1, float beamHitDelay = 0f)
         {
             Model = model ?? throw new ArgumentNullException(nameof(model));
             Action = action ?? throw new ArgumentNullException(nameof(action));
@@ -101,14 +106,19 @@ namespace GameLogic
             if (model.HitMode == BulletHitMode.AreaAtLanding && action.TargetInstanceIds.Count != 0)
                 throw new ArgumentException("位置落地弹不得绑定实体目标。", nameof(action));
             EntityValidation.RequirePositive(maxHitTargets, nameof(maxHitTargets));
+            EntityValidation.RequireFiniteNonNegative(beamHitDelay, nameof(beamHitDelay));
+            if (model.FlightType == BulletFlightType.Beam && beamHitDelay >= model.FlightTime)
+                throw new ArgumentOutOfRangeException(nameof(beamHitDelay));
+            BeamHitDelay = beamHitDelay;
             var heading = direction ?? (action.AimPoint - action.Origin);
             if (!Finite(heading.x) || !Finite(heading.y) || !Finite(heading.z))
                 throw new ArgumentOutOfRangeException(nameof(direction));
             heading.z = 0f;
-            if (model.FlightType == BulletFlightType.Straight && heading.sqrMagnitude <= 0f)
+            if (model.FlightType != BulletFlightType.Parabolic && heading.sqrMagnitude <= 0f)
                 throw new ArgumentException("直线弹丸需要有效发射方向。", nameof(direction));
             Direction = heading.normalized;
-            MaxHitTargets = model.HitMode == BulletHitMode.PierceEnemies ? maxHitTargets : 1;
+            MaxHitTargets = model.FlightType == BulletFlightType.Beam ? int.MaxValue :
+                model.HitMode == BulletHitMode.PierceEnemies ? maxHitTargets : 1;
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

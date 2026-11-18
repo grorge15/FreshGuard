@@ -238,7 +238,7 @@ namespace GameLogic.Tests
             var state = bullet.State;
             if (!beforeFirstTick) _combat.AdvanceExistingBullets(0.1f);
             _f.Advance(0.1f); // 敌人移动到子弹尚未采样的新位置后死亡。
-            var deathPosition = victim.transform.position;
+            var deathPosition = victim.GetVisualBounds().center;
             Assert.AreEqual(DamageResult.Killed, _f.Context.Registry.ApplyDamage(victimId, int.MaxValue, out var removal));
             ((EnemyBattleController)_f.Controller).NotifyKilled(removal);
             victim.OnDeathAnimationComplete();
@@ -596,6 +596,14 @@ namespace GameLogic.Tests
 
         private void Prepare(Func<string, Transform, CancellationToken, UniTask<GameObject>> load = null)
         {
+            // 光束在发射时就需要真实边界；测试场景与直线弹一样配置双方战场范围。
+            var layout = _f.Root.GetComponent<BattleScreenLayoutController>() ?? _f.Root.AddComponent<BattleScreenLayoutController>();
+            var fields = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            typeof(BattleScreenLayoutController).GetField("_playerBounds", fields).SetValue(layout,
+                new Bounds(Vector3.zero, new Vector3(20, 20, 1)));
+            typeof(BattleScreenLayoutController).GetField("_opponentBounds", fields).SetValue(layout,
+                new Bounds(Vector3.right * 10, new Vector3(20, 20, 1)));
+            typeof(BattleShopSceneController).GetField("_screenLayout", fields).SetValue(_f.Host, layout);
             _combat = new RobotCombatController(_f.Host, _f.Context, (EnemyBattleController)_f.Controller, _views, load ?? Load);
             _combat.PrepareAsync(_f.Tables, CancellationToken.None).GetAwaiter().GetResult();
         }

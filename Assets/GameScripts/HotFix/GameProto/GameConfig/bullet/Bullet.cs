@@ -59,7 +59,7 @@ public sealed partial class Bullet : Luban.BeanBase
     /// </summary>
     public readonly float Speed;
     /// <summary>
-    /// 抛物线飞行时间（秒）
+    /// 抛物线飞行时间或光束表现时长（秒）
     /// </summary>
     public readonly float FlightTime;
     /// <summary>

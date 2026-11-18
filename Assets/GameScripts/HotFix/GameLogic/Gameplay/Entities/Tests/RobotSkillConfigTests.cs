@@ -71,9 +71,26 @@ namespace GameLogic.Tests
                     Assert.AreEqual(row.Id == 1603 ? 1f : 1.2f, bullet.ArcHeight);
                     continue;
                 }
+                if (row.Id == 1501)
+                {
+                    Assert.AreEqual(1f, skill.Cooldown);
+                    Assert.AreEqual("ScatterLaserBeam", bullet.Prefab);
+                    Assert.AreEqual(BulletFlightType.Beam, bullet.FlightType);
+                    Assert.AreEqual(BulletHitMode.PierceEnemies, bullet.HitMode);
+                    Assert.IsFalse(bullet.TrackTarget);
+                    Assert.AreEqual(0f, bullet.Speed);
+                    Assert.That(bullet.FlightTime, Is.EqualTo(16f / 24f).Within(0.00001f));
+                    for (var level = 1; level <= 5; level++)
+                    {
+                        Assert.IsTrue(catalog.TryGetLevel(row.Id, level, out var laser));
+                        Assert.That(laser.Parameters["castWindup"], Is.EqualTo(2f / 24f).Within(0.00001f));
+                        Assert.AreEqual(0f, laser.Parameters["pierceTargetCount"]);
+                    }
+                    continue;
+                }
                 Assert.AreEqual(row.Id == 1505 ? "FrostIcicleBullet" : "RobotBullet", bullet.Prefab);
                 if (row.Id == 1505) Assert.AreEqual(3503, bullet.Id);
-                if (row.Id == 1501 || row.Id == 1502 || row.Id == 1505)
+                if (row.Id == 1502 || row.Id == 1505)
                 {
                     Assert.AreEqual(BulletFlightType.Straight, bullet.FlightType);
                     Assert.IsFalse(bullet.TrackTarget);
@@ -109,6 +126,10 @@ namespace GameLogic.Tests
         [TestCase(BulletFlightType.Straight, true, BulletHitMode.FirstEnemy, 10f, 0f)]
         [TestCase(BulletFlightType.Parabolic, true, BulletHitMode.LockedTarget, 0f, 0f)]
         [TestCase(BulletFlightType.Parabolic, true, BulletHitMode.PierceEnemies, 0f, 0.6f)]
+        [TestCase(BulletFlightType.Beam, true, BulletHitMode.PierceEnemies, 0f, 0.7f)]
+        [TestCase(BulletFlightType.Beam, false, BulletHitMode.FirstEnemy, 0f, 0.7f)]
+        [TestCase(BulletFlightType.Beam, false, BulletHitMode.PierceEnemies, 0f, 0f)]
+        [TestCase(BulletFlightType.Beam, false, BulletHitMode.PierceEnemies, 10f, 0.7f)]
         public void UnsupportedBulletCombinationsRejectConfiguration(BulletFlightType flightType,
             bool trackTarget, BulletHitMode hitMode, float speed, float flightTime)
         {
@@ -147,7 +168,7 @@ namespace GameLogic.Tests
         {
             var catalog = SkillConfigAdapter.FromTables(LoadTables());
             Assert.IsTrue(catalog.TryGetLevel(1501, 1, out var scatter));
-            Assert.AreEqual(5f, scatter.Parameters["scatterCount"]);
+            Assert.AreEqual(3f, scatter.Parameters["scatterCount"]);
             Assert.AreEqual(60f, scatter.Parameters["scatterAngle"]);
             Assert.IsTrue(catalog.TryGetLevel(1502, 1, out var pierce));
             Assert.AreEqual(3f, pierce.Parameters["pierceTargetCount"]);

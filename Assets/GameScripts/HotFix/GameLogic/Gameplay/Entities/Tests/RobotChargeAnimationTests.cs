@@ -101,7 +101,7 @@ namespace GameLogic.Tests
             }
             Assert.AreEqual(0, Counter(first).AttackCount);
             Assert.AreEqual(0, Counter(second).AttackCount);
-            // 电磁炉先播放施法动画；结束后才重新显示累计动画默认段。
+            // 周期结束后恢复累计动画默认段。
             _f.Context.Battle.Timelines.Cancel(first.OwnerRef);
             _views[first.InstanceId].GetComponent<RobotChargeAnimationView>().Advance(.5f);
             Assert.AreSame(Frames(configId)[0], AnimatedPortrait(first).sprite);
@@ -111,7 +111,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(0, Counter(first).AttackCount);
         }
 
-        [TestCase(704)] [TestCase(701)]
+        [TestCase(704)]
         public void PendingChildPreservesEverySuccessfullyLaunchedAttack(int configId)
         {
             var robot = AddRobot(configId);
@@ -127,7 +127,7 @@ namespace GameLogic.Tests
             Assert.AreEqual(1, Counter(robot).AttackCount, "待发子技能恢复后保留额外发射的进度");
         }
 
-        [TestCase(704)] [TestCase(701)]
+        [TestCase(704)]
         public void UpgradeDuringChildCastCannotConsumeResetProgressOrEmitOldChild(int configId)
         {
             var robot = AddRobot(configId);
@@ -153,11 +153,7 @@ namespace GameLogic.Tests
             Assert.IsFalse(original.enabled, "累计动画与静态立绘不能重叠显示");
             if (configId != 701) return;
             for (var i = 0; i < 5; i++) { _f.Context.Registry.AdvanceTime(1); Assert.IsTrue(Fire(robot)); }
-            Assert.IsTrue(_views[robot.InstanceId].GetComponent<RobotCastAnimationView>().IsPlaying);
-            Assert.IsTrue(original.enabled);
-            Assert.IsFalse(renderer.enabled, "电磁炉施法动画期间让出立绘表现");
-            _f.Context.Battle.Timelines.Cancel(robot.OwnerRef);
-            _combat.AdvanceExistingBullets(0);
+            Assert.IsFalse(_views[robot.InstanceId].GetComponent<RobotCastAnimationView>().IsPlaying);
             Assert.IsFalse(original.enabled);
             Assert.IsTrue(renderer.enabled);
         }

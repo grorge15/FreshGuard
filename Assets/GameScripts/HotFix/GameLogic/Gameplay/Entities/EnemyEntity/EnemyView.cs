@@ -249,6 +249,8 @@ namespace GameLogic
             _shakeLocalOffsets = new Vector3[_shakeRoots.Length];
         }
 
+        internal Vector3 AttackTargetPosition => GetVisualBounds().center;
+
         internal Bounds GetVisualBounds()
         {
             CacheVisuals();

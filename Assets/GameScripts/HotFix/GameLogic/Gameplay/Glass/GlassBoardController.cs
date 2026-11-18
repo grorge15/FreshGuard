@@ -22,6 +22,7 @@ namespace GameLogic
         public long BattleId => _context != null ? _context.BattleId : 0;
         public int LiveCount => _byCell.Count;
         public bool IsRunning => _prepared && _host != null && _host.IsCombatRunning && _host.Context == _context;
+        public bool CanCollide => _prepared && _host != null && _host.IsBallSimulationRunning && _host.Context == _context;
 
         public async UniTask PrepareAsync(BattleShopSceneController host, BattleShopContext context,
             PlacementBoardView board, BattleSide side, BoardLayoutRules layout, Tables tables, CancellationToken token)

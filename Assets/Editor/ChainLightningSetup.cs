@@ -13,7 +13,7 @@ namespace FreshGuard.Editor
     {
         private const string Folder = "Assets/AssetRaw/Actor/Prefabs/bullets";
         private const string AnimationFolder = "Assets/AssetRaw/Actor/Animations/Effects";
-        private const string SpriteFolder = "Assets/AssetRaw/Actor/Sprites/Bullets/闪电";
+        private const string SpriteFolder = "Assets/AssetRaw/Actor/Sprites/Bullets/Frames/闪电";
         private const string BoltPath = Folder + "/InductionBolt.prefab";
         private const string EffectPath = Folder + "/LightningChainEffect.prefab";
         private const float FrameRate = 24f;
@@ -25,8 +25,8 @@ namespace FreshGuard.Editor
             if (!AssetDatabase.IsValidFolder(AnimationFolder))
                 AssetDatabase.CreateFolder("Assets/AssetRaw/Actor/Animations", "Effects");
             var spark = BuildClip("LightningSpark", "闪电火花", 10, new Vector2(0.5f, 0.5f));
-            // 帧画布为512x128，左侧电光起点在x=56。各帧保持同一支点，增长时不漂移。
-            var chain = BuildClip("LightningArc", "闪电链", 5, new Vector2(56f / 512f, 0.5f));
+            // 帧画布为512x160，左侧电光起点在x=56。各帧保持同一支点，增长时不漂移。
+            var chain = BuildClip("LightningArc", "闪电链", 8, new Vector2(56f / 512f, 0.5f));
             BuildBolt(chain);
             BuildEffect(chain, spark);
             AssetDatabase.DeleteAsset(Folder + "/LightningChain.mat");
@@ -117,6 +117,7 @@ namespace FreshGuard.Editor
                 var serialized = new SerializedObject(view);
                 serialized.FindProperty("_chainTemplate").objectReferenceValue = chainSequence;
                 serialized.FindProperty("_sparkTemplate").objectReferenceValue = sparkSequence;
+                serialized.FindProperty("_chainThickness").floatValue = 0.36f;
                 serialized.FindProperty("Lifetime").floatValue = sparkClip.length;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
                 view.Clear();

@@ -172,10 +172,13 @@ namespace GameLogic
                 (row.HitMode == BulletHitMode.FirstEnemy || row.HitMode == BulletHitMode.PierceEnemies) && row.Speed > 0f;
             var validLanding = row.FlightType == BulletFlightType.Parabolic && !row.TrackTarget &&
                 row.HitMode == BulletHitMode.AreaAtLanding && row.FlightTime > 0f && row.BehaviorKey == "splash";
+            var validBeam = row.FlightType == BulletFlightType.Beam && !row.TrackTarget &&
+                row.HitMode == BulletHitMode.PierceEnemies && row.FlightTime > 0f &&
+                row.Speed == 0f && row.ArcHeight == 0f && row.BehaviorKey == "direct";
             if (row.Id <= 0 || string.IsNullOrWhiteSpace(row.Prefab) ||
                 !EntityValidation.IsFiniteNonNegative(row.Speed) || !EntityValidation.IsFiniteNonNegative(row.FlightTime) ||
                 !EntityValidation.IsFiniteNonNegative(row.ArcHeight) || !EntityValidation.IsFiniteNonNegative(row.HitRadius) ||
-                (!validParabolic && !validStraight && !validLanding))
+                (!validParabolic && !validStraight && !validLanding && !validBeam))
                 throw new InvalidOperationException("弹丸配置或轨迹命中组合无效：" + row.Id);
             if (row.BehaviorKey == "chain" && (!validStraight || row.HitMode != BulletHitMode.FirstEnemy ||
                 string.IsNullOrWhiteSpace(row.HitEffectPrefab)))
@@ -212,8 +215,11 @@ namespace GameLogic
             if (skill.TimelineKey == "robot.burst" && (row.BurstCount < 1 || row.BurstInterval <= 0f))
                 throw new InvalidOperationException("连射次数与间隔必须大于0：" + row.Id);
             if (skill.BulletId != 0 && catalog.TryGetBullet(skill.BulletId, out var bullet) &&
-                bullet.HitMode == BulletHitMode.PierceEnemies && row.PierceTargetCount < 1)
+                bullet.HitMode == BulletHitMode.PierceEnemies && bullet.FlightType != BulletFlightType.Beam && row.PierceTargetCount < 1)
                 throw new InvalidOperationException("穿透人数必须至少为1：" + row.Id);
+            if (skill.BulletId != 0 && catalog.TryGetBullet(skill.BulletId, out var beam) && beam.FlightType == BulletFlightType.Beam &&
+                (!EntityValidation.IsFiniteNonNegative(row.CastWindup) || row.CastWindup >= beam.FlightTime || row.PierceTargetCount != 0))
+                throw new InvalidOperationException("光束前摇必须小于表现时长，穿透人数填0表示沿线全穿透：" + row.Id);
             if (skill.BulletId != 0 && catalog.TryGetBullet(skill.BulletId, out var chain) && chain.BehaviorKey == "chain")
             {
                 if (row.ChainTargetCount < 1 ||

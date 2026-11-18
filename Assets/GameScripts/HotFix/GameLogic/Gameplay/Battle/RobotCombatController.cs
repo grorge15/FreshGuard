@@ -50,6 +50,7 @@ namespace GameLogic
             internal RobotView View;
             internal RobotCastAnimationView CastAnimation;
             internal RobotChargeAnimationView ChargeAnimation;
+            internal int ScatterLaserStep;
             internal readonly Dictionary<(int SkillId, string Prefab), ProjectilePool> Pools = new Dictionary<(int, string), ProjectilePool>();
             internal CancellationTokenSource Cancellation;
         }
@@ -397,13 +398,20 @@ namespace GameLogic
             var scatter = cast.TimelineKey == "robot.scatter";
             var count = 1;
             if (scatter && !TryCount(cast.Get("scatterCount"), out count)) return false;
+            if (scatter && bulletModel.FlightType == BulletFlightType.Beam)
+                count = Math.Min(count, 1 + reserve.ScatterLaserStep);
             var total = count;
             if (burst && !TryCount(cast.Get("burstCount"), out total)) return false;
             var shotIndex = node.Parameters.TryGetValue("shotIndex", out var shot) ? (int)shot : 0;
             var angle = scatter ? cast.Get("scatterAngle") : 0f;
+            if (scatter && bulletModel.FlightType == BulletFlightType.Beam && count == 2)
+                angle *= 0.5f;
             var knockback = cast.Get("knockbackDistance");
             var maxHits = 1;
-            if (bulletModel.HitMode == BulletHitMode.PierceEnemies && !TryCount(cast.Get("pierceTargetCount"), out maxHits)) return false;
+            if (bulletModel.FlightType != BulletFlightType.Beam && bulletModel.HitMode == BulletHitMode.PierceEnemies &&
+                !TryCount(cast.Get("pierceTargetCount"), out maxHits)) return false;
+            if (bulletModel.FlightType == BulletFlightType.Beam &&
+                (!EntityValidation.IsFiniteNonNegative(cast.Get("castWindup")) || cast.Get("castWindup") >= bulletModel.FlightTime)) return false;
             if (!EntityValidation.IsFiniteNonNegative(angle) || angle > 360f ||
                 !EntityValidation.IsFiniteNonNegative(knockback) ||
                 !EntityValidation.IsFiniteNonNegative(cast.Get("damage")) || cast.Get("damage") >= int.MaxValue) return false;
@@ -506,7 +514,7 @@ namespace GameLogic
             var origin = reserve.View.GetAttackOrigin();
             var heading = aimPoint - origin;
             heading.z = 0;
-            if (model.FlightType == BulletFlightType.Straight && heading.sqrMagnitude <= 0f) heading = Vector3.up;
+            if (model.FlightType != BulletFlightType.Parabolic && heading.sqrMagnitude <= 0f) heading = Vector3.up;
             var baseDirection = heading.normalized;
             for (var i = 0; i < ready.Length; i++)
             {
@@ -528,13 +536,19 @@ namespace GameLogic
                     var behavior = _context.Battle.BulletBehaviors.Create(model.BehaviorKey);
                     var chain = model.BehaviorKey == "chain" ? new ChainBulletSnapshot(
                         checked((int)cast.Get("chainTargetCount")), cast.Get("chainRange"), cast.Get("chainDamageRatio")) : null;
-                    var state = new BulletState(new BulletLauncher(model, projectile.Action, direction, maxHits), _bulletWorld,
+                    var state = new BulletState(new BulletLauncher(model, projectile.Action, direction, maxHits,
+                        model.FlightType == BulletFlightType.Beam ? cast.Get("castWindup") : 0f), _bulletWorld,
                         (hit, id) => behavior.OnHit(new BulletHitContext(hit, id, projectile, _context.Combat,
                             (IProjectileWorld)_bulletWorld, chain, positions => PlayHitEffect(model.HitEffectPrefab, cast.Owner.Side, positions))));
                     Launch(reserve, instance, state);
                     launched = true;
                     // 登记真实弹丸后才计数；同次散射只在首颗登记时提交一次。
-                    if (i == 0) reserve.Robot.NotifyAttackLaunched(cast);
+                    if (i == 0)
+                    {
+                        if (cast.TimelineKey == "robot.scatter" && model.FlightType == BulletFlightType.Beam)
+                            reserve.ScatterLaserStep = (reserve.ScatterLaserStep + 1) % 3;
+                        reserve.Robot.NotifyAttackLaunched(cast);
+                    }
                     reserve.ChargeAnimation?.Refresh();
                     if (OwnsBattle && !state.IsResolved && instance != null) instance.SetActive(true);
                 }
