@@ -36,6 +36,7 @@ namespace GameLogic
         private bool _ready;
         private bool _interactionOpened;
         private bool _running;
+        private bool _ballsLaunched;
         private bool _frozen;
         private IProgress<BattleLoadingProgress> _loadingProgress;
         private readonly Stopwatch _loadingStopwatch = new Stopwatch();
@@ -55,6 +56,8 @@ namespace GameLogic
         public bool CanInteractWithRobots => IsReady && _interactionOpened && !_frozen &&
             _placement != null && _placement.IsReady;
         public bool IsCombatRunning => IsReady && _running && !_frozen;
+        /// <summary>加载并放行后即开始弹珠物理运动；准备倒计时仍保护玻璃耐久。</summary>
+        public bool IsBallSimulationRunning => IsReady && _matchReleased && !_frozen;
         /// <summary>
         /// 真正进入可见战斗态：双方能源球已发射、首批敌人已生成，并且物理系统已经完成至少一次反弹。
         /// 开战后的运行检查；匹配界面以IsReady为准，不等待发球和反弹。
@@ -173,7 +176,7 @@ namespace GameLogic
                 popupRoot.transform.SetParent(transform, false);
                 _comboPopupRoot = popupRoot.transform;
                 _bootstrap.ConfigureFromTables(tables);
-                _bootstrap.BindBattle(context.BattleId, () => IsCombatRunning && Context == context,
+                _bootstrap.BindBattle(context.BattleId, () => IsBallSimulationRunning && Context == context,
                     context.Registry, _comboPopupRoot);
                 _bootstrap.RobotContactDetected += OnRobotContact;
                 _bootstrap.BerserkChanged += OnBerserkChanged;
@@ -216,6 +219,7 @@ namespace GameLogic
                     throw new OperationCanceledException(cancellationToken);
                 PublishBattleProgress(true);
                 _preparationRemaining = 3f;
+                _ballsLaunched = false;
                 _running = _frozen = false;
                 _ready = true;
                 ReportLoading(BattleLoadingStage.Ai, 0.97f, "初始化对手 AI");
@@ -533,22 +537,30 @@ namespace GameLogic
                 if (!IsReady) return;
                 if (!_running)
                 {
+                    if (!_ballsLaunched)
+                    {
+                        try { ConfigureBattleAssistsBeforeLaunch(); }
+                        catch (Exception exception)
+                        {
+                            Debug.LogException(exception, this);
+                            Cleanup();
+                            return;
+                        }
+                        if (!_bootstrap.LaunchBoth(_playerBoard, _opponentBoard))
+                        {
+                            Cleanup();
+                            Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
+                            return;
+                        }
+                        _ballsLaunched = true;
+                    }
                     _preparationRemaining = Mathf.Max(0f, _preparationRemaining - deltaTime);
-                    if (_preparationRemaining > 0f) return;
+                    if (_preparationRemaining > 0f)
+                    {
+                        _bootstrap.AdvanceBerserk(deltaTime);
+                        return;
+                    }
                     _running = true;
-                    try { ConfigureBattleAssistsBeforeLaunch(); }
-                    catch (Exception exception)
-                    {
-                        Debug.LogException(exception, this);
-                        Cleanup();
-                        return;
-                    }
-                    if (!_bootstrap.LaunchBoth(_playerBoard, _opponentBoard))
-                    {
-                        Cleanup();
-                        Debug.LogError("双方能源球发射失败，修复后重新初始化对局。", this);
-                        return;
-                    }
                     try { _enemies?.StartBattle(); }
                     catch (Exception e) { Debug.LogException(e, this); return; }
                     GameSoundService.Play(GameSound.BattleStart);
@@ -698,7 +710,7 @@ namespace GameLogic
             _lastProgressBattleId = 0;
             _lastProgressWave = 0;
             _lastProgressSecond = -1;
-            _ready = _running = _frozen = _interactionOpened = false;
+            _ready = _running = _ballsLaunched = _frozen = _interactionOpened = false;
             _preparationRemaining = 0f;
             if (_bootstrap != null)
             {
