@@ -16,6 +16,7 @@ namespace FreshGuard.Editor
         private static readonly Vector2 Design = new Vector2(1056, 324);
         private static readonly Vector2 Machine = new Vector2(600, 289.49f);
         private static readonly Vector2 MachinePosition = new Vector2((Design.x - Machine.x) * 0.5f, -(Design.y - Machine.y) * 0.5f);
+        private const float ArtworkScale = 1.11f;
         private static readonly Vector2 LeverSize = new Vector2(253.44f, 174.7f);
         private const float LeverScale = 0.75f;
         private static readonly Color Cream = new Color32(255, 246, 222, 255);
@@ -40,7 +41,9 @@ namespace FreshGuard.Editor
                 if (oldMachine != null) UnityEngine.Object.DestroyImmediate(oldMachine.gameObject);
                 var machine = Rect("SlotMachine", panel, Machine, MachinePosition, new Vector2(0, 1), new Vector2(0, 1));
                 machine.SetAsFirstSibling();
-                Picture(machine, Sprite(ART + "laohuji.png"));
+                var center = Vector2.one * 0.5f;
+                var artwork = Rect("MachineArtwork", machine, Machine * ArtworkScale, Vector2.zero, center, center);
+                Picture(artwork, Sprite(ART + "laohuji.png"));
                 var palette = Rect("ReelPalette", machine, Vector2.zero, Vector2.zero);
                 foreach (var stem in new[] { "Cannon", "Frost", "Impact", "Piercing", "Poison", "RapidFire", "Scatter", "Tractor" })
                 {
@@ -59,7 +62,7 @@ namespace FreshGuard.Editor
                 for (var i = 0; i < ShopRules.OfferBatchCount; i++)
                 {
                     var window = Rect("Reel_" + i, machine, new Vector2(Machine.x * 0.24f, Machine.y * 0.465f),
-                        new Vector2(Machine.x * (0.101f + i * 0.277f), -Machine.y * 0.284f), new Vector2(0, 1), new Vector2(0, 1));
+                        ReelPosition(i), new Vector2(0, 1), new Vector2(0, 1));
                     window.gameObject.AddComponent<RectMask2D>();
                     Rect("Strip", window, window.sizeDelta, Vector2.zero, new Vector2(0.5f, 1), new Vector2(0.5f, 1));
                     window.gameObject.SetActive(false);
@@ -71,7 +74,7 @@ namespace FreshGuard.Editor
                 var template = (RectTransform)offers.Find("m_item_Template");
                 if (template.GetComponent<CanvasGroup>() == null) template.gameObject.AddComponent<CanvasGroup>();
                 Place(template, new Vector2(Machine.x * 0.24f, Machine.y * 0.568f),
-                    new Vector2(Machine.x * 0.101f, -Machine.y * 0.284f), new Vector2(0, 1), new Vector2(0, 1));
+                    ReelPosition(0), new Vector2(0, 1), new Vector2(0, 1));
                 var iconRect = (RectTransform)template.Find("m_img_RobotIcon");
                 Place(iconRect, new Vector2(Machine.x * 0.24f, Machine.y * 0.465f) * 0.91f,
                     new Vector2(0, -Machine.y * 0.465f * 0.5f), new Vector2(0.5f, 1), Vector2.one * 0.5f);
@@ -213,25 +216,32 @@ namespace FreshGuard.Editor
             Place(offers, Machine, MachinePosition, topLeft, topLeft);
             var template = (RectTransform)offers.Find("m_item_Template");
             Place(template, new Vector2(Machine.x * 0.24f, Machine.y * 0.568f),
-                new Vector2(Machine.x * 0.101f, -Machine.y * 0.284f), topLeft, topLeft);
+                ReelPosition(0), topLeft, topLeft);
             var windowSize = new Vector2(Machine.x * 0.24f, Machine.y * 0.465f);
             Place((RectTransform)template.Find("m_img_RobotIcon"), windowSize * 0.91f,
                 new Vector2(0, -windowSize.y * 0.5f), new Vector2(0.5f, 1), Vector2.one * 0.5f);
             for (var i = 0; i < ShopRules.OfferBatchCount; i++)
             {
                 var window = (RectTransform)machine.Find("Reel_" + i);
-                Place(window, windowSize, new Vector2(Machine.x * (0.101f + i * 0.277f), -Machine.y * 0.284f), topLeft, topLeft);
+                Place(window, windowSize, ReelPosition(i), topLeft, topLeft);
                 Place((RectTransform)window.Find("Strip"), windowSize, Vector2.zero, new Vector2(0.5f, 1), new Vector2(0.5f, 1));
             }
             ConfigureLeverLayout((RectTransform)panel.Find("m_btn_Refresh"));
         }
 
+        private static Vector2 ReelPosition(int index)
+        {
+            return new Vector2(Machine.x * (0.38f + (index - 1) * 0.277f * ArtworkScale), -Machine.y * 0.284f);
+        }
+
         private static void ConfigureLeverLayout(RectTransform lever)
         {
-            // 整体缩放使旋钮、文字和货币图标保持比例，旋钮中心对齐右侧货币栏。
+            // 让摇杆转轴随机身背景向外移动，保留摇杆自身尺寸。
             var knobCenter = new Vector2(Design.x - 32 - 158 * 0.5f, MachinePosition.y - Machine.y * 0.54f);
             var knobOffset = new Vector2(LeverSize.x * 0.6f, LeverSize.y * 0.45f) * LeverScale;
-            Place(lever, LeverSize, knobCenter - knobOffset, new Vector2(0, 1), new Vector2(0.08f, 0.11f));
+            var center = new Vector2(Design.x, -Design.y) * 0.5f;
+            var pivot = center + (knobCenter - knobOffset - center) * ArtworkScale;
+            Place(lever, LeverSize, pivot, new Vector2(0, 1), new Vector2(0.08f, 0.11f));
             lever.localScale = Vector3.one * LeverScale;
         }
 

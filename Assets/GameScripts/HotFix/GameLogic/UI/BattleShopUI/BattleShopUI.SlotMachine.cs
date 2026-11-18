@@ -67,7 +67,7 @@ namespace GameLogic
                 rect.anchorMin = rect.anchorMax = new Vector2(0, 1);
                 rect.pivot = new Vector2(0, 1);
                 rect.localScale = Vector3.one;
-                rect.anchoredPosition = new Vector2(_offers.rect.width * (0.101f + i * 0.277f), -_offers.rect.height * 0.284f);
+                rect.anchoredPosition = _reelWindows[i].anchoredPosition;
                 PresentSlotItem(i, Time.unscaledTime - _refreshStartedAt);
             }
         }
