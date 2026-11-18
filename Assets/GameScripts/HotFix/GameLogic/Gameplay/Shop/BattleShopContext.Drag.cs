@@ -311,13 +311,15 @@ namespace GameLogic
 
 
 
-        public bool TryCreateActionToken(int instanceId, out RobotActionToken token)
+        public bool TryCreateActionToken(int instanceId, out RobotActionToken token, bool allowStored = false)
         {
             token = default(RobotActionToken);
             RobotEntity robot;
             Entity entity;
             if (IsEnded || _endRequested || _committing || !_owned.TryGetValue(instanceId, out robot) ||
-                !Registry.TryGet(instanceId, out entity) || !ReferenceEquals(entity, robot) || !robot.CanParticipate)
+                !Registry.TryGet(instanceId, out entity) || !ReferenceEquals(entity, robot) ||
+                (!robot.CanParticipate && !(allowStored && !robot.IsRemoved && !robot.IsDragging &&
+                    robot.Location == RobotLocation.PurchasedShopSlot)))
                 return false;
             token = new RobotActionToken(BattleId, instanceId, robot.ActionVersion, robot.Level);
             return true;
