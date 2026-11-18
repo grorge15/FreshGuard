@@ -7,7 +7,7 @@ namespace GameLogic
     {
         private const int SAMPLES = 64;
         private const float EPSILON = 0.000001f;
-        private const float LANDING_SPEED_RATIO = 2.3f;
+        private readonly bool _juiceThrow;
         private readonly Vector3 _origin;
         private readonly float _height;
         private readonly float _bendSign;
@@ -17,10 +17,13 @@ namespace GameLogic
         private readonly float _duration;
         internal float ApexProgress => _duration > EPSILON ? _riseLength / _duration : 0.5f;
 
-        internal ParabolicTrajectory(Vector3 origin, Vector3 target, float height)
+        internal ParabolicTrajectory(Vector3 origin, Vector3 target, float height, bool juiceThrow = false)
         {
             _origin = origin;
-            _height = height;
+            _juiceThrow = juiceThrow;
+            // Keep the launch height fixed during tracking; near targets get a shallow toss.
+            _height = juiceThrow ? Mathf.Min(height, 0.65f * Vector2.Distance(origin, target)) : height;
+            var landingSpeedRatio = juiceThrow ? 1.8f : 2.3f;
             _bendSign = target.x < origin.x ? -1f : 1f;
             CreateCurves(target, out var rise, out var fall);
             var previous = rise.Start;
@@ -38,8 +41,8 @@ namespace GameLogic
             {
                 var point = fall.Position(SampleParameter(i, false));
                 var descent = drop > EPSILON ? Mathf.Clamp01((fall.Start.y - point.y) / drop) : 0f;
-                // v² = v_top² + 2*g*下降高度；将v_top归一化为1，落地速度为2.3倍。
-                var speed = Mathf.Sqrt(1f + (LANDING_SPEED_RATIO * LANDING_SPEED_RATIO - 1f) * descent);
+                // v² = v_top² + 2*g*下降高度；将v_top归一化为1，落地倍率由弹道决定。
+                var speed = Mathf.Sqrt(1f + (landingSpeedRatio * landingSpeedRatio - 1f) * descent);
                 _fallTimes[i] = _fallTimes[i - 1] +
                     2f * Vector3.Distance(previous, point) / (previousSpeed + speed);
                 previous = point;
@@ -73,18 +76,22 @@ namespace GameLogic
             var span = target.x - _origin.x;
             // 竖直目标保留小幅侧弧，避免最高点发生原地折返或出现零切线。
             if (Mathf.Abs(span) < _height * 0.25f) span = _bendSign * _height * 0.25f;
-            var peak = Vector3.LerpUnclamped(_origin, target, 0.83f);
-            peak.x = _origin.x + span * 0.83f;
+            var apex = _juiceThrow ? 0.6f : 0.83f;
+            var peak = Vector3.LerpUnclamped(_origin, target, apex);
+            peak.x = _origin.x + span * apex;
             peak.y = Mathf.Max(_origin.y, target.y) + _height;
-            var first = Vector3.LerpUnclamped(_origin, target, 0.235294118f);
-            first.x = _origin.x + span * 0.235294118f;
+            var riseIn = _juiceThrow ? 0.17f : 0.235294118f;
+            var riseOut = _juiceThrow ? 0.47f : 0.668235294f;
+            var fallIn = _juiceThrow ? 0.82f : 0.940294118f;
+            var first = Vector3.LerpUnclamped(_origin, target, riseIn);
+            first.x = _origin.x + span * riseIn;
             first.y = Mathf.Lerp(_origin.y, peak.y, 0.719814241f);
-            var second = Vector3.LerpUnclamped(_origin, target, 0.668235294f);
-            second.x = _origin.x + span * 0.668235294f;
+            var second = Vector3.LerpUnclamped(_origin, target, riseOut);
+            second.x = _origin.x + span * riseOut;
             second.y = peak.y;
             rise = new Curve(_origin, first, second, peak);
-            first = Vector3.LerpUnclamped(_origin, target, 0.940294118f);
-            first.x = _origin.x + span * 0.940294118f;
+            first = Vector3.LerpUnclamped(_origin, target, fallIn);
+            first.x = _origin.x + span * fallIn;
             first.y = peak.y;
             second = target;
             second.y = Mathf.Lerp(target.y, peak.y, 0.534055728f);
