@@ -16,6 +16,9 @@ namespace GameLogic
         private Vector3 _targetPosition;
         private bool _targetLost;
         private bool _advancing;
+        private bool _beamHit;
+        private bool _beamScanned;
+        private int _beamContactIndex;
         public BulletLauncher Launcher { get; }
         public CombatActionSnapshot Action => Launcher.Action;
         public Vector3 Position { get; private set; }
@@ -23,6 +26,7 @@ namespace GameLogic
         public int HitCount => _hitTargets.Count;
         public float Elapsed { get; private set; }
         public bool IsResolved { get; private set; }
+        public Vector3 BeamEnd { get; private set; }
         public BulletState(BulletLauncher launcher, IBulletWorld world, Action<BulletState> onHit)
             : this(launcher, world, Adapt(onHit)) { }
 
@@ -31,11 +35,13 @@ namespace GameLogic
             Launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
             _world = world ?? throw new ArgumentNullException(nameof(world));
             _onHit = onHit ?? throw new ArgumentNullException(nameof(onHit));
-            if (launcher.Model.FlightType == BulletFlightType.Straight && !(world is IProjectileWorld))
+            if (launcher.Model.FlightType != BulletFlightType.Parabolic && !(world is IProjectileWorld))
                 throw new ArgumentException("直线弹丸需要区域与受击目标查询。", nameof(world));
             Position = launcher.Action.Origin;
             Direction = launcher.Direction;
             _targetPosition = launcher.Action.AimPoint;
+            if (launcher.Model.FlightType == BulletFlightType.Beam)
+                BeamEnd = GetBeamEnd(((IProjectileWorld)world).GetBattleBounds(Action.SourceSide), Position, Direction);
             if (launcher.Model.FlightType == BulletFlightType.Parabolic)
                 _trajectory = new ParabolicTrajectory(launcher.Action.Origin, _targetPosition, launcher.Model.ArcHeight);
         }
@@ -49,10 +55,68 @@ namespace GameLogic
             _advancing = true;
             try
             {
+                if (Launcher.Model.FlightType == BulletFlightType.Beam) return AdvanceBeam(deltaTime);
                 return Launcher.Model.FlightType == BulletFlightType.Straight
                     ? AdvanceStraight(deltaTime) : AdvanceParabolic(deltaTime);
             }
             finally { _advancing = false; }
+        }
+
+        private bool AdvanceBeam(float deltaTime)
+        {
+            if (deltaTime <= 0f) return false;
+            if ((BeamEnd - Action.Origin).sqrMagnitude <= Mathf.Epsilon) { Cancel(); return true; }
+            var nextElapsed = Mathf.Min(Launcher.Model.FlightTime, Elapsed + deltaTime);
+            if (!_beamHit && nextElapsed >= Launcher.BeamHitDelay)
+            {
+                // 先冻结整条光束的受击候选，再执行任意扣血回调；每束只扫描一次。
+                Elapsed = Launcher.BeamHitDelay;
+                if (!_beamScanned)
+                {
+                    _beamScanned = true;
+                    var world = (IProjectileWorld)_world;
+                    var targets = world.GetTargets(Action.SourceSide);
+                    if (targets != null)
+                        foreach (var target in targets)
+                            if (TryContact(Action.Origin, BeamEnd, target.Position,
+                                Launcher.Model.HitRadius + target.HitRadius, out var fraction))
+                                _contacts.Add(new Contact(target.InstanceId, fraction));
+                    _contacts.Sort((a, b) =>
+                    {
+                        var order = a.Fraction.CompareTo(b.Fraction);
+                        return order != 0 ? order : a.InstanceId.CompareTo(b.InstanceId);
+                    });
+                }
+                while (_beamContactIndex < _contacts.Count)
+                {
+                    if (IsResolved) return true;
+                    if (!_world.IsValid(Action.BattleId)) { Cancel(); return true; }
+                    if (!_world.IsRunning) return false;
+                    var contact = _contacts[_beamContactIndex++];
+                    if (!_world.TryGetPosition(Action.SourceSide, contact.InstanceId, out _) ||
+                        !_hitTargets.Add(contact.InstanceId)) continue;
+                    _onHit(this, contact.InstanceId);
+                }
+                _beamHit = true;
+            }
+            if (IsResolved) return true;
+            if (!_world.IsValid(Action.BattleId)) { Cancel(); return true; }
+            if (!_world.IsRunning) return false;
+            Elapsed = nextElapsed;
+            // 已命中后保留同一快照播放消散，不再结算持续伤害。
+            if (Elapsed >= Launcher.Model.FlightTime) IsResolved = true;
+            return IsResolved;
+        }
+
+        private static Vector3 GetBeamEnd(Bounds bounds, Vector3 origin, Vector3 direction)
+        {
+            if (!ContainsXY(bounds, origin)) return origin;
+            var distance = float.PositiveInfinity;
+            if (direction.x > 0f) distance = Mathf.Min(distance, (bounds.max.x - origin.x) / direction.x);
+            else if (direction.x < 0f) distance = Mathf.Min(distance, (bounds.min.x - origin.x) / direction.x);
+            if (direction.y > 0f) distance = Mathf.Min(distance, (bounds.max.y - origin.y) / direction.y);
+            else if (direction.y < 0f) distance = Mathf.Min(distance, (bounds.min.y - origin.y) / direction.y);
+            return origin + direction * distance;
         }
 
         private bool AdvanceParabolic(float deltaTime)

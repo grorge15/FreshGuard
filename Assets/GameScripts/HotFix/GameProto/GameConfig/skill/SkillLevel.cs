@@ -197,7 +197,7 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// </summary>
     public readonly float StaffAppearSettleTime;
     /// <summary>
-    /// 施法前摇时间（秒）
+    /// 施法前摇；光束为亮束前延迟（秒）
     /// </summary>
     public readonly float CastWindup;
    

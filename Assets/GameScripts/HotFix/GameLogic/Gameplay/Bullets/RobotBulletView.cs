@@ -8,6 +8,7 @@ namespace GameLogic
     public sealed class RobotBulletView : MonoBehaviour
     {
         private BattleSpriteAnimation _animation;
+        private LaserBeamView _laser;
         public BulletState State { get; private set; }
         public long BattleId => Action?.BattleId ?? 0;
         public BattleSide Side => Action?.SourceSide ?? default(BattleSide);
@@ -22,6 +23,13 @@ namespace GameLogic
         public void Present(BulletState state)
         {
             if (this == null || state == null) return;
+            if (state.Launcher.Model.FlightType == GameConfig.bullet.BulletFlightType.Beam)
+            {
+                if (_laser == null) _laser = GetComponent<LaserBeamView>();
+                if (_laser == null) throw new InvalidOperationException("光束预制体缺少 LaserBeamView。");
+                _laser.Present(state);
+                return;
+            }
             if (_animation == null) _animation = GetComponent<BattleSpriteAnimation>();
             if (_animation != null) _animation.Sample(state.Elapsed);
             transform.position = state.Position;

@@ -24,6 +24,10 @@ namespace GameConfig.bullet
         /// 抛物线
         /// </summary>
         Parabolic = 1,
+        /// <summary>
+        /// 固定方向瞬时穿透光束
+        /// </summary>
+        Beam = 2,
     }
 
 } 
