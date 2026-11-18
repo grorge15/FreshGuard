@@ -24,6 +24,19 @@ namespace GameLogic
         public int BoardRevision => _state?.BoardRevision ?? 0;
         public int EvaluatedCandidates { get; private set; }
 
+        public bool MatchesShop(OpponentAiSnapshot snapshot)
+        {
+            if (_options.Lane == OpponentAiActionLane.Drag) return true;
+            if (snapshot.EnergyCoins != _state.EnergyCoins || snapshot.RefreshPrice != _state.RefreshPrice ||
+                snapshot.Offers.Count != _state.Offers.Count) return false;
+            for (var i = 0; i < snapshot.Offers.Count; i++)
+            {
+                var a = snapshot.Offers[i]; var b = _state.Offers[i];
+                if (a.OfferId != b.OfferId || a.SlotId != b.SlotId || a.Price != b.Price || a.IsPurchased != b.IsPurchased) return false;
+            }
+            return true;
+        }
+
         private sealed class Candidate
         {
             public OpponentAiAction Action;
@@ -45,6 +58,8 @@ namespace GameLogic
         { _state = state; _liveState = state; _options = options; _liveOptions = options; _steps = Search().GetEnumerator(); }
 
         public bool MatchesOptions(OpponentAiPlanningOptions options) =>
+            options.Lane == _options.Lane &&
+            options.FollowUpPurchase == _options.FollowUpPurchase && options.FollowUpMove == _options.FollowUpMove &&
             options.AllowMove == _options.AllowMove && options.AllowPurchase == _options.AllowPurchase &&
             options.AllowMerge == _options.AllowMerge && options.AllowRefresh == _options.AllowRefresh &&
             options.AllowTwoStep == _options.AllowTwoStep && Nullable.Equals(options.PendingFollowUp, _options.PendingFollowUp) &&
@@ -88,26 +103,45 @@ namespace GameLogic
             _before = _evaluator.Evaluate(_state, board, _state.Robots);
             Accumulate(_before.GlassValue, _before.RobotValue, _before.Control, _before.Mobility);
             yield return true;
-            foreach (var action in SpatialActions(_state, _options))
+            var preparation = new List<Candidate>();
+            var groups = !_state.Army.HasValue ? new[] { -1 } :
+                OpponentAiArmyRules.NeedsRecruitment(_state) ? new[] { 1, 0 } : new[] { 0, 1 };
+            foreach (var group in groups)
             {
-                Candidate candidate;
-                if (TryEvaluate(_state, action, out candidate))
+                // 分组完成精检后再进入下一优先级，阶段性发布也不能让次级动作抢先。
+                _candidates.Clear();
+                _preview.Clear();
+                foreach (var action in SpatialActions(_state, _options, group))
                 {
-                    _candidates.Add(candidate);
-                    Accumulate(candidate.G, candidate.R, candidate.C, candidate.M);
-                    candidate.Score = Score(candidate.G, candidate.R, candidate.C, candidate.M);
-                    foreach (var preview in _preview) preview.Score = Score(preview.G, preview.R, preview.C, preview.M);
-                    _preview.Add(candidate); _preview.Sort(Compare);
-                    if (_preview.Count > 8) _preview.RemoveAt(8);
+                    Candidate candidate;
+                    if (TryEvaluate(_state, action, out candidate))
+                    {
+                        _candidates.Add(candidate);
+                        preparation.Add(candidate);
+                        Accumulate(candidate.G, candidate.R, candidate.C, candidate.M);
+                        candidate.Score = Score(candidate.G, candidate.R, candidate.C, candidate.M);
+                        foreach (var preview in _preview) preview.Score = Score(preview.G, preview.R, preview.C, preview.M);
+                        _preview.Add(candidate); _preview.Sort(Compare);
+                        if (_preview.Count > 8) _preview.RemoveAt(8);
+                    }
+                    EvaluatedCandidates++;
+                    yield return true;
                 }
-                EvaluatedCandidates++;
+                foreach (var candidate in _candidates) candidate.Score = Score(candidate.G, candidate.R, candidate.C, candidate.M);
+                _candidates.Sort(Compare);
+                BestAction = SelectVerified(_candidates, _liveState);
+                if (BestAction.Kind != OpponentAiActionKind.Wait) yield break;
+                if (group >= 0)
+                {
+                    foreach (var step in SearchMerges(group, Score(_before.GlassValue, _before.RobotValue, _before.Control, _before.Mobility)))
+                        yield return step;
+                    if (BestAction.Kind != OpponentAiActionKind.Wait) yield break;
+                }
                 yield return true;
             }
+            _candidates.Clear();
+            _candidates.AddRange(preparation);
             var beforeScore = Score(_before.GlassValue, _before.RobotValue, _before.Control, _before.Mobility);
-            foreach (var candidate in _candidates) candidate.Score = Score(candidate.G, candidate.R, candidate.C, candidate.M);
-            _candidates.Sort(Compare);
-            BestAction = SelectVerified(_candidates, _liveState);
-            if (BestAction.Kind != OpponentAiActionKind.Wait) yield break;
 
             // 第二步保留目标，但使用当前球、商品、额度和几何重算；不重放旧动作队列。
             if (_liveOptions.PendingFollowUp.HasValue)
@@ -116,7 +150,7 @@ namespace GameLogic
                 var action = follow.ToAction();
                 Candidate candidate;
                 var permitted = action.BattleId == _liveState.BattleId &&
-                    (action.Kind == OpponentAiActionKind.Move ? _liveOptions.AllowMove : _liveOptions.AllowPurchase && !Blocked(_liveOptions, action.OfferId));
+                    (OpponentAiArmyRules.IsDrag(action.Kind) ? _liveOptions.AllowMove : _liveOptions.AllowPurchase && !Blocked(_liveOptions, action.OfferId));
                 if (permitted && TryEvaluate(_liveState, action, out candidate))
                 {
                     BestAction = SelectVerified(new List<Candidate> { candidate }, _liveState, minimumGain: .0001f);
@@ -142,12 +176,10 @@ namespace GameLogic
                     if (IsReverse(first.Action) || !Safe(first.Action)) { yield return true; continue; }
                     BoardModel nextBoard; List<OpponentAiRobotSnapshot> nextRobots; int cost;
                     if (!OpponentAiPlanner.TrySimulate(_liveState, first.Action, out nextBoard, out nextRobots, out cost)) continue;
-                    var offers = new List<OpponentAiOfferSnapshot>();
-                    foreach (var offer in _liveState.Offers) if (offer.OfferId != first.Action.OfferId) offers.Add(offer);
-                    var next = new OpponentAiSnapshot(_liveState.Side, _liveState.EnergyCoins - cost, nextBoard, offers,
-                        nextRobots, _liveState.CandidateProfiles, _liveState.RefreshPrice, _liveState.BattleId, _liveState.HasPurchasedShopRobots, _liveState.World);
-                    var secondOptions = new OpponentAiPlanningOptions { AllowPurchase = _options.AllowPurchase,
-                        AllowMove = _options.AllowMove, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false,
+                    var next = OpponentAiPlanner.AfterSimulation(_liveState, first.Action, nextBoard, nextRobots, cost);
+                    // 通道只约束当前提交的第一步，第二步允许由另一个通道完成。
+                    var secondOptions = new OpponentAiPlanningOptions { AllowPurchase = _options.FollowUpPurchase ?? _options.AllowPurchase,
+                        AllowMove = _options.FollowUpMove ?? _options.AllowMove, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false,
                         BlockedOfferIds = _options.BlockedOfferIds };
                     var secondCandidates = new List<Candidate>();
                     foreach (var second in SpatialActions(next, secondOptions))
@@ -174,8 +206,21 @@ namespace GameLogic
                 }
             }
 
+            if (!_state.Army.HasValue)
+            {
+                foreach (var step in SearchMerges(-1, beforeScore)) yield return step;
+                if (BestAction.Kind != OpponentAiActionKind.Wait) yield break;
+            }
+            if (_options.AllowRefresh && OpponentAiPlanner.CanRefresh(_state))
+                BestAction = new OpponentAiAction(OpponentAiActionKind.Refresh, battleId: _state.BattleId, decisionReason: "刷新寻找可用形状或升级");
+        }
+
+        private IEnumerable<bool> SearchMerges(int group, float beforeScore)
+        {
             foreach (var merge in MergeActions())
             {
+                if (group == 0 && merge.Kind == OpponentAiActionKind.PurchaseAndMerge ||
+                    group == 1 && merge.Kind == OpponentAiActionKind.Merge) continue;
                 BoardModel afterBoard; List<OpponentAiRobotSnapshot> afterRobots; int cost;
                 if (!OpponentAiPlanner.TrySimulate(_state, merge, out afterBoard, out afterRobots, out cost)) continue;
                 var after = _evaluator.Evaluate(_liveState, afterBoard, afterRobots);
@@ -192,8 +237,6 @@ namespace GameLogic
                     Score(after.GlassValue, after.RobotValue, after.Control, after.Mobility));
                 yield break;
             }
-            if (_options.AllowRefresh && OpponentAiPlanner.CanRefresh(_state))
-                BestAction = new OpponentAiAction(OpponentAiActionKind.Refresh, battleId: _state.BattleId, decisionReason: "刷新寻找可用形状或升级");
         }
 
         private bool TryEvaluate(OpponentAiSnapshot state, OpponentAiAction action, out Candidate candidate)
@@ -260,13 +303,12 @@ namespace GameLogic
                 var close = candidate.Closed && (candidate.Enclosure > before.Enclosure ||
                     candidate.Enclosure == before.Enclosure && candidate.C > before.Control + .05f);
                 var unblocking = !before.HasReserve && candidate.Reserve;
-                var startup = (comparisonState.World == null || !comparisonState.World.Ball.IsLaunched) &&
-                    CountRobots(comparisonState) < 2 && candidate.Action.Kind == OpponentAiActionKind.PurchaseAndDeploy;
-                if (!close && !unblocking && !startup && candidate.Score < baseline + (minimumGain ?? Tuning.MinimumScoreGain) ||
+                var recruiting = OpponentAiArmyRules.NeedsRecruitment(comparisonState) && OpponentAiArmyRules.AddsRobot(candidate.Action);
+                if (!close && !unblocking && !recruiting && candidate.Score < baseline + (minimumGain ?? Tuning.MinimumScoreGain) ||
                     !candidate.Reserve && !close || IsReverse(candidate.Action) && !close && !unblocking ||
                     !_evaluator.IsActionSafe(simulationState, candidate.Action, true,
                         sameLayout ? preciseBefore : null, candidate.PreciseRegion)) continue;
-                var reason = close ? "一步封口" : unblocking ? "恢复机动空间" : startup ? "开局部署" :
+                var reason = close ? "一步封口" : recruiting ? "扩军补足机器人" : unblocking ? "恢复机动空间" :
                     comparisonState.StrategyPhase == OpponentAiStrategyPhase.GlassExpansion ? "改善玻璃接触" : "改善连击围挡";
                 return Describe(candidate.Action, reason, baseline, candidate.Score, scoreReference: reference,
                     minimumEnclosure: candidate.Enclosure);
@@ -285,7 +327,7 @@ namespace GameLogic
             return after.Valid && after.IsClosed;
         }
 
-        private static IEnumerable<OpponentAiAction> SpatialActions(OpponentAiSnapshot state, OpponentAiPlanningOptions options)
+        private static IEnumerable<OpponentAiAction> SpatialActions(OpponentAiSnapshot state, OpponentAiPlanningOptions options, int group = -1)
         {
             var board = state.Board;
             var anchors = new List<BoardCoordinate>();
@@ -299,7 +341,7 @@ namespace GameLogic
                 var distance = distanceA.CompareTo(distanceB);
                 return distance != 0 ? distance : a.Row == b.Row ? a.Column.CompareTo(b.Column) : a.Row.CompareTo(b.Row);
             });
-            if (options.AllowMove && !(state.World?.Ball.IsBerserk ?? false))
+            if (group != 1 && options.AllowMove && !(state.World?.Ball.IsBerserk ?? false))
                 foreach (var robot in state.Robots)
                 {
                     if (!robot.IsOnBoard || robot.InstanceId < 0) continue;
@@ -310,8 +352,22 @@ namespace GameLogic
                             yield return new OpponentAiAction(OpponentAiActionKind.Move, sourceInstanceId: robot.InstanceId,
                                 anchor: anchor, battleId: state.BattleId);
                         }
+                    if (state.Army.HasValue && state.ReturnSlotIds.Count > 0)
+                    {
+                        var removal = new OpponentAiAction(OpponentAiActionKind.ReturnToShop,
+                            slotId: state.ReturnSlotIds[0], sourceInstanceId: robot.InstanceId, battleId: state.BattleId);
+                        if (OpponentAiArmyRules.Allows(state, removal)) yield return removal;
+                    }
                 }
-            if (!options.AllowPurchase) yield break;
+            if (state.Army.HasValue && options.AllowMove &&
+                (group < 0 || group == (OpponentAiArmyRules.NeedsRecruitment(state) ? 1 : 0)))
+                foreach (var owned in state.Robots)
+                    if (owned.Location == RobotLocation.PurchasedShopSlot)
+                        foreach (var anchor in anchors)
+                            if (anchor.Column + owned.Definition.Width <= board.Columns && anchor.Row + owned.Definition.Height <= board.Rows)
+                                yield return new OpponentAiAction(OpponentAiActionKind.DeployOwned,
+                                    sourceInstanceId: owned.InstanceId, anchor: anchor, battleId: state.BattleId);
+            if (group == 0 || !options.AllowPurchase) yield break;
             foreach (var offer in state.Offers)
             {
                 if (offer.IsPurchased || offer.Price > state.EnergyCoins || Blocked(options, offer.OfferId)) continue;
@@ -327,7 +383,7 @@ namespace GameLogic
         private IEnumerable<OpponentAiAction> MergeActions()
         {
             if (!_options.AllowMerge) yield break;
-            if (_options.AllowPurchase && _state.StrategyPhase == OpponentAiStrategyPhase.ComboControl)
+            if (_options.Lane != OpponentAiActionLane.Drag && _options.AllowPurchase && _state.StrategyPhase == OpponentAiStrategyPhase.ComboControl)
                 foreach (var offer in _state.Offers)
                     foreach (var target in _state.Robots)
                     {
@@ -337,14 +393,15 @@ namespace GameLogic
                         yield return new OpponentAiAction(OpponentAiActionKind.PurchaseAndMerge, offer.SlotId, offer.OfferId,
                             targetInstanceId: target.InstanceId, anchor: target.Anchor.Value, battleId: _state.BattleId);
                     }
-            if (_liveState.World?.Ball.IsBerserk ?? false) yield break;
+            if (_options.Lane == OpponentAiActionLane.Purchase || (_liveState.World?.Ball.IsBerserk ?? false)) yield break;
             foreach (var source in _state.Robots)
                 foreach (var target in _state.Robots)
                 {
                     if (!source.IsOnBoard || !target.IsOnBoard || source.InstanceId == target.InstanceId ||
                         source.Level != target.Level || source.Profile.RobotId != target.Profile.RobotId || target.Level >= target.MaxLevel) continue;
-                    yield return new OpponentAiAction(OpponentAiActionKind.Merge, sourceInstanceId: source.InstanceId,
+                    var merge = new OpponentAiAction(OpponentAiActionKind.Merge, sourceInstanceId: source.InstanceId,
                         targetInstanceId: target.InstanceId, anchor: target.Anchor.Value, battleId: _state.BattleId);
+                    if (OpponentAiArmyRules.Allows(_state, merge)) yield return merge;
                 }
         }
 
@@ -412,8 +469,6 @@ namespace GameLogic
         }
         private static bool Blocked(OpponentAiPlanningOptions options, long id)
         { if (options.BlockedOfferIds != null) foreach (var blocked in options.BlockedOfferIds) if (blocked == id) return true; return false; }
-        private static int CountRobots(OpponentAiSnapshot state)
-        { var count = 0; foreach (var robot in state.Robots) if (robot.IsOnBoard) count++; return count; }
         private static OpponentAiAction Describe(OpponentAiAction a, string reason, float before, float after,
             OpponentAiFollowUp? followUp = null, OpponentAiScoreReference? scoreReference = null,
             OpponentAiEnclosureKind? minimumEnclosure = null)

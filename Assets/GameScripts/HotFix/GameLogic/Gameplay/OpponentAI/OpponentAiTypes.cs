@@ -10,7 +10,9 @@ namespace GameLogic
         PurchaseAndMerge,
         Merge,
         Move,
-        Refresh
+        Refresh,
+        ReturnToShop,
+        DeployOwned
     }
 
     public readonly struct OpponentAiRobotProfile
@@ -89,6 +91,43 @@ namespace GameLogic
         public bool IsOnBoard => Location == RobotLocation.Board && Anchor.HasValue;
     }
 
+    /// <summary>扩军只完成一次；完成后允许在7个以上按收益调整，不反复追补到8个。</summary>
+    public readonly struct OpponentAiArmyState
+    {
+        public const int RecruitmentTarget = 8;
+        public const int MinimumRobots = 7;
+        public readonly bool Established;
+        public OpponentAiArmyState(bool established) { Established = established; }
+    }
+
+    public static class OpponentAiArmyRules
+    {
+        public static int Count(OpponentAiSnapshot state)
+        {
+            var count = 0;
+            foreach (var robot in state.Robots) if (robot.IsOnBoard) count++;
+            return count;
+        }
+
+        public static bool NeedsRecruitment(OpponentAiSnapshot state) => state.Army.HasValue &&
+            Count(state) < (state.Army.Value.Established ? OpponentAiArmyState.MinimumRobots : OpponentAiArmyState.RecruitmentTarget);
+
+        public static bool AddsRobot(OpponentAiAction action) =>
+            action.Kind == OpponentAiActionKind.PurchaseAndDeploy || action.Kind == OpponentAiActionKind.DeployOwned;
+
+        public static bool IsDrag(OpponentAiActionKind kind) => kind == OpponentAiActionKind.Move ||
+            kind == OpponentAiActionKind.ReturnToShop || kind == OpponentAiActionKind.DeployOwned;
+
+        public static bool Allows(OpponentAiSnapshot state, OpponentAiAction action)
+        {
+            if (!state.Army.HasValue) return true; // 旧工具快照不自动启用运行时扩军策略。
+            if (action.Kind == OpponentAiActionKind.Merge || action.Kind == OpponentAiActionKind.ReturnToShop)
+                return state.Army.Value.Established && Count(state) > OpponentAiArmyState.MinimumRobots;
+            if (action.Kind == OpponentAiActionKind.PurchaseAndMerge && NeedsRecruitment(state)) return false;
+            return true;
+        }
+    }
+
     public sealed class OpponentAiSnapshot
     {
         public BattleSide Side { get; }
@@ -103,6 +142,8 @@ namespace GameLogic
         public IReadOnlyList<OpponentAiRobotProfile> CandidateProfiles { get; }
         public int RefreshPrice { get; }
         public OpponentAiWorldSnapshot World { get; }
+        public OpponentAiArmyState? Army { get; }
+        public IReadOnlyList<int> ReturnSlotIds { get; }
         public int BoardRevision => World?.BoardRevision ?? 0;
         public OpponentAiStrategyPhase StrategyPhase => World?.Phase ?? OpponentAiStrategyPhase.GlassExpansion;
 
@@ -111,7 +152,8 @@ namespace GameLogic
             IReadOnlyList<OpponentAiRobotSnapshot> robots,
             IReadOnlyList<OpponentAiRobotProfile> candidateProfiles,
             int refreshPrice = 5, long battleId = 0, bool hasPurchasedShopRobots = false,
-            OpponentAiWorldSnapshot world = null)
+            OpponentAiWorldSnapshot world = null, IReadOnlyList<int> returnSlotIds = null,
+            OpponentAiArmyState? army = null)
         {
             if (side != BattleSide.Player && side != BattleSide.Opponent)
                 throw new ArgumentOutOfRangeException(nameof(side));
@@ -125,10 +167,12 @@ namespace GameLogic
             CandidateProfiles = new List<OpponentAiRobotProfile>(candidateProfiles ?? throw new ArgumentNullException(nameof(candidateProfiles))).AsReadOnly();
             HasPurchasedShopRobots = hasPurchasedShopRobots;
             World = world;
+            Army = army;
+            ReturnSlotIds = new List<int>(returnSlotIds ?? Array.Empty<int>()).AsReadOnly();
             RefreshPrice = refreshPrice < 0 ? throw new ArgumentOutOfRangeException(nameof(refreshPrice)) : refreshPrice;
         }
 
-        private OpponentAiSnapshot(OpponentAiSnapshot source, OpponentAiWorldSnapshot world)
+        private OpponentAiSnapshot(OpponentAiSnapshot source, OpponentAiWorldSnapshot world, OpponentAiArmyState? army)
         {
             // _board 仅在首次捕获时复制，之后从不修改或直接返回；只读集合也已脱离输入集合。
             // WithWorld 可跨线程共享这份私有结构，所有模拟仍通过 Board 获取独立副本。
@@ -142,12 +186,17 @@ namespace GameLogic
             HasPurchasedShopRobots = source.HasPurchasedShopRobots;
             RefreshPrice = source.RefreshPrice;
             World = world;
+            Army = army;
+            ReturnSlotIds = source.ReturnSlotIds;
         }
 
         internal static BoardModel CopyBoard(BoardModel source) => source.Clone();
 
         public OpponentAiSnapshot WithWorld(OpponentAiWorldSnapshot world) => new OpponentAiSnapshot(
-            this, world);
+            this, world, Army);
+
+        public OpponentAiSnapshot WithArmyState(bool established) => new OpponentAiSnapshot(this, World,
+            new OpponentAiArmyState(established || OpponentAiArmyRules.Count(this) >= OpponentAiArmyState.RecruitmentTarget));
     }
 
     public readonly struct OpponentAiAction
@@ -194,11 +243,13 @@ namespace GameLogic
 
     public sealed class OpponentAiPlanningOptions
     {
+        public OpponentAiActionLane Lane;
+        public bool? FollowUpPurchase;
+        public bool? FollowUpMove;
         public bool AllowPurchase = true;
         public bool AllowMerge = true;
         public bool AllowMove = true;
         public bool AllowRefresh = true;
-        public int InitialRobotTarget = 3;
         public long PreferredOfferId;
         public IReadOnlyCollection<long> BlockedOfferIds;
         public float ActiveTime;
@@ -206,4 +257,6 @@ namespace GameLogic
         public bool AllowTwoStep = true;
         public OpponentAiFollowUp? PendingFollowUp;
     }
+
+    public enum OpponentAiActionLane { All, Purchase, Drag }
 }

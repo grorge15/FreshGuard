@@ -7,6 +7,175 @@ namespace GameLogic.Tests
     public sealed class OpponentAiV2Tests
     {
         [Test]
+        public void RecruitmentBuysEighthRobotWithoutImmediateScoreGain()
+        {
+            var board = new BoardModel(12, 4);
+            var profile = new OpponentAiRobotProfile(501, 1, 0, 1, new PlaceableDefinition("p", 1, 1));
+            var robots = new List<OpponentAiRobotSnapshot>();
+            for (var i = 0; i < 7; i++)
+            {
+                var shape = new PlaceableDefinition("army:" + i, 1, 1);
+                var cell = new BoardCoordinate(i, 0);
+                board.TryPlace(cell, shape);
+                robots.Add(new OpponentAiRobotSnapshot(i + 1, profile, 1, 5, 0, 1,
+                    RobotLocation.Board, cell, shape));
+            }
+            var state = new OpponentAiSnapshot(BattleSide.Opponent, 20, board,
+                new[] { new OpponentAiOfferSnapshot(21, 11, profile, 1, 6, false) }, robots, new[] { profile });
+            state = state.WithArmyState(false);
+            var action = OpponentAiPlanner.Plan(state, new OpponentAiPlanningOptions {
+                AllowMove = false, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false });
+            Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy, action.Kind,
+                "尚未达到8个时，不能因即时评分不足而拒绝安全扩军");
+            Assert.IsTrue(OpponentAiPlanner.IsActionUseful(state, action), "提交复核也必须认可扩军收益");
+        }
+
+        [Test]
+        public void RecruitmentPurchasePrecedesAvailableOneMoveSeal()
+        {
+            var state = ArmyRing(4);
+            var action = OpponentAiPlanner.Plan(state, new OpponentAiPlanningOptions {
+                AllowMerge = false, AllowRefresh = false, AllowTwoStep = false });
+            Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy, action.Kind);
+            Assert.AreEqual(new BoardCoordinate(4, 3), action.Anchor);
+        }
+
+        [Test]
+        public void EstablishedArmyDragPrecedesPurchaseAndBlockedPurchaseCanFallBackToDrag()
+        {
+            foreach (var count in new[] { 4, 5 })
+            {
+                var action = OpponentAiPlanner.Plan(ArmyRing(count), new OpponentAiPlanningOptions {
+                    AllowPurchase = count == 5, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false });
+                Assert.AreEqual(OpponentAiActionKind.Move, action.Kind);
+                Assert.AreEqual(new BoardCoordinate(4, 3), action.Anchor);
+            }
+        }
+
+        [Test]
+        public void PartialRecruitmentResultCannotPublishLowerPriorityDrag()
+        {
+            using (var search = OpponentAiPlanner.BeginSearch(ArmyRing(4), new OpponentAiPlanningOptions {
+                AllowMerge = false, AllowRefresh = false, AllowTwoStep = false }))
+            {
+                for (var i = 0; i < 1000 && !search.IsComplete && search.BestAction.Kind == OpponentAiActionKind.Wait; i++)
+                {
+                    search.Advance(1, double.PositiveInfinity);
+                    search.PublishBestPartial();
+                }
+                Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy, search.BestAction.Kind);
+            }
+        }
+
+        [Test]
+        public void EstablishedArmyCanReturnEighthRobotButCannotRemoveOrMergeSeventh()
+        {
+            var state = ArmyLine(8, true);
+            var action = OpponentAiPlanner.Plan(state, new OpponentAiPlanningOptions {
+                AllowPurchase = false, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false });
+            Assert.AreEqual(OpponentAiActionKind.ReturnToShop, action.Kind);
+            Assert.IsTrue(OpponentAiPlanner.IsActionUseful(state, action));
+            state = ArmyLine(7, true);
+            Assert.IsFalse(OpponentAiPlanner.IsActionUseful(state, action));
+            Assert.IsFalse(OpponentAiPlanner.IsActionUseful(state, new OpponentAiAction(OpponentAiActionKind.Merge,
+                sourceInstanceId: 1, targetInstanceId: 2, decisionReason: "保留围挡升级")));
+            Assert.AreEqual(OpponentAiActionKind.Wait, OpponentAiPlanner.Plan(state, new OpponentAiPlanningOptions {
+                AllowPurchase = false, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false }).Kind);
+        }
+
+        [Test]
+        public void StoredRobotCanRefillEstablishedArmyWithoutPurchaseTokens()
+        {
+            var state = ArmyLine(6, true);
+            var robots = new List<OpponentAiRobotSnapshot>(state.Robots);
+            var profile = robots[0].Profile;
+            robots.Add(new OpponentAiRobotSnapshot(99, profile, 1, 5, 10, 1,
+                RobotLocation.PurchasedShopSlot, null, new PlaceableDefinition("stored", 1, 1)));
+            state = new OpponentAiSnapshot(state.Side, 0, state.Board, state.Offers, robots,
+                state.CandidateProfiles, world: state.World).WithArmyState(true);
+            var action = OpponentAiPlanner.Plan(state, new OpponentAiPlanningOptions {
+                AllowPurchase = false, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false });
+            Assert.AreEqual(OpponentAiActionKind.DeployOwned, action.Kind);
+            Assert.AreEqual(99, action.SourceInstanceId);
+            Assert.IsTrue(OpponentAiPlanner.IsActionUseful(state, action));
+            Assert.IsTrue(ArmyLine(7, true).WithWorld(state.World).Army.Value.Established);
+            Assert.IsTrue(OpponentAiArmyRules.NeedsRecruitment(ArmyLine(7, false)));
+            Assert.IsFalse(OpponentAiArmyRules.NeedsRecruitment(ArmyLine(7, true)));
+        }
+
+        [Test]
+        public void RecruitmentStillBuysAfterBallLaunchAndCannotIgnoreBallOverlap()
+        {
+            var state = ArmyLine(7, false);
+            state = state.WithWorld(new OpponentAiWorldSnapshot(new OpponentAiBallState(
+                new Vector2(10.5f, 2.5f), Vector2.up, 0, .2f), null, settings: state.World.Settings));
+            var action = OpponentAiPlanner.Plan(state, new OpponentAiPlanningOptions {
+                AllowMove = false, AllowMerge = false, AllowRefresh = false, AllowTwoStep = false });
+            Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy, action.Kind);
+            Assert.IsTrue(new OpponentAiRegionEvaluator().IsActionSafe(state, action));
+            Assert.IsTrue(OpponentAiPlanner.IsActionUseful(state, action));
+            var overlapping = new OpponentAiAction(OpponentAiActionKind.PurchaseAndDeploy, 21, 11,
+                anchor: new BoardCoordinate(10, 2), decisionReason: "扩军补足机器人");
+            Assert.IsNull(OpponentAiActionProof.Create(state, overlapping), "扩军不能绕过压球校验");
+        }
+
+        private static OpponentAiSnapshot ArmyLine(int count, bool established)
+        {
+            var board = new BoardModel(12, 4);
+            var profile = new OpponentAiRobotProfile(501, 1, 10, 1, new PlaceableDefinition("profile", 1, 1), 5);
+            var robots = new List<OpponentAiRobotSnapshot>();
+            for (var i = 0; i < count; i++)
+            {
+                var shape = new PlaceableDefinition("line:" + i, 1, 1);
+                var cell = new BoardCoordinate(i, 0);
+                board.TryPlace(cell, shape);
+                robots.Add(new OpponentAiRobotSnapshot(i + 1, profile, 1, 5, 10, 1, RobotLocation.Board, cell, shape));
+            }
+            var world = new OpponentAiWorldSnapshot(default(OpponentAiBallState), null,
+                settings: new OpponentAiStrategySettings { GlassWeights = new Vector4(0, 0, 0, 1), MinimumScoreGain = .001f });
+            return new OpponentAiSnapshot(BattleSide.Opponent, 20, board,
+                new[] { new OpponentAiOfferSnapshot(21, 11, profile, 1, 6, false) }, robots, new[] { profile },
+                world: world, returnSlotIds: new[] { 99 }).WithArmyState(established);
+        }
+
+        [Test]
+        public void DragLaneCanPlanMoveThenPurchaseAcrossLanes()
+        {
+            var original = TwoStepState();
+            var board = original.Board;
+            board.Release(original.Robots[3].Definition.Id);
+            var robots = new List<OpponentAiRobotSnapshot>(original.Robots);
+            robots.RemoveAt(3);
+            var state = new OpponentAiSnapshot(original.Side, 20, board,
+                new[] { new OpponentAiOfferSnapshot(21, 11, robots[0].Profile, 1, 6, false) },
+                robots, original.CandidateProfiles, battleId: original.BattleId, world: original.World);
+            var options = new OpponentAiPlanningOptions {
+                Lane = OpponentAiActionLane.Drag, AllowPurchase = false, AllowMerge = false, AllowRefresh = false,
+                FollowUpPurchase = true };
+            var action = OpponentAiPlanner.Plan(state, options);
+            Assert.AreEqual(OpponentAiActionKind.Move, action.Kind);
+            Assert.IsTrue(action.FollowUp.HasValue);
+            Assert.AreEqual(OpponentAiActionKind.PurchaseAndDeploy, action.FollowUp.Value.Kind);
+        }
+
+        internal static OpponentAiSnapshot ArmyRing(int extras)
+        {
+            var state = RingState(3, true);
+            var board = state.Board;
+            var robots = new List<OpponentAiRobotSnapshot>(state.Robots);
+            for (var i = 0; i < extras; i++)
+            {
+                var shape = new PlaceableDefinition("extra:" + i, 1, 1);
+                var cell = new BoardCoordinate(i, 0);
+                board.TryPlace(cell, shape);
+                robots.Add(new OpponentAiRobotSnapshot(i + 4, state.Robots[0].Profile, 1, 5, 10, 1,
+                    RobotLocation.Board, cell, shape));
+            }
+            return new OpponentAiSnapshot(state.Side, state.EnergyCoins, board, state.Offers, robots,
+                state.CandidateProfiles, world: state.World).WithArmyState(false);
+        }
+
+        [Test]
         public void IndependentRobotSealOutranksHighDamageGlassAssistedCandidate()
         {
             var state = GlassAssistedState();

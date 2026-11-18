@@ -46,6 +46,7 @@ namespace GameLogic
         {
             finalRegion = null;
             if (state == null) return false;
+            if (!OpponentAiArmyRules.Allows(state, action)) return false;
             if (action.DecisionReason == null && action.MinimumEnclosure == OpponentAiEnclosureKind.None)
                 return true; // 兼容未指定围挡目标的工具入口。
             evaluator = evaluator ?? new OpponentAiRegionEvaluator();
@@ -53,10 +54,7 @@ namespace GameLogic
             if (!TrySimulate(state, action, out board, out robots, out cost)) return false;
             if (action.FollowUp.HasValue)
             {
-                var offers = new List<OpponentAiOfferSnapshot>();
-                foreach (var offer in state.Offers) if (offer.OfferId != action.OfferId) offers.Add(offer);
-                var next = new OpponentAiSnapshot(state.Side, state.EnergyCoins - cost, board, offers, robots,
-                    state.CandidateProfiles, state.RefreshPrice, state.BattleId, state.HasPurchasedShopRobots, state.World);
+                var next = AfterSimulation(state, action, board, robots, cost);
                 var follow = action.FollowUp.Value.ToAction();
                 if (!evaluator.IsActionSafe(next, follow)) return false;
                 if (!TrySimulate(next, follow, out board, out robots, out cost)) return false;
@@ -68,13 +66,13 @@ namespace GameLogic
             if (!before.Valid || !after.Valid) return false;
             var minimumEnclosure = action.FollowUp?.MinimumEnclosure ?? action.MinimumEnclosure;
             if (after.Enclosure < minimumEnclosure) return false;
+            // 扩军购买不要求即时评分增长；安全性由独立的IsActionSafe/提交证明保证。
+            if (!action.FollowUp.HasValue && OpponentAiArmyRules.NeedsRecruitment(state) &&
+                OpponentAiArmyRules.AddsRobot(action) && after.HasReserve) return true;
             var close = after.ImprovesEnclosure(before.Enclosure, before.Control);
             if (action.DecisionReason == "一步封口") return close;
             if (action.FollowUp.HasValue && action.FollowUp.Value.RequireClosed && !close) return false;
             if (!before.HasReserve && after.HasReserve) return true;
-            var count = 0; foreach (var robot in state.Robots) if (robot.IsOnBoard) count++;
-            if ((state.World == null || !state.World.Ball.IsLaunched) && count < 2 &&
-                action.Kind == OpponentAiActionKind.PurchaseAndDeploy) return true;
             var precise = before.GeometryComplete && after.GeometryComplete;
             if (action.ScoreReference.HasValue && action.ScoreReference.Value.Precise && !precise) return false;
             if (action.ScoreReference.HasValue ? !action.ScoreReference.Value.Precise : !precise)
@@ -105,11 +103,46 @@ namespace GameLogic
             return false;
         }
 
+        internal static OpponentAiSnapshot AfterSimulation(OpponentAiSnapshot state, OpponentAiAction action,
+            BoardModel board, List<OpponentAiRobotSnapshot> robots, int cost)
+        {
+            var offers = new List<OpponentAiOfferSnapshot>();
+            foreach (var offer in state.Offers) if (offer.OfferId != action.OfferId) offers.Add(offer);
+            var all = new List<OpponentAiRobotSnapshot>(robots);
+            foreach (var owned in state.Robots)
+            {
+                if (!owned.IsOnBoard && owned.InstanceId != action.SourceInstanceId) all.Add(owned);
+                if (action.Kind == OpponentAiActionKind.ReturnToShop && owned.InstanceId == action.SourceInstanceId)
+                    all.Add(new OpponentAiRobotSnapshot(owned.InstanceId, owned.Profile, owned.Level, owned.MaxLevel,
+                        owned.Damage, owned.TriggerInterval, RobotLocation.PurchasedShopSlot, null, owned.Definition));
+            }
+            var slots = new List<int>(state.ReturnSlotIds);
+            if (action.Kind == OpponentAiActionKind.ReturnToShop) slots.Remove(action.SlotId);
+            if (action.Kind == OpponentAiActionKind.PurchaseAndDeploy && !slots.Contains(action.SlotId)) slots.Add(action.SlotId);
+            var next = new OpponentAiSnapshot(state.Side, state.EnergyCoins - cost, board, offers, all,
+                state.CandidateProfiles, state.RefreshPrice, state.BattleId,
+                state.HasPurchasedShopRobots || action.Kind == OpponentAiActionKind.ReturnToShop,
+                state.World, slots, state.Army);
+            return state.Army.HasValue ? next.WithArmyState(state.Army.Value.Established) : next;
+        }
+
         internal static bool TrySimulate(OpponentAiSnapshot state, OpponentAiAction action, out BoardModel board,
             out List<OpponentAiRobotSnapshot> robots, out int cost)
         {
             board = state.Board; robots = new List<OpponentAiRobotSnapshot>(); cost = 0;
+            if (!OpponentAiArmyRules.Allows(state, action)) return false;
             foreach (var robot in state.Robots) if (robot.IsOnBoard) robots.Add(robot);
+            if (action.Kind == OpponentAiActionKind.DeployOwned)
+            {
+                foreach (var owned in state.Robots)
+                {
+                    if (owned.InstanceId != action.SourceInstanceId || owned.Location != RobotLocation.PurchasedShopSlot) continue;
+                    if (!board.TryPlace(action.Anchor, owned.Definition)) return false;
+                    robots.Add(Changed(owned, action.Anchor, owned.Level, owned.Damage));
+                    return true;
+                }
+                return false;
+            }
             if (action.Kind == OpponentAiActionKind.PurchaseAndDeploy)
             {
                 foreach (var offer in state.Offers)
@@ -125,6 +158,13 @@ namespace GameLogic
                 return false;
             }
             var sourceIndex = robots.FindIndex(r => r.InstanceId == action.SourceInstanceId);
+            if (action.Kind == OpponentAiActionKind.ReturnToShop)
+            {
+                if (sourceIndex < 0 || !ContainsSlot(state.ReturnSlotIds, action.SlotId)) return false;
+                board.Release(robots[sourceIndex].Definition.Id);
+                robots.RemoveAt(sourceIndex);
+                return true;
+            }
             if (action.Kind == OpponentAiActionKind.Move)
             {
                 if (sourceIndex < 0) return false;
@@ -162,5 +202,11 @@ namespace GameLogic
         private static OpponentAiRobotSnapshot Changed(OpponentAiRobotSnapshot robot, BoardCoordinate anchor, int level, int damage)
             => new OpponentAiRobotSnapshot(robot.InstanceId, robot.Profile, level, robot.MaxLevel, damage,
                 robot.TriggerInterval, RobotLocation.Board, anchor, robot.Definition);
+
+        private static bool ContainsSlot(IReadOnlyList<int> slots, int id)
+        {
+            foreach (var slot in slots) if (slot == id) return true;
+            return false;
+        }
     }
 }

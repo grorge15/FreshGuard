@@ -56,8 +56,13 @@ namespace GameLogic
 
         public bool CanCommit(OpponentAiSnapshot current)
         {
-            if (current == null || current.BattleId != _snapshot.BattleId || current.BoardRevision != _snapshot.BoardRevision ||
-                current.EnergyCoins != _snapshot.EnergyCoins || current.StrategyPhase != _snapshot.StrategyPhase) return false;
+            if (current == null || !OpponentAiArmyRules.Allows(current, _action)) return false;
+            if (current.BattleId != _snapshot.BattleId || current.BoardRevision != _snapshot.BoardRevision ||
+                current.StrategyPhase != _snapshot.StrategyPhase) return false;
+            var spends = _action.Kind == OpponentAiActionKind.PurchaseAndDeploy || _action.Kind == OpponentAiActionKind.PurchaseAndMerge ||
+                _action.FollowUp.HasValue && (_action.FollowUp.Value.Kind == OpponentAiActionKind.PurchaseAndDeploy ||
+                    _action.FollowUp.Value.Kind == OpponentAiActionKind.PurchaseAndMerge);
+            if (spends && current.EnergyCoins != _snapshot.EnergyCoins) return false;
             var oldBall = _snapshot.World?.Ball ?? default(OpponentAiBallState);
             var ball = current.World?.Ball ?? default(OpponentAiBallState);
             if (oldBall.IsLaunched != ball.IsLaunched || oldBall.IsBerserk != ball.IsBerserk ||
