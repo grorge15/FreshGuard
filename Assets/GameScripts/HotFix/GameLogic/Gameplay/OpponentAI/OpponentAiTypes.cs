@@ -102,12 +102,16 @@ namespace GameLogic
         public IReadOnlyList<OpponentAiRobotSnapshot> Robots { get; }
         public IReadOnlyList<OpponentAiRobotProfile> CandidateProfiles { get; }
         public int RefreshPrice { get; }
+        public OpponentAiWorldSnapshot World { get; }
+        public int BoardRevision => World?.BoardRevision ?? 0;
+        public OpponentAiStrategyPhase StrategyPhase => World?.Phase ?? OpponentAiStrategyPhase.GlassExpansion;
 
         public OpponentAiSnapshot(BattleSide side, int energyCoins, BoardModel board,
             IReadOnlyList<OpponentAiOfferSnapshot> offers,
             IReadOnlyList<OpponentAiRobotSnapshot> robots,
             IReadOnlyList<OpponentAiRobotProfile> candidateProfiles,
-            int refreshPrice = 5, long battleId = 0, bool hasPurchasedShopRobots = false)
+            int refreshPrice = 5, long battleId = 0, bool hasPurchasedShopRobots = false,
+            OpponentAiWorldSnapshot world = null)
         {
             if (side != BattleSide.Player && side != BattleSide.Opponent)
                 throw new ArgumentOutOfRangeException(nameof(side));
@@ -120,26 +124,30 @@ namespace GameLogic
             Robots = new List<OpponentAiRobotSnapshot>(robots ?? throw new ArgumentNullException(nameof(robots))).AsReadOnly();
             CandidateProfiles = new List<OpponentAiRobotProfile>(candidateProfiles ?? throw new ArgumentNullException(nameof(candidateProfiles))).AsReadOnly();
             HasPurchasedShopRobots = hasPurchasedShopRobots;
+            World = world;
             RefreshPrice = refreshPrice < 0 ? throw new ArgumentOutOfRangeException(nameof(refreshPrice)) : refreshPrice;
         }
 
-        internal static BoardModel CopyBoard(BoardModel source)
+        private OpponentAiSnapshot(OpponentAiSnapshot source, OpponentAiWorldSnapshot world)
         {
-            var open = new List<BoardCoordinate>();
-            for (var row = 0; row < source.Rows; row++)
-                for (var column = 0; column < source.Columns; column++)
-                {
-                    var cell = new BoardCoordinate(column, row);
-                    if (source.IsOpen(cell)) open.Add(cell);
-                }
-            var copy = new BoardModel(source.Columns, source.Rows, open);
-            foreach (var cell in open)
-            {
-                var id = source.GetOccupant(cell);
-                if (!string.IsNullOrEmpty(id)) copy.TryPlace(cell, new PlaceableDefinition(id, 1, 1));
-            }
-            return copy;
+            // _board 仅在首次捕获时复制，之后从不修改或直接返回；只读集合也已脱离输入集合。
+            // WithWorld 可跨线程共享这份私有结构，所有模拟仍通过 Board 获取独立副本。
+            Side = source.Side;
+            EnergyCoins = source.EnergyCoins;
+            _board = source._board;
+            BattleId = source.BattleId;
+            Offers = source.Offers;
+            Robots = source.Robots;
+            CandidateProfiles = source.CandidateProfiles;
+            HasPurchasedShopRobots = source.HasPurchasedShopRobots;
+            RefreshPrice = source.RefreshPrice;
+            World = world;
         }
+
+        internal static BoardModel CopyBoard(BoardModel source) => source.Clone();
+
+        public OpponentAiSnapshot WithWorld(OpponentAiWorldSnapshot world) => new OpponentAiSnapshot(
+            this, world);
     }
 
     public readonly struct OpponentAiAction
@@ -152,10 +160,18 @@ namespace GameLogic
         public BoardCoordinate Anchor { get; }
         public long BattleId { get; }
         public long FreedOfferId { get; }
+        public string DecisionReason { get; }
+        public float ScoreBefore { get; }
+        public float ScoreAfter { get; }
+        public OpponentAiFollowUp? FollowUp { get; }
+        public OpponentAiScoreReference? ScoreReference { get; }
+        public OpponentAiEnclosureKind MinimumEnclosure { get; }
 
         public OpponentAiAction(OpponentAiActionKind kind, int slotId = -1, long offerId = 0,
             int sourceInstanceId = 0, int targetInstanceId = 0, BoardCoordinate anchor = default(BoardCoordinate),
-            long battleId = 0, long freedOfferId = 0)
+            long battleId = 0, long freedOfferId = 0, string decisionReason = null,
+            float scoreBefore = 0f, float scoreAfter = 0f, OpponentAiFollowUp? followUp = null,
+            OpponentAiScoreReference? scoreReference = null, OpponentAiEnclosureKind minimumEnclosure = OpponentAiEnclosureKind.None)
         {
             Kind = kind;
             SlotId = slotId;
@@ -165,6 +181,12 @@ namespace GameLogic
             Anchor = anchor;
             BattleId = battleId;
             FreedOfferId = freedOfferId;
+            DecisionReason = decisionReason;
+            ScoreBefore = scoreBefore;
+            ScoreAfter = scoreAfter;
+            FollowUp = followUp;
+            ScoreReference = scoreReference;
+            MinimumEnclosure = minimumEnclosure;
         }
 
         public static OpponentAiAction Wait() => new OpponentAiAction(OpponentAiActionKind.Wait);
@@ -179,5 +201,9 @@ namespace GameLogic
         public int InitialRobotTarget = 3;
         public long PreferredOfferId;
         public IReadOnlyCollection<long> BlockedOfferIds;
+        public float ActiveTime;
+        public IReadOnlyList<OpponentAiMoveMemory> RecentMoves;
+        public bool AllowTwoStep = true;
+        public OpponentAiFollowUp? PendingFollowUp;
     }
 }

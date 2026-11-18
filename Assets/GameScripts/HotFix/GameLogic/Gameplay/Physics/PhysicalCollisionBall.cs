@@ -371,7 +371,7 @@ namespace GameLogic
             else trail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
 
-        /// <summary>提交占格后开始恢复；有相邻空位匀速脱离，否则在原格真实边线上往返。</summary>
+        /// <summary>提交占格后开始恢复；有相邻空位匀速脱离，否则在机器人外侧格边往返。</summary>
         public void ResolvePlacementOverlap(RobotView placed, PlacementBoardView board)
         {
             if (!_launched || IsBerserk || _body == null || _collider == null || placed == null || board == null) return;
@@ -418,8 +418,9 @@ namespace GameLogic
                 _direction = (_placementRecovery.TargetPosition - center).normalized;
                 return;
             }
-            if (RecoveryState != PlacementRecoveryState.Trapped)
+            if (!_placementRecovery.HasValidTrappedEdge)
             {
+                ReleaseTrappedMotion();
                 var midpoint = _placementRecovery.EnterTrapped(UnityEngine.Random.Range(0, 4), UnityEngine.Random.value < 0.5f);
                 SetBallCenter(midpoint);
                 center = midpoint;
@@ -570,7 +571,9 @@ namespace GameLogic
                 if (count)
                 {
                     float previousSpeed = EffectiveSpeed;
+                    int version = _recoveryVersion;
                     ProcessRecoveryEndpoint(center, hit.collider);
+                    if (!CanAdvancePlacementRecovery(version)) return;
                     // 端点在步内加速时，余下的时间按新速度继续运动。
                     remaining *= EffectiveSpeed / previousSpeed;
                 }
@@ -617,11 +620,21 @@ namespace GameLogic
             _impactFeedback?.RecordCorner(center);
             BounceCount++;
             SecondsSinceEffectiveInteraction = 0f;
-            var robot = obstacle != null ? obstacle.GetComponentInParent<RobotView>() : null;
-            if (robot != null && IsContactRunning && obstacle == robot.GetPhysicalCollider() &&
-                robot.TryGetComboRobot(_comboRegistry, Side, out _))
+            int version = _recoveryVersion;
+            // 扫掠会跳过侧向保护接触；到几何端点时仍需按球的真实接触形状识别机器人。
+            var robotObstacle = obstacle;
+            var robot = FindRecoveryEndpointRobot(center, ref robotObstacle);
+            if (robot != null && IsContactRunning)
+            {
+                int instanceId = robot.InstanceId;
+                robot.PlayCollisionFeedback();
                 GameSoundService.PlayForSide(GameSound.RobotHit, Side);
+                RobotContactDetected?.Invoke(this, instanceId);
+                // 攻击通知可能同步结束对局、合成机器人或让球进入暴走。
+                if (!CanAdvancePlacementRecovery(version)) return;
+            }
             if (robot == null) ResetComboCount();
+            if (!CanAdvancePlacementRecovery(version)) return;
             var glass = obstacle != null ? obstacle.GetComponent<GlassView>() : null;
             if (glass != null) ProcessRecoveryGlass(glass);
             else if (obstacle != null && obstacle.GetComponentInParent<PhysicalCollisionBoundary>() != null)
@@ -630,7 +643,7 @@ namespace GameLogic
                 _impactFeedback?.PlayWall(point, center - point);
                 GameSoundService.PlayForSide(GameSound.BallWall, Side);
             }
-            if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
+            if (!CanAdvancePlacementRecovery(version)) return;
             gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, WorldRadius + PlacementClearance * 1.5f,
                 new ContactFilter2D { useTriggers = false }, _placementOverlaps);
             // 几何端点也可能同时接触玻璃；先收集，避免奖励同步回调覆盖查询缓冲区。
@@ -640,12 +653,45 @@ namespace GameLogic
             foreach (var adjacent in glasses)
             {
                 ProcessRecoveryGlass(adjacent);
-                if (!_launched || IsBerserk || (_runningGate != null && !_runningGate())) return;
+                if (!CanAdvancePlacementRecovery(version)) return;
             }
             // 同一端点也接触玻璃时，玻璃中断连击，不能再把机器人计入旧连击。
             if (glass != null || glasses.Count > 0) ResetComboCount();
-            else AddRobotCombo(robot, obstacle);
+            else AddRobotCombo(robot, robotObstacle);
+            if (!CanAdvancePlacementRecovery(version)) return;
             ApplyBounceAcceleration(robot != null);
+        }
+
+        private bool CanAdvancePlacementRecovery(int version) => this != null && _launched && !_frozen && !IsBerserk &&
+            version == _recoveryVersion && RecoveryState == PlacementRecoveryState.Trapped &&
+            (_runningGate == null || _runningGate());
+
+        private RobotView FindRecoveryEndpointRobot(Vector2 center, ref Collider2D obstacle)
+        {
+            if (obstacle != null)
+                return TryGetRecoveryRobot(obstacle, out var direct) ? direct : null;
+            float radius = WorldRadius + PlacementMotionEpsilon * 2f;
+            gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, radius,
+                new ContactFilter2D { useTriggers = false }, _placementOverlaps);
+            RobotView selected = null;
+            float best = float.PositiveInfinity;
+            foreach (var candidate in _placementOverlaps)
+            {
+                if (!TryGetRecoveryRobot(candidate, out var view)) continue;
+                float distance = (candidate.ClosestPoint(center) - center).sqrMagnitude;
+                if (distance > radius * radius || distance > best ||
+                    distance == best && selected != null && view.InstanceId >= selected.InstanceId) continue;
+                best = distance; selected = view; obstacle = candidate;
+            }
+            return selected;
+        }
+
+        private bool TryGetRecoveryRobot(Collider2D collider, out RobotView view)
+        {
+            view = collider != null ? collider.GetComponentInParent<RobotView>() : null;
+            return view != null && collider.enabled && collider.gameObject.activeInHierarchy &&
+                IsPlacementObstacle(collider) && collider == view.GetPhysicalCollider() &&
+                view.TryGetComboRobot(_comboRegistry, Side, out _);
         }
 
         private void ProcessRecoveryGlass(GlassView glass)
