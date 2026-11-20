@@ -11,7 +11,10 @@ namespace GameLogic
         private readonly Vector3[] _corners = new Vector3[4];
         private readonly Vector2[] _uv = new Vector2[4];
         private const float ArtWidth = 2105f;
-        private const float ArtworkScale = 1.155f;
+        private const float ArtworkScale = 1.155f * 1.15f;
+        // Keep the crest and end cap at their native proportions; shorten only the well.
+        private const float WellLeft = 331f, SourceWellWidth = 1698f, DisplayWellWidth = 1138f;
+        private const float DisplayWidth = ArtWidth - SourceWellWidth + DisplayWellWidth;
         private const float LabelScale = 0.95f;
         private readonly MeshRenderer _barRenderer, _textRenderer;
         private readonly TextMesh _text;
@@ -27,7 +30,7 @@ namespace GameLogic
             go.GetComponent<MeshFilter>().sharedMesh = _frameMesh;
             _barRenderer = go.GetComponent<MeshRenderer>();
             SetArtwork(_barRenderer, spriteMaterial, frame);
-            WriteQuad(_frameMesh, -0.5f, 146.5f / ArtWidth, 1f, 293f / ArtWidth, 1f);
+            BuildFrame();
             var strip = new GameObject("Fill", typeof(MeshFilter), typeof(MeshRenderer));
             strip.transform.SetParent(_root, false);
             _fillMesh = new Mesh { name = "Boss HP fill" };
@@ -90,8 +93,31 @@ namespace GameLogic
             _text.transform.localScale = Vector3.one * (LabelScale * Mathf.Min(1f, 0.94f / Mathf.Max(0.01f, _textRenderer.localBounds.size.x)));
             float ratio = Mathf.Clamp01((float)hp / maxHp);
             // Source artwork places the fill at (331,122) in a 2105 x 293 top-left canvas.
-            WriteQuad(_fillMesh, -0.5f + 331f / ArtWidth, (146.5f - 122f) / ArtWidth,
-                1698f / ArtWidth, 119f / ArtWidth, ratio);
+            WriteQuad(_fillMesh, (WellLeft - DisplayWidth / 2f) / ArtWidth, (146.5f - 122f) / ArtWidth,
+                DisplayWellWidth / ArtWidth, 119f / ArtWidth, ratio);
+        }
+
+        private void BuildFrame()
+        {
+            float[] source = { 0, WellLeft, WellLeft + SourceWellWidth, ArtWidth };
+            float[] display = { 0, WellLeft, WellLeft + DisplayWellWidth, DisplayWidth };
+            var vertices = new Vector3[8];
+            var uvs = new Vector2[8];
+            var colors = new Color[8];
+            float unit = ArtworkScale / ArtWidth;
+            for (int i = 0; i < 4; i++)
+            {
+                float x = (display[i] - DisplayWidth / 2f) * unit;
+                vertices[2*i] = new Vector3(x, 146.5f * unit);
+                vertices[2*i+1] = new Vector3(x, -146.5f * unit);
+                uvs[2*i] = new Vector2(source[i] / ArtWidth, 1f);
+                uvs[2*i+1] = new Vector2(source[i] / ArtWidth, 0f);
+                colors[2*i] = colors[2*i+1] = Color.white;
+            }
+            _frameMesh.vertices = vertices;
+            _frameMesh.uv = uvs;
+            _frameMesh.colors = colors;
+            _frameMesh.triangles = new[] { 0,2,3, 0,3,1, 2,4,5, 2,5,3, 4,6,7, 4,7,5 };
         }
 
         private static void SetArtwork(MeshRenderer renderer, Material material, Texture texture)
