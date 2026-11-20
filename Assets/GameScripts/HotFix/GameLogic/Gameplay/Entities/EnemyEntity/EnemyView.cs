@@ -16,6 +16,7 @@ namespace GameLogic
         [SerializeField] private bool _faceMovement;
         [SerializeField] private bool _spriteFacesRight = true;
         [SerializeField] private EnemyHitEffect _hitEffect;
+        [SerializeField] private Texture2D _bossHpFrame, _bossHpFill;
         [Tooltip("死亡动画已包含击杀爆闪时，关闭独立受击特效，避免重复叠加。")]
         [SerializeField] private bool _deathAnimationIncludesHitEffect;
         private Animator _animator;
@@ -25,6 +26,7 @@ namespace GameLogic
         private Color[] _baseSpriteColors;
         private bool[] _baseSpriteFlipX;
         private Transform[] _shakeRoots;
+        private BossHealthBar _healthBar;
         private Vector3[] _shakeLocalOffsets;
         private bool _moving;
         private bool _attacking;
@@ -69,6 +71,12 @@ namespace GameLogic
             _side = enemy.Side;
             PlayState("Idle", true);
             RefreshSortingOrder();
+            if ((enemy.Configuration?.EnemyType == 3 || enemy is SkeletonBossEnemy) && _spriteRenderers.Length > 0)
+            {
+                if (_healthBar == null) _healthBar = new BossHealthBar(transform, _spriteRenderers[0].sharedMaterial, _bossHpFrame, _bossHpFill);
+                GetVisualSorting(out var layer, out var order);
+                _healthBar.Bind(GetVisualBounds(), enemy, layer, order);
+            }
         }
 
         public void Unbind()
@@ -125,6 +133,7 @@ namespace GameLogic
             Entity existing;
             if (_registry.TryGet(InstanceId, out existing)) return false;
             ClearHitFeedback();
+            _healthBar?.Hide();
             _registry = null;
             _removing = true;
             _attacking = false;
@@ -150,12 +159,13 @@ namespace GameLogic
             RemoveHitShake();
             AdvanceHitFeedback(Time.unscaledDeltaTime);
             if (_registry == null || InstanceId <= 0) return;
-            if (!HasAliveEntity())
+            if (!_registry.TryGet(InstanceId, out var entity) || !(entity is EnemyEntity enemy) || !enemy.IsAlive)
             {
                 // 未转交移除快照时停止查询并隐藏，防止已回收实体留下幽灵表现。
                 ResetBinding();
                 gameObject.SetActive(false);
             }
+            else _healthBar?.Refresh(enemy.CurrentHp, enemy.MaxHp);
         }
 
         private void LateUpdate() { ApplyHitShake(); RefreshSortingOrder(); }
@@ -280,6 +290,7 @@ namespace GameLogic
             CacheVisuals();
             // 越靠下越靠前；同一高度再用实例 ID 保证稳定顺序，避免排序相同导致的闪烁。
             GetVisualSorting(out var layer, out var order);
+            _healthBar?.SetSorting(layer, order);
             if (_hitEffect != null) _hitEffect.SetSorting(layer, order);
             foreach (var renderer in _spriteRenderers)
                 if (renderer != null)
@@ -319,6 +330,7 @@ namespace GameLogic
 
         private void ResetBinding()
         {
+            _healthBar?.Hide();
             _registry = null;
             _side = BattleSide.Player;
             InstanceId = 0;
@@ -330,6 +342,8 @@ namespace GameLogic
             for (var i = 0; i < _spriteRenderers.Length; i++)
                 if (_spriteRenderers[i] != null) _spriteRenderers[i].flipX = _baseSpriteFlipX[i];
         }
+
+        private void OnDestroy() => _healthBar?.Dispose();
 
         private void PlayState(string state, bool restart = false)
         {

@@ -153,6 +153,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _configId: 2003
+  _bossHpFrame: {fileID: 2800000, guid: 508e8cb9b1ce46989b7e73898e3761ae, type: 3}
+  _bossHpFill: {fileID: 2800000, guid: ea99ee57b58b486d8332a8cc149cddbb, type: 3}
   _faceMovement: 0
   _spriteFacesRight: 0
   _hitEffect: {fileID: 1647370198236183516}
