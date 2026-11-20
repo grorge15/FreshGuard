@@ -33,7 +33,7 @@ namespace GameLogic.Tests
         [TearDown]
         public void Clear() { _combat?.Dispose(); _f?.Dispose(); _views.Clear(); }
 
-        [TestCase(704, 12)]
+        [TestCase(704, 7)]
         [TestCase(701, 4)]
         public void LaunchedAttackPlaysOneSegmentThenHoldsItsLastFrame(int configId, int endFrame)
         {
@@ -89,7 +89,7 @@ namespace GameLogic.Tests
             Assert.AreSame(Frames(configId)[0], AnimatedPortrait(robot).sprite);
         }
 
-        [TestCase(704, 3)] [TestCase(701, 5)]
+        [TestCase(704, 6)] [TestCase(701, 5)]
         public void CompletedCycleResetsToFirstSegmentAndTwoRobotsStayIndependent(int configId, int required)
         {
             var first = AddRobot(configId); var second = AddRobot(configId);
@@ -115,16 +115,19 @@ namespace GameLogic.Tests
         public void PendingChildPreservesEverySuccessfullyLaunchedAttack(int configId)
         {
             var robot = AddRobot(configId);
-            var required = configId == 704 ? 3 : 5;
+            const int required = 5;
             robot.Buffs.Add(new BuffModel(998, "test", priority: 1000), robot.OwnerRef, 100,
                 behavior: new ChildCastHook(robot, false));
-            for (var i = 0; i < required + 1; i++)
+            for (var i = 0; i < required; i++)
             { _f.Context.Registry.AdvanceTime(1); Assert.IsTrue(Fire(robot)); }
-            Assert.IsTrue(Counter(robot).Pending);
-            Assert.AreEqual(required + 1, Counter(robot).AttackCount);
+            _f.Context.Registry.AdvanceTime(1);
+            Assert.IsFalse(Fire(robot));
+            Assert.AreEqual(required, Counter(robot).AttackCount);
             robot.Buffs.Remove(robot.Buffs.Items.Single(b => b.Model.Id == 998));
             _f.Context.Battle.TriggeredSkills.Process();
-            Assert.AreEqual(1, Counter(robot).AttackCount, "待发子技能恢复后保留额外发射的进度");
+            Assert.AreEqual(required, Counter(robot).AttackCount);
+            Assert.IsTrue(Fire(robot));
+            Assert.AreEqual(0, Counter(robot).AttackCount);
         }
 
         [TestCase(704)]
@@ -133,9 +136,11 @@ namespace GameLogic.Tests
             var robot = AddRobot(configId);
             robot.Buffs.Add(new BuffModel(998, "test", priority: -1000), robot.OwnerRef, 100,
                 behavior: new ChildCastHook(robot, true));
-            var required = configId == 704 ? 3 : 5;
+            const int required = 5;
             for (var i = 0; i < required; i++)
             { _f.Context.Registry.AdvanceTime(1); Assert.IsTrue(Fire(robot)); }
+            _f.Context.Registry.AdvanceTime(1);
+            Assert.IsFalse(Fire(robot));
             Assert.AreEqual(2, robot.Level);
             Assert.AreEqual(0, Counter(robot).AttackCount);
             Assert.IsFalse(Counter(robot).Pending);
@@ -208,7 +213,7 @@ namespace GameLogic.Tests
             internal ChildCastHook(RobotEntity robot, bool upgrade) { _robot = robot; _upgrade = upgrade; }
             public override void OnCast(BuffContainer c, BuffObj b, SkillCastContext cast)
             {
-                if (cast.Request.Trigger != SkillTriggerSource.AttackCycle) return;
+                if (cast.Request.SkillId != _robot.AttackCycle.TriggerSkillId) return;
                 if (_upgrade) _robot.TryUpgrade(); else cast.Cancel();
             }
         }

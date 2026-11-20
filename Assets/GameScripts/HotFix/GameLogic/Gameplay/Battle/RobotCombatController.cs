@@ -256,9 +256,11 @@ namespace GameLogic
                 reserve.View.InstanceId != robot.InstanceId || !reserve.View.isActiveAndEnabled ||
                 !_context.Registry.TryGet(robot.InstanceId, out var current) || !ReferenceEquals(current, robot)) return false;
             var target = _targets.GetTarget(robot.Side);
-            if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out var aimPoint)) return false;
-            return _context.Battle.Skills.TryCast(new SkillCastRequest(robot.OwnerRef, robot.SkillId,
-                SkillTriggerSource.Contact, SkillTarget.Entity(robot.Side, target.Value, aimPoint)),
+            var volley = robot.AttackCycle.VolleyReady;
+            if (!target.HasValue || !_enemies.TryGetTargetPosition(robot.Side, target.Value, out var aimPoint, ground: volley)) return false;
+            var request = new SkillCastRequest(robot.OwnerRef, volley ? robot.AttackCycle.TriggerSkillId : robot.SkillId,
+                SkillTriggerSource.Contact, volley ? SkillTarget.AtPosition(robot.Side, aimPoint) : SkillTarget.Entity(robot.Side, target.Value, aimPoint));
+            return _context.Battle.Skills.TryCast(request,
                 () => robot.TryConsumeAttackTrigger(robot.Configuration.MinTriggerInterval)).Accepted;
         }
 

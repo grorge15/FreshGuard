@@ -34,11 +34,20 @@ namespace GameLogic
             TriggerSkillId = triggerSkillId;
         }
 
+        internal bool VolleyReady => _robot is JuicerRobotEntity && TriggerSkillId > 0 &&
+            AttackCount >= RequiredCount(_battle, _robot.SkillId, _robot.Level);
+
         internal void PrepareCast(SkillCastContext context)
         {
             if (TriggerSkillId == 0 || !IsCurrent() || !context.Request.Owner.Equals(_robot.OwnerRef)) return;
             if (context.Request.SkillId == TriggerSkillId)
             {
+                if (_robot is JuicerRobotEntity)
+                {
+                    if (context.Request.Trigger != SkillTriggerSource.Contact || !VolleyReady) context.Cancel();
+                    else context.DeferUntilAccepted(() => AttackCount = 0);
+                    return;
+                }
                 if (context.Request.Trigger != SkillTriggerSource.AttackCycle ||
                     context.Request.SourceAttackCycleVersion != Version ||
                     !_battle.TriggeredSkills.TryGet(_robot.OwnerRef, out var pending) || !Matches(pending))
@@ -85,6 +94,11 @@ namespace GameLogic
             if (_robot is InductionRobotEntity)
             {
                 AttackCount = AttackCount >= required - 1 ? 0 : AttackCount + 1;
+                return;
+            }
+            if (_robot is JuicerRobotEntity)
+            {
+                AttackCount = Math.Min(required, AttackCount + 1);
                 return;
             }
             AttackCount = checked(AttackCount + 1);

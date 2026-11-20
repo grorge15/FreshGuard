@@ -174,14 +174,14 @@ namespace GameLogic.Tests
         public void ExportedRobotConfigurationOwnsChildAndKeepsLevelThresholds()
         {
             var tables = Tables();
-            foreach (var pair in new[] { (704, 1603, 1604, 3), (701, 1605, 1600, 5), (702, 1606, 1601, 5), (703, 1607, 1602, 5) })
+            foreach (var pair in new[] { (704, 1603, 1604, 5), (701, 1605, 1600, 5), (702, 1606, 1601, 5), (703, 1607, 1602, 5) })
             {
                 var robot = tables.TbRobot.Get(pair.Item1);
                 Assert.AreEqual(pair.Item2, robot.SkillId);
                 Assert.AreEqual(pair.Item3, robot.AttackCycleSkillId);
                 Assert.IsEmpty(tables.TbSkill.Get(pair.Item2).PassiveBuffIds);
                 for (var level = 1; level <= 5; level++)
-                    Assert.AreEqual(pair.Item4, tables.TbSkillLevel.Get(pair.Item2 * 100 + level).AttackCycleCount);
+                    Assert.AreEqual(pair.Item1 == 702 ? new[] { 15, 12, 10, 8, 7 }[level - 1] : pair.Item4, tables.TbSkillLevel.Get(pair.Item2 * 100 + level).AttackCycleCount);
             }
             Assert.IsNull(typeof(IBuffBehavior).GetMethod("OnAttackLaunched"));
         }

@@ -66,12 +66,13 @@ namespace GameLogic
     {
         public int InstanceId { get; }
         public Vector3 Position { get; }
+        public Vector3 GroundPosition { get; }
         public float HitRadius { get; }
-        public BulletTarget(int instanceId, Vector3 position, float hitRadius)
+        public BulletTarget(int instanceId, Vector3 position, float hitRadius, Vector3? groundPosition = null)
         {
             EntityValidation.RequirePositive(instanceId, nameof(instanceId));
             EntityValidation.RequireFiniteNonNegative(hitRadius, nameof(hitRadius));
-            InstanceId = instanceId; Position = position; HitRadius = hitRadius;
+            InstanceId = instanceId; Position = position; GroundPosition = groundPosition ?? position; HitRadius = hitRadius;
         }
     }
 

@@ -27,16 +27,16 @@ namespace GameLogic.Tests
         public void Clear() { _combat?.Dispose(); _combat = null; _f?.Dispose(); _f = null; _views.Clear(); }
 
         [Test]
-        public void RealControllerEmitsTwoCyclesWithThirdNormalPlusFiveFixedDrops()
+        public void RealControllerEmitsTwoCyclesWithFiveNormalsThenOneVolley()
         {
             Prepare(); var robot = AddRobot();
             var ordinary = 0; var drops = 0;
-            for (var i = 0; i < 6; i++)
+            for (var i = 0; i < 12; i++)
             {
                 var emitted = Shoot(robot);
                 ordinary += emitted.Count(s => s.Action.SkillId == 1603);
                 drops += emitted.Count(s => s.Action.SkillId == 1604);
-                Assert.AreEqual(i % 3 == 2 ? 6 : 1, emitted.Length);
+                Assert.AreEqual(i % 6 == 5 ? 5 : 1, emitted.Length);
                 foreach (var drop in emitted.Where(s => s.Action.SkillId == 1604))
                 {
                     Assert.IsEmpty(drop.Action.TargetInstanceIds);
@@ -44,7 +44,7 @@ namespace GameLogic.Tests
                     Assert.AreEqual(0, drop.Elapsed, "子技能同刻发出，尚未飞行");
                 }
             }
-            Assert.AreEqual(6, ordinary); Assert.AreEqual(10, drops);
+            Assert.AreEqual(10, ordinary); Assert.AreEqual(10, drops);
             Assert.AreEqual(0, Counter(robot).AttackCount);
         }
 
@@ -53,14 +53,17 @@ namespace GameLogic.Tests
         {
             Prepare(); _holdFirstChild = true; var robot = AddRobot();
             for (var i = 0; i < 5; i++) Assert.AreEqual(1, Shoot(robot).Length);
-            Assert.IsTrue(Counter(robot).Pending); Assert.AreEqual(5, Counter(robot).AttackCount);
-            Assert.AreEqual(1, _f.Context.Battle.TriggeredSkills.Count);
+            _f.Context.Registry.AdvanceTime(1);
+            Assert.IsFalse(_combat.TryAttackFromContact(_f.Context.BattleId, robot.Side, robot.InstanceId)); Assert.AreEqual(5, Counter(robot).AttackCount);
+            Assert.AreEqual(0, _f.Context.Battle.TriggeredSkills.Count);
             Assert.IsNotNull(_pending);
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AssetRaw/Actor/Prefabs/bullets/JuiceBullet.prefab");
             _pending.TrySetResult(UnityEngine.Object.Instantiate(prefab, _pendingParent));
             _combat.AdvanceAttacks(0);
+            Assert.IsFalse(States().Any(s => s.Action.SkillId == 1604));
+            Assert.AreEqual(5, Shoot(robot).Length);
             Assert.AreEqual(5, States().Count(s => s.Action.SkillId == 1604));
-            Assert.AreEqual(2, Counter(robot).AttackCount);
+            Assert.AreEqual(0, Counter(robot).AttackCount);
             _combat.AdvanceAttacks(0);
             Assert.AreEqual(5, States().Count(s => s.Action.SkillId == 1604));
         }
@@ -68,22 +71,40 @@ namespace GameLogic.Tests
         [Test]
         public void UpgradeChangesNextVolleyButOldDropsKeepDamageAndLandingPositions()
         {
-            Prepare(); var robot = AddRobot(); Shoot(robot); Shoot(robot);
+            Prepare(); var robot = AddRobot(); for (var i = 0; i < 5; i++) Shoot(robot);
             var old = Shoot(robot).Where(s => s.Action.SkillId == 1604).ToArray();
             var positions = old.Select(s => s.Action.AimPoint).ToArray();
             Assert.IsTrue(robot.TryUpgrade());
             _f.PlayerView.transform.position += Vector3.down * 0.4f;
-            Shoot(robot); Shoot(robot);
+            for (var i = 0; i < 5; i++) Shoot(robot);
             var next = Shoot(robot).Where(s => s.Action.SkillId == 1604).ToArray();
             Assert.IsTrue(old.All(s => s.Action.BaseDamage == 12));
             Assert.IsTrue(next.All(s => s.Action.BaseDamage == 18));
             CollectionAssert.AreEqual(positions, old.Select(s => s.Action.AimPoint));
         }
 
+        [TestCase(0)] [TestCase(1)] [TestCase(2)] [TestCase(3)] [TestCase(4)]
+        public void VolleyDamagesEnemyStandingAtEachGroundLanding(int index)
+        {
+            Prepare(); var robot = AddRobot(); var view = _f.PlayerView;
+            for (var i = 0; i < 5; i++) Shoot(robot).Single().Cancel();
+            view.transform.position = new Vector3(-3f, 0.5f, 0f);
+            var drops = Shoot(robot);
+            Assert.AreEqual(5, drops.Length);
+            var ordered = drops.OrderBy(d => d.Action.Sequence).ToArray();
+            Assert.That(Vector2.Distance(ordered[0].Action.AimPoint, view.transform.position), Is.LessThan(.001f));
+            view.transform.position = ordered[index].Action.AimPoint;
+            _f.Context.Registry.TryGet(view.InstanceId, out var entity);
+            var enemy = (EnemyEntity)entity;
+            var before = enemy.CurrentHp;
+            _combat.AdvanceExistingBullets(.7f);
+            Assert.AreEqual(before - 12, enemy.CurrentHp);
+        }
+
         [Test]
         public void EmptyLandingsStillPlayFiveEffectsPauseAndRecycleByBattleTime()
         {
-            Prepare(); var robot = AddRobot(); Shoot(robot); Shoot(robot); Shoot(robot);
+            Prepare(); var robot = AddRobot(); for (var i = 0; i < 6; i++) Shoot(robot);
             foreach (var view in _f.Views.ToArray())
             {
                 _f.Context.Registry.ApplyDamage(view.InstanceId, int.MaxValue, out var removal);
@@ -107,7 +128,7 @@ namespace GameLogic.Tests
         public void TwoRobotsLandingTogetherKeepEffectsWhileAsyncPoolRefills()
         {
             Prepare(); var first = AddRobot(); var second = AddRobot();
-            for (var i = 0; i < 3; i++) { Shoot(first); Shoot(second); }
+            for (var i = 0; i < 6; i++) { Shoot(first); Shoot(second); }
             _holdEffect = true;
             _combat.AdvanceExistingBullets(0.7f);
             Assert.AreEqual(5, ActiveEffects());

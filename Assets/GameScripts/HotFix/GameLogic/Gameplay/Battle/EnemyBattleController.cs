@@ -419,7 +419,7 @@ namespace GameLogic
             foreach (var pair in _active)
                 if (pair.Value.Group.Side == side && pair.Value.View != null &&
                     _context.Registry.TryGet(pair.Key, out var entity) && entity is EnemyEntity enemy && enemy.IsAlive)
-                    targets.Add(new BulletTarget(pair.Key, pair.Value.View.AttackTargetPosition, enemy.Configuration?.HitRadius ?? 0.3f));
+                    targets.Add(new BulletTarget(pair.Key, pair.Value.View.AttackTargetPosition, enemy.Configuration?.HitRadius ?? 0.3f, pair.Value.View.transform.position));
             return targets;
         }
 
@@ -626,14 +626,14 @@ namespace GameLogic
             return OwnsBattle ? BattleRouteSampler.SampleDrops(_centerRoutes[(int)side], target, count, spacing) : Array.Empty<Vector3>();
         }
 
-        public bool TryGetTargetPosition(BattleSide side, int instanceId, out Vector3 position)
+        public bool TryGetTargetPosition(BattleSide side, int instanceId, out Vector3 position, bool ground = false)
         {
             position = default;
             if (!OwnsBattle || !_active.TryGetValue(instanceId, out var entry) || entry.Group.Side != side ||
                 entry.View == null || !entry.View.isActiveAndEnabled || entry.View.InstanceId != instanceId ||
                 !_context.Registry.TryGet(instanceId, out var entity) || !(entity is EnemyEntity enemy) ||
                 !enemy.IsAlive || enemy.Side != side) return false;
-            position = entry.View.AttackTargetPosition;
+            position = ground ? entry.View.transform.position : entry.View.AttackTargetPosition;
             return true;
         }
 

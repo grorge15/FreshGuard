@@ -138,7 +138,7 @@ namespace GameLogic
             var candidates = context.World.GetTargets(action.SourceSide);
             if (candidates != null) foreach (var candidate in candidates)
             {
-                if (!context.World.TryGetPosition(action.SourceSide, candidate.InstanceId, out var position)) continue;
+                var position = candidate.GroundPosition;
                 var dx = (double)position.x - center.x; var dy = (double)position.y - center.y;
                 if (dx * dx + dy * dy <= radiusSquared) ids.Add(candidate.InstanceId);
             }
