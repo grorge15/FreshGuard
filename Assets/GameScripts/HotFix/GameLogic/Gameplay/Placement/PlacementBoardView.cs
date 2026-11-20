@@ -125,7 +125,7 @@ namespace GameLogic
                         slot.sprite = sprite;
                         slot.transform.localPosition = GetLocalPosition(new BoardCoordinate(column, row)) + Vector3.forward;
                         slot.transform.localRotation = Quaternion.identity;
-                        slot.transform.localScale = new Vector3(_cellSize * 0.94f / slotSize.x, _cellSize * 0.94f / slotSize.y, 1f);
+                        slot.transform.localScale = new Vector3(_cellSize / slotSize.x, _cellSize / slotSize.y, 1f);
                         slot.sortingLayerID = _slotPrefab.sortingLayerID;
                         slot.sortingOrder = _slotPrefab.sortingOrder;
                         // Keep the prefab/scene tint; state effects restore this original color.
@@ -299,7 +299,7 @@ namespace GameLogic
             {
                 slot.sprite = sprite;
                 var size = sprite.bounds.size;
-                slot.transform.localScale = new Vector3(_cellSize * 0.94f / size.x, _cellSize * 0.94f / size.y, 1f);
+                slot.transform.localScale = new Vector3(_cellSize / size.x, _cellSize / size.y, 1f);
             }
             slot.color = _model.IsHighlighted(coordinate) ? HighlightedColor :
                 _blockedSlotSprite == null && _model.IsTerrainMap && _model.GetBaseTerrain(coordinate) == BaseTerrainType.Track
@@ -344,7 +344,7 @@ namespace GameLogic
                     slot.sortingLayerID = _slotPrefab.sortingLayerID;
                     slot.sortingOrder = _slotPrefab.sortingOrder;
                 }
-                slot.transform.localScale = new Vector3(_cellSize * 0.94f / size.x, _cellSize * 0.94f / size.y, 1f);
+                slot.transform.localScale = new Vector3(_cellSize / size.x, _cellSize / size.y, 1f);
             }
             RefreshBoardBackground();
             if (_initialized) RefreshAllCells();
