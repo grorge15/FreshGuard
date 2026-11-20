@@ -13,6 +13,7 @@ namespace GameLogic
         private readonly Image _portrait;
         private readonly Image _frame;
         private Image _unaffordableOverlay;
+        private Image _contactShadow;
         private CancellationTokenSource _loading;
         private string _location;
         private string _portraitLocation;
@@ -31,6 +32,11 @@ namespace GameLogic
 
         public void Render(string location, string portraitLocation, int level, bool visible, bool unaffordable = false)
         {
+            if (!string.IsNullOrEmpty(location))
+            {
+                if (portraitLocation == "RobotInductionCookerPortrait") location = "RobotInductionIcon";
+                else if (portraitLocation == "RobotFrostPortrait") location = "RobotFrostShopIcon";
+            }
             _visible = visible && !string.IsNullOrEmpty(location);
             _unaffordable = unaffordable;
             var visualLevel = Mathf.Clamp(level, 1, RobotLevelStyle.MaxLevel);
@@ -46,10 +52,19 @@ namespace GameLogic
                 _background.sprite = null;
                 _portrait.sprite = null;
                 _frame.sprite = null;
+                if (_contactShadow != null) _contactShadow.sprite = null;
                 if (!string.IsNullOrEmpty(location))
                 {
                     _loading = CancellationTokenSource.CreateLinkedTokenSource(
                         _background.gameObject.GetCancellationTokenOnDestroy());
+                    if (location == "RobotInductionIcon" || location == "RobotFrostShopIcon" ||
+                        location == "RobotScatterIcon" || location == "RobotRollingPinIcon" ||
+                        location == "RobotFoodContainerIcon" || location == "RobotJuicerIcon")
+                    {
+                        _contactShadow = EnsureContactShadow(_background);
+                        var shadow = location.Substring(0, location.Length - "Icon".Length) + "ContactShadow";
+                        _contactShadow.SetSprite(shadow, callback: _ => RefreshVisibility(), cancellationToken: _loading.Token);
+                    }
                     _background.SetSprite(location, callback: _ => RefreshVisibility(), cancellationToken: _loading.Token);
                     if (!string.IsNullOrEmpty(portraitLocation))
                         _portrait.SetSprite(portraitLocation, callback: _ => RefreshVisibility(), cancellationToken: _loading.Token);
@@ -60,9 +75,27 @@ namespace GameLogic
             RefreshVisibility();
         }
 
+        internal static Image EnsureContactShadow(Image background)
+        {
+            var existing = background.transform.Find("ContactShadow");
+            if (existing != null) return existing.GetComponent<Image>();
+            var image = new GameObject("ContactShadow", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+            image.gameObject.layer = background.gameObject.layer;
+            var rect = image.rectTransform;
+            rect.SetParent(background.transform, false);
+            rect.SetAsFirstSibling();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            image.raycastTarget = false;
+            image.preserveAspect = background.preserveAspect;
+            return image;
+        }
+
         private void RefreshVisibility()
         {
             if (_background != null) _background.enabled = _visible && _background.sprite != null;
+            if (_contactShadow != null) _contactShadow.enabled = _visible && _background.enabled && _contactShadow.sprite != null;
             if (_portrait != null) _portrait.enabled = _visible && _background != null &&
                 _background.sprite != null && _portrait.sprite != null;
             if (_frame != null) _frame.enabled = _visible && _background != null &&

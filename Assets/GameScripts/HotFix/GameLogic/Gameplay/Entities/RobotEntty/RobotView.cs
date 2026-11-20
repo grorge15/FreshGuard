@@ -15,6 +15,7 @@ namespace GameLogic
         [SerializeField] private SpriteRenderer _iconRenderer;
         [SerializeField] private SpriteRenderer _portraitRenderer;
         [SerializeField] private SpriteRenderer _levelFrameRenderer;
+        [SerializeField] private SpriteRenderer _contactShadow;
         [Header("碰撞反馈")]
         [SerializeField, Range(1f, 1.5f)] private float _collisionScale = 1.08f;
         [SerializeField, Min(0.05f)] private float _collisionDuration = 0.22f;
@@ -133,6 +134,7 @@ namespace GameLogic
                 _levelFrameRenderer.enabled = visible && useIcon && _levelFrameRenderer.sprite != null;
                 _levelFrameRenderer.color = RobotLevelStyle.FrameColorForLevel(visualLevel);
             }
+            if (_contactShadow != null) _contactShadow.enabled = visible && useIcon;
             foreach (var edge in _outline) edge.enabled = visible && !useIcon;
             var collider = GetPhysicalCollider();
             if (collider != null)
@@ -282,7 +284,7 @@ namespace GameLogic
         private CollisionVisual[] CaptureMergeVisuals()
         {
             var result = new List<CollisionVisual>();
-            foreach (var node in new[] { _iconRenderer != null ? _iconRenderer.transform : null,
+            foreach (var node in new[] { _contactShadow != null ? _contactShadow.transform : null, _iconRenderer != null ? _iconRenderer.transform : null,
                 _portraitRenderer != null ? _portraitRenderer.transform : null,
                 _levelFrameRenderer != null ? _levelFrameRenderer.transform : null })
             {
@@ -301,7 +303,7 @@ namespace GameLogic
             _mergeSourceGhost.transform.position = sourcePosition;
             _mergeSourceGhost.transform.rotation = transform.rotation;
             _mergeSourceGhost.transform.localScale = transform.localScale * 0.9f;
-            foreach (var source in new[] { _iconRenderer, _levelFrameRenderer, _portraitRenderer })
+            foreach (var source in new[] { _iconRenderer, _contactShadow, _levelFrameRenderer, _portraitRenderer })
             {
                 if (source == null || source.sprite == null) continue;
                 var child = new GameObject(source.gameObject.name).AddComponent<SpriteRenderer>();
@@ -395,7 +397,7 @@ namespace GameLogic
                 if (_iconRenderer == null || _iconRenderer.sprite == null) return;
                 var pivot = _iconRenderer.transform.TransformPoint(_iconRenderer.sprite.bounds.center);
                 var visuals = new List<CollisionVisual>();
-                foreach (var node in new[] { _iconRenderer.transform, _portraitRenderer != null ? _portraitRenderer.transform : null,
+                foreach (var node in new[] { _contactShadow != null ? _contactShadow.transform : null, _iconRenderer.transform, _portraitRenderer != null ? _portraitRenderer.transform : null,
                     _levelFrameRenderer != null ? _levelFrameRenderer.transform : null })
                 {
                     if (node == null) continue;

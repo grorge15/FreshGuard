@@ -108,6 +108,9 @@ namespace GameLogic
         private static void CopyRobotVisual(Image source, Image target)
         {
             CopyImage(source, target);
+            var shadow = source != null ? source.transform.Find("ContactShadow") : null;
+            if (shadow != null || target.transform.Find("ContactShadow") != null)
+                CopyImage(shadow != null ? shadow.GetComponent<Image>() : null, RobotIconPresentation.EnsureContactShadow(target));
             foreach (var child in new[] { "m_img_LevelFrame", "m_img_RobotPortrait" })
                 CopyImage(source != null ? source.transform.Find(child).GetComponent<Image>() : null,
                     target.transform.Find(child).GetComponent<Image>());
