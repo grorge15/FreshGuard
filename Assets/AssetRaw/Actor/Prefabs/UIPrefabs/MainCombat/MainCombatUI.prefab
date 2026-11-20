@@ -699,6 +699,10 @@ PrefabInstance:
   m_Modification:
     m_TransformParent: {fileID: 8112320146391017686}
     m_Modifications:
+    - target: {fileID: 750400021, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0.38000107
+      objectReference: {fileID: 0}
     - target: {fileID: 1154377765591507463, guid: 754184ddeca3eae4791195efb2af594a, type: 3}
       propertyPath: m_Name
       value: BattleShopUI

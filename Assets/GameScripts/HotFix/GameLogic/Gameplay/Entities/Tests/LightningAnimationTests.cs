@@ -58,12 +58,12 @@ namespace GameLogic.Tests
         }
 
         [Test]
-        public void FlyingBoltUsesSequenceAndNoLegacyMaterialOrLine()
+        public void InductionBoltHasNoVisualBeforeImpact()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(Folder + "InductionBolt.prefab");
             Assert.IsNotNull(prefab.GetComponent<RobotBulletView>());
-            Assert.IsEmpty(prefab.GetComponentsInChildren<LineRenderer>(true));
-            Assert.IsTrue(prefab.GetComponent("BattleSpriteAnimation") != null);
+            Assert.IsEmpty(prefab.GetComponentsInChildren<Renderer>(true));
+            Assert.IsEmpty(prefab.GetComponentsInChildren<BattleSpriteAnimation>(true));
             Assert.IsTrue(AssetDatabase.LoadAssetAtPath<Material>(Folder + "LightningChain.mat") == null);
         }
     }

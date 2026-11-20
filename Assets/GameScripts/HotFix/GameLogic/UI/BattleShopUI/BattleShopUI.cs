@@ -59,7 +59,7 @@ namespace GameLogic
             Drag = gameObject.GetComponent<RobotDragController>();
             m_item_Template.SetActive(false);
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
-            _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: false);
+            _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: true);
             InitializeSlotMachine();
             GameSoundService.BindButtons(gameObject);
         }

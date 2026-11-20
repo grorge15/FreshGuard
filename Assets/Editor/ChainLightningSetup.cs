@@ -27,7 +27,7 @@ namespace FreshGuard.Editor
             var spark = BuildClip("LightningSpark", "闪电火花", 10, new Vector2(0.5f, 0.5f));
             // 帧画布为512x160，左侧电光起点在x=56。各帧保持同一支点，增长时不漂移。
             var chain = BuildClip("LightningArc", "闪电链", 8, new Vector2(56f / 512f, 0.5f));
-            BuildBolt(chain);
+            BuildBolt();
             BuildEffect(chain, spark);
             AssetDatabase.DeleteAsset(Folder + "/LightningChain.mat");
             AssetDatabase.SaveAssets();
@@ -82,16 +82,14 @@ namespace FreshGuard.Editor
             return clip;
         }
 
-        private static void BuildBolt(AnimationClip clip)
+        private static void BuildBolt()
         {
-            // 从空对象重建，旧ElectricArc、Sprite和材质引用均不会残留。
+            // 飞行阶段仅推进命中判定；电链在命中时播放。
             var root = new GameObject("InductionBolt");
             try
             {
                 root.transform.localScale = Vector3.one * 0.08f;
-                var sequence = AddSequence(root, clip, true, 21);
                 root.AddComponent<RobotBulletView>();
-                sequence.Sample(0f);
                 Save(root, BoltPath);
             }
             finally { Object.DestroyImmediate(root); }
