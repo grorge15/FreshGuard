@@ -85,6 +85,14 @@ namespace GameLogic
         public EnemyBattleController Enemies => _enemies;
         public RobotCombatController Combat => _combat;
 
+        internal float GetBoardWidthRatioToPlayer(BattleSide side)
+        {
+            if (side == BattleSide.Player || _playerBoard == null || _opponentBoard == null) return 1f;
+            var playerWidth = _playerBoard.transform.TransformVector(Vector3.right * _playerBoard.Size.x).magnitude;
+            var opponentWidth = _opponentBoard.transform.TransformVector(Vector3.right * _opponentBoard.Size.x).magnitude;
+            return playerWidth > 0f ? opponentWidth / playerWidth : 1f;
+        }
+
         internal bool TryGetBoardCenter(BattleSide side, out Vector3 center)
         {
             var board = side == BattleSide.Player ? _playerBoard : side == BattleSide.Opponent ? _opponentBoard : null;

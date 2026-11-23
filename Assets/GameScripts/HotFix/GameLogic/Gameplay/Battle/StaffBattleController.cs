@@ -77,7 +77,7 @@ namespace GameLogic
                 instance.transform.SetParent(_activeRoot, false);
                 try
                 {
-                    view.Initialize(state, route);
+                    view.Initialize(state, route, _host.GetBoardWidthRatioToPlayer(state.Side));
                     BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), cast.Owner.Side);
                     _active.Add(new Entry { State = state, View = view, Route = route });
                     instance.SetActive(true);

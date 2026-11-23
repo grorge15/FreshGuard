@@ -12,7 +12,7 @@ namespace GameLogic
         private Quaternion _authoredRotation;
         private bool _initialized;
         public StaffState State { get; private set; }
-        public void Initialize(StaffState state, BattleRouteGeometry route)
+        public void Initialize(StaffState state, BattleRouteGeometry route, float boardWidthRatio)
         {
             if (_visual == null || _animation == null) throw new InvalidOperationException("StaffView缺少Visual或StaffRoll动画。");
             if (!_initialized) { _baseScale = _visual.localScale; _authoredRotation = _visual.localRotation; _initialized = true; }
@@ -26,7 +26,7 @@ namespace GameLogic
             var size = _authoredRotation * Vector3.Scale(bounds.size, _baseScale);
             var authoredWidth = Mathf.Abs(size.x);
             if (authoredWidth <= 0.000001f) throw new InvalidOperationException("Staff外观宽度必须大于0。");
-            _displayScale = _baseScale * (state.Config.Width / authoredWidth);
+            _displayScale = _baseScale * (state.Config.Width * boardWidthRatio / authoredWidth);
             Render(route);
         }
         private Vector3 _displayScale;

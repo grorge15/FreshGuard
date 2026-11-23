@@ -156,6 +156,29 @@ namespace GameLogic.Tests
             var before = enemy.RouteProgress; Summon(robot); _f.Advance(1.1f);
             Assert.Less(enemy.RouteProgress, before);
         }
+        [TestCase(BattleSide.Player, 1.2f)]
+        [TestCase(BattleSide.Opponent, 0.9f)]
+        public void StaffVisualWidthTracksBoardWidth(BattleSide side, float expectedWidth)
+        {
+            _f = new EnemyBattleControllerTests.Fixture();
+            var host = new SerializedObject(_f.Host);
+            foreach (var isPlayer in new[] { true, false })
+            {
+                var board = new GameObject("Board").AddComponent<PlacementBoardView>();
+                board.transform.SetParent(_f.Root.transform, false);
+                board.transform.localScale = Vector3.one * (isPlayer ? 1.2f : 0.9f);
+                host.FindProperty(isPlayer ? "_playerBoard" : "_opponentBoard").objectReferenceValue = board;
+            }
+            host.ApplyModifiedPropertiesWithoutUndo();
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/AssetRaw/Actor/Prefabs/bullets/StaffBullet.prefab");
+            var staff = UnityEngine.Object.Instantiate(prefab, _f.Root.transform).GetComponent<StaffView>();
+            var route = new BattleRouteGeometry(new[] { Vector3.zero, Vector3.up });
+            var config = new StaffConfig("StaffBullet", 0, 1, 1, 1.2f, .2f, 0, 0);
+            staff.Initialize(new StaffState(1, 1, default, config, 1), route, _f.Host.GetBoardWidthRatioToPlayer(side));
+            Assert.That(staff.GetComponentInChildren<SpriteRenderer>().bounds.size.x,
+                Is.EqualTo(expectedWidth).Within(.001f));
+        }
         [Test]
         public void ReusedViewResetsAppearanceAndKeepsConfiguredWidth()
         {
