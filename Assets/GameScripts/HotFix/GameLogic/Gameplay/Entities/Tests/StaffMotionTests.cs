@@ -62,6 +62,17 @@ namespace GameLogic.Tests
             Assert.That(s.Constrain(2, 4, 0, 0, .3f), Is.EqualTo(2.6f).Within(.0001f));
         }
         [Test]
+        public void GrowingOpponentStaffOnlyBlocksInsideItsCurrentWidth()
+        {
+            var state = new StaffState(1, 1, SkillOwnerRef.Battlefield(1, BattleSide.Opponent),
+                Config(.2f, .1f).ForBoard(.75f), 3);
+            Assert.AreEqual(4, state.Constrain(2, 4, 0, 0, .2f, 0));
+            state.Advance(.05f);
+            Assert.AreEqual(4, state.Constrain(2, 4, .4f, .4f, .2f, 0));
+            state.Advance(.25f);
+            Assert.That(state.Constrain(2, 4, .4f, .4f, .2f, 0), Is.EqualTo(2.925f).Within(.001f));
+        }
+        [Test]
         public void RouteMappingPreservesCorrespondingSegmentAtCorner()
         {
             var center = new BattleRouteGeometry(new[] { Vector3.zero, Vector3.right, new Vector3(1, 2) });

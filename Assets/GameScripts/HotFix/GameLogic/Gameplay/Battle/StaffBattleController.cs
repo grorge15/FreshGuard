@@ -58,8 +58,9 @@ namespace GameLogic
         public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute, out Action release)
         {
             execute = null; release = null;
-            if (!OwnsBattle || !_host.IsCombatRunning || cast.Staff == null || !_context.Battle.TryResolveOwner(cast.Owner, out var owner) || !owner.CanCast ||
-                !_enemies.TryPrepareStaff(cast.Owner.Side, cast.Staff, out var route, out var progress)) return false;
+            if (!OwnsBattle || !_host.IsCombatRunning || cast.Staff == null || !_context.Battle.TryResolveOwner(cast.Owner, out var owner) || !owner.CanCast) return false;
+            var config = cast.Staff.ForBoard(_host.GetBoardWidthRatioToPlayer(cast.Owner.Side));
+            if (!_enemies.TryPrepareStaff(cast.Owner.Side, config, out var route, out var progress)) return false;
             var prefab = cast.Staff.Prefab;
             if (!_ready.TryGetValue(prefab, out var pool)) return false;
             while (pool.Count > 0 && pool.Peek() == null) pool.Dequeue();
@@ -72,12 +73,12 @@ namespace GameLogic
                 if (consumed) return;
                 consumed = true;
                 if (!OwnsBattle) { Release(instance); return; }
-                var state = new StaffState(_context.BattleId, ++_nextId, cast.Owner, cast.Staff, progress);
+                var state = new StaffState(_context.BattleId, ++_nextId, cast.Owner, config, progress);
                 var view = instance.GetComponent<StaffView>();
                 instance.transform.SetParent(_activeRoot, false);
                 try
                 {
-                    view.Initialize(state, route, _host.GetBoardWidthRatioToPlayer(state.Side));
+                    view.Initialize(state, route);
                     BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), cast.Owner.Side);
                     _active.Add(new Entry { State = state, View = view, Route = route });
                     instance.SetActive(true);
@@ -115,7 +116,7 @@ namespace GameLogic
         }
         internal void BeginStep(float deltaTime)
         { foreach (var entry in _active) entry.State.Advance(deltaTime); }
-        internal float Constrain(BattleSide side, BattleRouteGeometry individual, float start, float candidate, float radius)
+        internal float Constrain(BattleSide side, BattleRouteGeometry individual, float start, float candidate, float radius, float forwardReach)
         {
             var result = candidate;
             foreach (var entry in _active)
@@ -123,7 +124,7 @@ namespace GameLogic
                 if (entry.State.Side != side) continue;
                 var route = entry.Route;
                 var from = individual.ConvertTo(route, start); var to = individual.ConvertTo(route, candidate);
-                var constrained = entry.State.Constrain(from, to, route.LateralOffset(individual, from), route.LateralOffset(individual, to), radius);
+                var constrained = entry.State.Constrain(from, to, route.LateralOffset(individual, from), route.LateralOffset(individual, to), radius, forwardReach);
                 result = Mathf.Min(result, route.ConvertTo(individual, constrained));
             }
             return result;

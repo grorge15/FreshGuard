@@ -14,6 +14,8 @@ namespace GameLogic
         public float Thickness { get; }
         public float GrowTime { get; }
         public float SettleTime { get; }
+        internal StaffConfig ForBoard(float ratio) => ratio == 1f ? this : new StaffConfig(Prefab,
+            SpawnGap * ratio, RollSpeed, RollDistance, Width * ratio, Thickness * ratio, GrowTime, SettleTime);
         public StaffConfig(string prefab, float gap, float speed, float distance, float width, float thickness,
             float growTime, float settleTime)
         {
@@ -131,9 +133,14 @@ namespace GameLogic
 
         /// <summary>对整段相对运动做区间相交，防止大步长越过障碍。输入输出均为中心线坐标。</summary>
         public float Constrain(float start, float candidate, float lateralStart, float lateralEnd, float radius)
+            => Constrain(start, candidate, lateralStart, lateralEnd, radius, radius);
+
+        internal float Constrain(float start, float candidate, float lateralStart, float lateralEnd, float radius, float forwardReach)
         {
-            var clearance = radius + Config.Thickness * 0.5f;
-            var halfWidth = Config.Width * 0.5f + radius;
+            var size = Side == BattleSide.Opponent ? AppearScale : 1f;
+            if (size <= 0f) return candidate;
+            var clearance = forwardReach + Config.Thickness * size * 0.5f;
+            var halfWidth = Config.Width * size * 0.5f + radius;
             var enter = 0f; var exit = 1f;
             if (!Slab(lateralStart, lateralEnd, -halfWidth, halfWidth, ref enter, ref exit)) return candidate;
             var widthExit = exit;

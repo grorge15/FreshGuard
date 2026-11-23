@@ -83,6 +83,7 @@ namespace GameLogic
             internal float[] CumulativeLengths;
             internal int NextPoint = 1;
             internal BattleRouteGeometry Geometry;
+            internal Bounds? StaffBodyAtFeet;
         }
 
         private sealed class DeathEntry
