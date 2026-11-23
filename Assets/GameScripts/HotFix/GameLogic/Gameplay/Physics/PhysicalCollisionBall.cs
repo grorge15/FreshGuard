@@ -636,8 +636,9 @@ namespace GameLogic
             if (robot == null) ResetComboCount();
             if (!CanAdvancePlacementRecovery(version)) return;
             var glass = obstacle != null ? obstacle.GetComponent<GlassView>() : null;
+            bool hitBoundary = obstacle != null && obstacle.GetComponentInParent<PhysicalCollisionBoundary>() != null;
             if (glass != null) ProcessRecoveryGlass(glass);
-            else if (obstacle != null && obstacle.GetComponentInParent<PhysicalCollisionBoundary>() != null)
+            else if (hitBoundary)
             {
                 var point = obstacle.ClosestPoint(center);
                 _impactFeedback?.PlayWall(point, center - point);
@@ -655,8 +656,8 @@ namespace GameLogic
                 ProcessRecoveryGlass(adjacent);
                 if (!CanAdvancePlacementRecovery(version)) return;
             }
-            // 同一端点也接触玻璃时，玻璃中断连击，不能再把机器人计入旧连击。
-            if (glass != null || glasses.Count > 0) ResetComboCount();
+            // 攻击已独立通知；同一端点的玻璃或墙仍中断连击。
+            if (glass != null || glasses.Count > 0 || hitBoundary) ResetComboCount();
             else AddRobotCombo(robot, robotObstacle);
             if (!CanAdvancePlacementRecovery(version)) return;
             ApplyBounceAcceleration(robot != null);
@@ -668,8 +669,9 @@ namespace GameLogic
 
         private RobotView FindRecoveryEndpointRobot(Vector2 center, ref Collider2D obstacle)
         {
-            if (obstacle != null)
-                return TryGetRecoveryRobot(obstacle, out var direct) ? direct : null;
+            if (TryGetRecoveryRobot(obstacle, out var direct)) return direct;
+            // 直接命中玻璃等障碍时，也可能同时接触侧面的机器人，不能提前返回。
+            // 只修改独立的机器人碰撞体引用，原障碍仍由调用方结算玻璃或墙。
             float radius = WorldRadius + PlacementMotionEpsilon * 2f;
             gameObject.scene.GetPhysicsScene2D().OverlapCircle(center, radius,
                 new ContactFilter2D { useTriggers = false }, _placementOverlaps);
