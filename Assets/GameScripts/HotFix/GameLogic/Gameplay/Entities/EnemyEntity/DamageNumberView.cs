@@ -24,6 +24,8 @@ namespace GameLogic
         private Vector3 _endOffset;
         private float _elapsed;
         private bool _initialized;
+        private BattleScreenLayoutController _opponentLayout;
+        private Vector3 _baseScale;
 
         public float Lifetime => lifetime;
         public float Elapsed => _elapsed;
@@ -36,7 +38,7 @@ namespace GameLogic
             _label.alignment = TextAlignment.Center;
             _label.fontSize = 32;
             _label.fontStyle = FontStyle.Bold;
-            _label.characterSize = 0.08f;
+            _label.characterSize = 0.088f;
             _label.color = color;
             var renderer = GetComponent<MeshRenderer>();
             if (renderer != null)
@@ -73,6 +75,26 @@ namespace GameLogic
             _initialized = true;
             transform.position = _startPosition;
             Apply(0f);
+        }
+
+        internal void MatchPlayerCamera(BattleScreenLayoutController layout)
+        {
+            _baseScale = transform.localScale;
+            _opponentLayout = layout;
+            RefreshScreenScale();
+        }
+
+        private void LateUpdate() => RefreshScreenScale();
+
+        private void RefreshScreenScale()
+        {
+            if (_opponentLayout == null) return;
+            var layout = _opponentLayout.Layout;
+            // 两台相机每世界单位的像素数不同，敌方飘字按己方的像素密度显示。
+            var ratio = layout.PlayerPixelsPerUnit > 0f && layout.OpponentPixelsPerUnit > 0f
+                ? layout.PlayerPixelsPerUnit / layout.OpponentPixelsPerUnit : 1f;
+            var scale = _baseScale * ratio;
+            if (transform.localScale != scale) transform.localScale = scale;
         }
 
         private static float RandomRange(float min, float max) => Mathf.Lerp(min, max, (float)MotionRandom.NextDouble());
