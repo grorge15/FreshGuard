@@ -18,8 +18,8 @@ namespace GameLogic
             if (!TryCalculate(new Vector2(1080, 1920),
                 Rect.MinMaxRect(16, 12 + shopHeight + 16, 1064, 1904), combined, out center, out size)) return false;
             pixelsPerUnit = 1920f / (2f * size);
-            // 仅战场继承V1显示比例。信息栏使用Prefab原始尺寸，不继承旧世界空隙限制。
-            infoScale = 1f;
+            // 信息栏单独等比放大，窄屏仍按安全区宽度收缩。
+            infoScale = 1.025f;
             return true;
         }
 
@@ -36,7 +36,7 @@ namespace GameLogic
             var margin = 16f * canvasScale;
             var width = safe.width - 2f * margin;
             if (!Positive(width)) return false;
-            var infoScale = Mathf.Min(referenceInfoScale, width / (1040f * canvasScale));
+            var infoScale = Mathf.Min(referenceInfoScale, (safe.width - 12f * canvasScale) / (1040f * canvasScale));
             var infoHeight = 156f * infoScale * canvasScale;
             var bottom = Mathf.Max(safe.yMin, shop.yMax) + margin;
             var boardsHeight = safe.yMax - margin - bottom - infoHeight - 2f * margin;
