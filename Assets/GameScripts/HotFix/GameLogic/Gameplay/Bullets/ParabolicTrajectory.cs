@@ -7,7 +7,7 @@ namespace GameLogic
     {
         private const int SAMPLES = 64;
         private const float EPSILON = 0.000001f;
-        private readonly bool _juiceThrow;
+        private readonly bool _shallowThrow;
         private readonly Vector3 _origin;
         private readonly float _height;
         private readonly float _bendSign;
@@ -17,13 +17,13 @@ namespace GameLogic
         private readonly float _duration;
         internal float ApexProgress => _duration > EPSILON ? _riseLength / _duration : 0.5f;
 
-        internal ParabolicTrajectory(Vector3 origin, Vector3 target, float height, bool juiceThrow = false)
+        internal ParabolicTrajectory(Vector3 origin, Vector3 target, float height, bool shallowThrow = false)
         {
             _origin = origin;
-            _juiceThrow = juiceThrow;
+            _shallowThrow = shallowThrow;
             // Keep the launch height fixed during tracking; near targets get a shallow toss.
-            _height = juiceThrow ? Mathf.Min(height, 0.65f * Vector2.Distance(origin, target)) : height;
-            var landingSpeedRatio = juiceThrow ? 1.8f : 2.3f;
+            _height = shallowThrow ? Mathf.Min(height, 0.65f * Vector2.Distance(origin, target)) : height;
+            var landingSpeedRatio = shallowThrow ? 1.8f : 2.3f;
             _bendSign = target.x < origin.x ? -1f : 1f;
             CreateCurves(target, out var rise, out var fall);
             var previous = rise.Start;
@@ -76,13 +76,13 @@ namespace GameLogic
             var span = target.x - _origin.x;
             // 竖直目标保留小幅侧弧，避免最高点发生原地折返或出现零切线。
             if (Mathf.Abs(span) < _height * 0.25f) span = _bendSign * _height * 0.25f;
-            var apex = _juiceThrow ? 0.6f : 0.83f;
+            var apex = _shallowThrow ? 0.6f : 0.83f;
             var peak = Vector3.LerpUnclamped(_origin, target, apex);
             peak.x = _origin.x + span * apex;
             peak.y = Mathf.Max(_origin.y, target.y) + _height;
-            var riseIn = _juiceThrow ? 0.17f : 0.235294118f;
-            var riseOut = _juiceThrow ? 0.47f : 0.668235294f;
-            var fallIn = _juiceThrow ? 0.82f : 0.940294118f;
+            var riseIn = _shallowThrow ? 0.17f : 0.235294118f;
+            var riseOut = _shallowThrow ? 0.47f : 0.668235294f;
+            var fallIn = _shallowThrow ? 0.82f : 0.940294118f;
             var first = Vector3.LerpUnclamped(_origin, target, riseIn);
             first.x = _origin.x + span * riseIn;
             first.y = Mathf.Lerp(_origin.y, peak.y, 0.719814241f);

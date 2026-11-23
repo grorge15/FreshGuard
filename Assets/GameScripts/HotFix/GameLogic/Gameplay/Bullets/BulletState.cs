@@ -8,6 +8,7 @@ namespace GameLogic
     /// <summary>延迟状态只保存标识和发射快照，不保存池化实体引用。</summary>
     public sealed class BulletState
     {
+        internal const int BASIC_BULLET_ID = 3500;
         private const int JUICER_NORMAL_SKILL_ID = 1603;
         private readonly IBulletWorld _world;
         private readonly Action<BulletState, int> _onHit;
@@ -45,7 +46,7 @@ namespace GameLogic
                 BeamEnd = GetBeamEnd(((IProjectileWorld)world).GetBattleBounds(Action.SourceSide), Position, Direction);
             if (launcher.Model.FlightType == BulletFlightType.Parabolic)
                 _trajectory = new ParabolicTrajectory(launcher.Action.Origin, _targetPosition, launcher.Model.ArcHeight,
-                    launcher.Action.SkillId == JUICER_NORMAL_SKILL_ID);
+                    launcher.Model.Id == BASIC_BULLET_ID || launcher.Action.SkillId == JUICER_NORMAL_SKILL_ID);
         }
         public bool Advance(float deltaTime)
         {

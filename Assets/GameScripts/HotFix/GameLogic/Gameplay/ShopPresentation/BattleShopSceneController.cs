@@ -217,6 +217,7 @@ namespace GameLogic
                     !ReferenceEquals(window.Context, context) || !ReferenceEquals(window.Host, this))
                     throw new InvalidOperationException("主战斗窗口加载失败或归属已变化。");
                 CombatWindow = window;
+                GameSettings.EnterBattleInterface(context);
                 ShopWindow = window.Shop;
                 _battleInfoWindow = window.Info;
                 if (_screenLayout == null) _screenLayout = GetComponent<BattleScreenLayoutController>();
@@ -572,6 +573,7 @@ namespace GameLogic
                     try { _enemies?.StartBattle(); }
                     catch (Exception e) { Debug.LogException(e, this); return; }
                     GameSoundService.Play(GameSound.BattleStart);
+                    GameSettings.BeginBattleMusic(Context);
                     startedThisFrame = true;
                 }
                 var frameContext = Context;
@@ -703,6 +705,7 @@ namespace GameLogic
 
         private void Cleanup()
         {
+            GameSettings.EndBattleMusic(Context);
             if (_screenLayout != null) _screenLayout.Unbind();
             // 球和表现可在UI绑定前登记，初始化中途失败也必须解除这一局的归属。
             var renderRegistry = GetComponent<BattleSideRenderRegistry>();

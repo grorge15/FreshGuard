@@ -14,8 +14,8 @@ rng = np.random.default_rng(20261109)
 SOUNDS = [
  ('UiClick','通用界面','按钮点击','可操作按钮确认点击',.64,.045,True,'click','各界面共用；不可操作按钮不播放'),
  ('UiConfirm','通用界面','弹窗确认','点击弹窗确认按钮',.64,.045,True,'confirm','离开战斗、移除助力的确认操作'),
- ('UiOpen','通用界面','弹窗打开','神秘商店、移除确认框、BUFF选择打开',.65,.10,True,'open','轻巧上扬'),
- ('UiClose','通用界面','弹窗关闭','关闭神秘商店或移除确认框',.55,.10,True,'close','轻巧下落'),
+ ('UiOpen','通用界面','弹窗打开','神秘商店、移除确认框、BUFF选择打开',.64,.045,True,'open','普通点击声'),
+ ('UiClose','通用界面','弹窗关闭','关闭神秘商店或移除确认框',.50,.045,True,'close','普通点击声，稍轻'),
  ('Error','通用界面','操作失败','货币不足、达到上限、操作失败提示',.60,.35,True,'error','同类提示限频'),
  ('MatchFound','匹配','匹配成功','从匹配中切换到匹配成功',.85,.5,True,'match','每次匹配只播放一次'),
  ('Countdown','开战','准备倒计时','准备倒计时切换到新的正整数',.70,.15,True,'tick','随倒计时接近结束轻微升调'),
@@ -30,7 +30,7 @@ SOUNDS = [
  ('GlassBreak','玻璃','普通玻璃破碎','己方普通玻璃耐久归零',.60,.075,False,'glassbreak','用户调整素材：玻璃破碎.MP3；仅己方；保留编辑后的短促碎裂声'),
  ('GlassRainbow','玻璃','彩色玻璃破碎','己方彩色玻璃耐久归零',.69,.09,False,'rainbow','用户调整素材：玻璃破碎.MP3；仅己方；使用同一声音，不额外叠加和弦'),
  ('CoinCollect','局内奖励','能源币到账','奖励飞行图标到达商店余额图标',.58,.075,True,'coin','仅玩家奖励；批量到账限频'),
- ('Combo','连击','Combo档位','现有Combo数字提示出现',.60,.12,False,'combo','根据档位升调；暴走触发时避免重复强调'),
+ ('Combo','连击','Combo档位','现有Combo数字提示出现',.42,.12,False,'combo','根据档位升调；暴走触发时避免重复强调'),
  ('RageStart','暴走','进入暴走','玩家主球进入暴走状态',.86,.5,False,'rage','临时球共用这一次提示'),
  ('RageEnd','暴走','暴走结束','玩家暴走自然结束',.58,.5,False,'rageend','终局清理不播放结束声'),
  ('TowerHit','塔','塔受伤','己方塔实际扣血，与塔抖动同步',.73,.16,False,'tower','仅己方棋盘；不添加敌人攻击声音'),
@@ -41,10 +41,11 @@ SOUNDS = [
  ('BuffAcquired','神秘商店','获得助力','成功购买未持有的助力',.82,.15,True,'buff','购买成功后播放'),
  ('BuffStack','神秘商店','助力叠层','成功购买已持有助力并增加层数',.86,.15,True,'stack','比获得助力更明亮'),
  ('BuffRemove','神秘商店','移除助力','确认移除助力成功',.65,.15,True,'remove','取消操作只播放关闭声'),
- ('WaveAdvance','战斗流程','波次切换','已开战后波次增加',.52,.5,True,'wave','首波开战不重复提示'),
  ('BuffChoose','BUFF选择','选择强化','手动或超时完成BUFF三选一',.78,.15,True,'choose','已接界面；正常战斗尚未调用该界面'),
- ('InductionZap','机器人攻击','电磁炉放电','己方电磁炉发射',.50,.07,False,'zap','同次发射一次'),
- ('FrostArrow','机器人攻击','冰霜炮箭矢','己方冰霜炮发射',.56,.07,False,'arrow','同次发射一次'),
+ ('InductionZap','机器人攻击','电磁炉放电','己方电磁炉发射',.25,.07,False,'zap','同次发射一次'),
+ ('FrostArrow','机器人攻击','冰霜炮箭矢','己方冰霜炮发射',.28,.07,False,'arrow','同次发射一次'),
+ ('BasicShot','机器人攻击','普通子弹发射','己方普通弹发射',.16,.075,False,'basicshot','高频发射轻量播放'),
+ ('JuicerShot','机器人攻击','果汁弹发射','己方榨汁机普攻或齐射',.30,.085,False,'juicershot','齐射只播一次'),
  ('LaserFire','机器人攻击','激光发射','己方散射机器人发射光束',.50,.07,False,'laser','多束同时发射只播放一次'),
  ('RobotHit','机器人碰撞','撞击机器人','己方能源球首次有效接触机器人或在脱困端点反弹',.46,.09,False,'robothit','用户素材：刀打骷髅.MP3；仅己方；持续接触不重复播放'),
 ]
@@ -150,13 +151,37 @@ def make(recipe):
     raise ValueError(recipe)
 
 SELECTED = {
+    'BasicShot': 'RobotFire/BasicShot_1B.wav',
+    'JuicerShot': 'RobotFire/JuicerShot_2E_soft.wav',
+    'TowerDestroyed': 'Review24/16-O.wav',
+    'Error': 'Review24/03-B.wav',
+    'Countdown': 'Review24/05-B.wav',
+    'LeverDown': 'Review24/07-A.wav',
+    'ReelStop': 'Review24/09-A.wav',
+    'CoinCollect': 'Review24/12-B.wav',
+    'Combo': 'Review24/13-B.wav',
+    'RageStart': 'Review24/14-B.wav',
+    'Victory': 'Review24/17-A.wav',
+    'Defeat': 'Review24/18-B.wav',
+    'RewardClaim': 'Review24/19-A.wav',
+    'BuffAcquired': 'Review24/20-A.wav',
+    'BuffRemove': 'Review24/22-B.wav',
+    'BuffChoose': 'Review24/24-B.wav',
+    'BuffStack': 'Review24/20-A.wav',
+
     'UiClick': '03_点击按钮.wav',
+    'UiOpen': '03_点击按钮.wav',
+    'UiClose': '03_点击按钮.wav',
     'UiConfirm': '04_弹窗确认.wav',
     'RobotHit': '01_碰撞机器人.wav',
     'GlassHit': '02_碰撞玻璃.wav',
     'GlassBreak': 'GlassBreak.wav',
     'GlassRainbow': 'GlassBreak.wav',
-    **{s: s+'.wav' for s in ('ReelSpin','InductionZap','FrostArrow','LaserFire')},
+    'LaserFire': 'LaserFire.wav',
+    'ReelSpin': 'ReelSpin_v2.wav',
+    'InductionZap': 'InductionZap_RedEclipse_B.wav',
+    'FrostArrow': 'FrostArrow_wesnoth_spear_miss.wav',
+    'TowerHit': 'TowerHit_mixkit_2185.wav',
 }
 
 def main():
@@ -166,7 +191,7 @@ def main():
     for sound,module,label,trigger,volume,cooldown,ui,recipe,note in SOUNDS:
         if sound in SELECTED:
             # 保持后续程序音效的随机序列。
-            if recipe in ('click','spin'): make(recipe)
+            if recipe in ('click','spin','tower','tick','lever','stop','collapse'): make(recipe)
             elif recipe == 'glasshit': glass()
             elif recipe in ('glassbreak','rainbow'): glass(True)
             source = ROOT/'Tools/Audio/Sources/SelectedSfx'/SELECTED[sound]
@@ -181,7 +206,7 @@ def main():
                 changed.append(path.name)
             entries.append(dict(id=sound,module=module,label=label,trigger=trigger,location=name,
                 volume=volume,cooldown=cooldown,ui=ui,loop=sound=='ReelSpin',duration=duration,
-                source=('TinyWorlds / CC0' if sound in ('GlassBreak','GlassRainbow') else 'Mixkit：见 Sources_1123.md' if sound in ('ReelSpin','InductionZap','FrostArrow','LaserFire') else '用户提供：'+source.name),
+                source=('Kenney Interface Sounds：drop_001（2E 柔化），见 RobotFire/来源.md' if sound=='JuicerShot' else 'Mixkit：见 RobotFire/来源.md' if source.parent.name=='RobotFire' else '原创程序合成，保留试听版 16' if sound=='TowerDestroyed' else '试听定版 '+source.stem+'，见 Review24/来源.md' if source.parent.name=='Review24' else 'Red Eclipse：见 RedEclipse_Zapper/SOURCE.md' if sound=='InductionZap' else 'The Battle for Wesnoth：见 FrostArrow_2C.md' if sound=='FrostArrow' else 'Mixkit：见 Mixkit_stock.md' if '_mixkit_' in source.stem else '音效修订：见 Revision_v2.md' if source.stem.endswith('_v2') else 'TinyWorlds / CC0' if sound in ('GlassBreak','GlassRainbow') else 'Mixkit：见 Sources_1123.md' if sound in ('ReelSpin','InductionZap','FrostArrow','LaserFire') else '用户提供：'+source.name),
                 sourceFile=source.relative_to(ROOT).as_posix(),note=trigger))
             continue
         x=make(recipe)

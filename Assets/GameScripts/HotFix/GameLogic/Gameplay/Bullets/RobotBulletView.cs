@@ -9,6 +9,7 @@ namespace GameLogic
     {
         private BattleSpriteAnimation _animation;
         private LaserBeamView _laser;
+        private BasicBulletTrail _basicTrail;
         public BulletState State { get; private set; }
         public long BattleId => Action?.BattleId ?? 0;
         public BattleSide Side => Action?.SourceSide ?? default(BattleSide);
@@ -21,6 +22,10 @@ namespace GameLogic
         public void Bind(BulletState state)
         {
             State = state ?? throw new ArgumentNullException(nameof(state));
+            if (state.Launcher.Model.Id == BulletState.BASIC_BULLET_ID &&
+                _basicTrail == null && TryGetComponent<SpriteRenderer>(out var sprite) && sprite.sprite != null)
+                _basicTrail = new BasicBulletTrail(sprite);
+            _basicTrail?.Reset(state.Launcher.Model.Id == BulletState.BASIC_BULLET_ID);
             Present(state);
             // Reset the trail after positioning a newly spawned or reused projectile.
             if (TryGetComponent<TrailRenderer>(out var trail)) trail.Clear();
@@ -41,6 +46,7 @@ namespace GameLogic
             if (state.Direction.sqrMagnitude > 0f)
                 transform.rotation = Quaternion.Euler(0f, 0f,
                     Mathf.Atan2(state.Direction.y, state.Direction.x) * Mathf.Rad2Deg);
+            _basicTrail?.Record(state.Position);
         }
         public void Initialize(BattleShopSceneController host, BattleShopContext context, EnemyBattleController enemies,
             CombatActionSnapshot action, float flightTime, float arcHeight)

@@ -232,6 +232,7 @@ public partial class GameApp
     }
     private static void Release()
     {
+        GameSettings.ReleaseMusic();
         GameSoundService.Release();
         _appLifetime?.Cancel();
         _appLifetime?.Dispose();

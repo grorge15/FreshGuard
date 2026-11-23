@@ -494,6 +494,7 @@ namespace GameLogic
                             (IProjectileWorld)_bulletWorld, present: positions => PlayHitEffect(model.HitEffectPrefab, cast.Owner.Side, positions),
                             splashRadius: radius)));
                     Launch(reserve, instance, state); launched = true;
+                    if (i == 0) GameSoundService.PlayForSide(GameSound.JuicerShot, cast.Owner.Side);
                     if (OwnsBattle && !state.IsResolved && instance != null) instance.SetActive(true);
                 }
                 finally { if (!launched) ReturnPrepared(sourceId, cast.SkillId, model.Prefab, instance); }
@@ -555,6 +556,10 @@ namespace GameLogic
                             GameSoundService.PlayForSide(GameSound.FrostArrow, cast.Owner.Side);
                         else if (reserve.Robot is ScatterRobotEntity && model.FlightType == BulletFlightType.Beam)
                             GameSoundService.PlayForSide(GameSound.LaserFire, cast.Owner.Side);
+                        else if (reserve.Robot is JuicerRobotEntity)
+                            GameSoundService.PlayForSide(GameSound.JuicerShot, cast.Owner.Side);
+                        else if (model.Prefab == "RobotBullet")
+                            GameSoundService.PlayForSide(GameSound.BasicShot, cast.Owner.Side);
                         reserve.Robot.NotifyAttackLaunched(cast);
                     }
                     reserve.ChargeAnimation?.Refresh();

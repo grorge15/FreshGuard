@@ -14,7 +14,7 @@ namespace GameLogic
         LeverDown, LeverReturn, ReelSpin, ReelStop, Purchase, BallWall,
         GlassHit, GlassBreak, GlassRainbow, CoinCollect, Combo, RageStart, RageEnd,
         TowerHit, TowerDestroyed, Victory, Defeat, RewardClaim,
-        BuffAcquired, BuffStack, BuffRemove, WaveAdvance, BuffChoose, RobotHit, UiConfirm, InductionZap, FrostArrow, LaserFire
+        BuffAcquired, BuffStack, BuffRemove, BuffChoose = 29, RobotHit, UiConfirm, InductionZap, FrostArrow, LaserFire, BasicShot, JuicerShot
     }
 
     [Serializable]
@@ -98,7 +98,9 @@ namespace GameLogic
             if (!IsReady || !Application.isPlaying || !Entries.TryGetValue(sound, out entry)) return null;
             var now = Time.unscaledTime;
             float last;
-            if (LastPlayed.TryGetValue(sound, out last) && now - last < entry.cooldown) return null;
+            // 按钮与它触发的弹窗共用点击声，合并相邻的播放请求。
+            var cooldownKey = sound == GameSound.UiOpen || sound == GameSound.UiClose ? GameSound.UiClick : sound;
+            if (LastPlayed.TryGetValue(cooldownKey, out last) && now - last < entry.cooldown) return null;
             var agent = GameModule.Audio.Play(entry.ui ? TEngine.AudioType.UISound : TEngine.AudioType.Sound,
                 entry.location, entry.loop, Mathf.Clamp01(entry.volume * gain), bAsync: true, bInPool: true);
             if (agent == null) return null;
@@ -108,7 +110,7 @@ namespace GameLogic
             source.ignoreListenerPause = entry.ui;
             var lease = ++_nextLease;
             Leases[agent] = lease;
-            LastPlayed[sound] = now;
+            LastPlayed[cooldownKey] = now;
             PlaybackCount++;
             return new GameSoundPlayback(agent, lease, entry.location);
         }
