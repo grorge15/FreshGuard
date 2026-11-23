@@ -14,7 +14,7 @@ namespace GameLogic
         LeverDown, LeverReturn, ReelSpin, ReelStop, Purchase, BallWall,
         GlassHit, GlassBreak, GlassRainbow, CoinCollect, Combo, RageStart, RageEnd,
         TowerHit, TowerDestroyed, Victory, Defeat, RewardClaim,
-        BuffAcquired, BuffStack, BuffRemove, WaveAdvance, BuffChoose, RobotHit
+        BuffAcquired, BuffStack, BuffRemove, WaveAdvance, BuffChoose, RobotHit, UiConfirm, InductionZap, FrostArrow, LaserFire
     }
 
     [Serializable]

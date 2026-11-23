@@ -11,9 +11,25 @@
       "cooldown": 0.045,
       "ui": true,
       "loop": false,
-      "duration": 0.085,
-      "source": "原创程序合成，无第三方采样",
-      "note": "各界面共用；不可操作按钮不播放"
+      "duration": 0.091,
+      "source": "用户提供：03_点击按钮.wav",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/03_点击按钮.wav",
+      "note": "可操作按钮确认点击"
+    },
+    {
+      "id": "UiConfirm",
+      "module": "通用界面",
+      "label": "弹窗确认",
+      "trigger": "点击弹窗确认按钮",
+      "location": "fg_ui_confirm",
+      "volume": 0.64,
+      "cooldown": 0.045,
+      "ui": true,
+      "loop": false,
+      "duration": 0.292,
+      "source": "用户提供：04_弹窗确认.wav",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/04_弹窗确认.wav",
+      "note": "点击弹窗确认按钮"
     },
     {
       "id": "UiOpen",
@@ -137,9 +153,10 @@
       "cooldown": 0,
       "ui": true,
       "loop": true,
-      "duration": 0.18,
-      "source": "原创程序合成，无第三方采样",
-      "note": "循环；隐藏、取消、终局时立即停止"
+      "duration": 0.805,
+      "source": "Mixkit：见 Sources_1123.md",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/ReelSpin.wav",
+      "note": "滚轴开始转动，最后一个槽位停定时结束"
     },
     {
       "id": "ReelStop",
@@ -193,12 +210,10 @@
       "cooldown": 0.07,
       "ui": false,
       "loop": false,
-      "duration": 0.287,
-      "source": "用户提供：玻璃碰撞_轻.MP3",
-      "note": "用户素材：玻璃碰撞_轻.MP3；仅己方；玻璃扣耐久但未破碎时播放",
-      "sourceFile": "Tools/Audio/Sources/GlassHit_User/玻璃碰撞_轻.MP3",
-      "sourceOriginalPath": "F:/视频剪辑/玻璃碰撞_轻.MP3",
-      "sourceProcessing": "仅44.1 kHz单声道PCM格式转换；保留音高、完整时长与素材音量"
+      "duration": 0.097,
+      "source": "用户提供：02_碰撞玻璃.wav",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/02_碰撞玻璃.wav",
+      "note": "己方玻璃实际扣耐久但尚未破碎"
     },
     {
       "id": "GlassBreak",
@@ -210,12 +225,10 @@
       "cooldown": 0.075,
       "ui": false,
       "loop": false,
-      "duration": 0.183,
-      "source": "用户调整后提供：玻璃破碎.MP3",
-      "note": "用户调整素材：玻璃破碎.MP3；仅己方；保留编辑后的短促碎裂声",
-      "sourceFile": "Tools/Audio/Sources/GlassBreak_User/玻璃破碎.MP3",
-      "sourceOriginalPath": "F:/视频剪辑/玻璃破碎.MP3",
-      "sourceProcessing": "仅44.1 kHz单声道PCM格式转换；保留音高、完整时长与素材音量；不额外叠加和弦"
+      "duration": 0.52,
+      "source": "TinyWorlds / CC0",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/GlassBreak.wav",
+      "note": "己方普通玻璃耐久归零"
     },
     {
       "id": "GlassRainbow",
@@ -227,12 +240,10 @@
       "cooldown": 0.09,
       "ui": false,
       "loop": false,
-      "duration": 0.183,
-      "source": "用户调整后提供：玻璃破碎.MP3",
-      "note": "用户调整素材：玻璃破碎.MP3；仅己方；使用同一声音，不额外叠加和弦",
-      "sourceFile": "Tools/Audio/Sources/GlassBreak_User/玻璃破碎.MP3",
-      "sourceOriginalPath": "F:/视频剪辑/玻璃破碎.MP3",
-      "sourceProcessing": "仅44.1 kHz单声道PCM格式转换；保留音高、完整时长与素材音量；不额外叠加和弦"
+      "duration": 0.52,
+      "source": "TinyWorlds / CC0",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/GlassBreak.wav",
+      "note": "己方彩色玻璃耐久归零"
     },
     {
       "id": "CoinCollect",
@@ -431,6 +442,51 @@
       "note": "已接界面；正常战斗尚未调用该界面"
     },
     {
+      "id": "InductionZap",
+      "module": "机器人攻击",
+      "label": "电磁炉放电",
+      "trigger": "己方电磁炉发射",
+      "location": "fg_induction_zap",
+      "volume": 0.5,
+      "cooldown": 0.07,
+      "ui": false,
+      "loop": false,
+      "duration": 0.218,
+      "source": "Mixkit：见 Sources_1123.md",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/InductionZap.wav",
+      "note": "己方电磁炉发射"
+    },
+    {
+      "id": "FrostArrow",
+      "module": "机器人攻击",
+      "label": "冰霜炮箭矢",
+      "trigger": "己方冰霜炮发射",
+      "location": "fg_frost_arrow",
+      "volume": 0.56,
+      "cooldown": 0.07,
+      "ui": false,
+      "loop": false,
+      "duration": 0.31,
+      "source": "Mixkit：见 Sources_1123.md",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/FrostArrow.wav",
+      "note": "己方冰霜炮发射"
+    },
+    {
+      "id": "LaserFire",
+      "module": "机器人攻击",
+      "label": "激光发射",
+      "trigger": "己方散射机器人发射光束",
+      "location": "fg_laser_fire",
+      "volume": 0.5,
+      "cooldown": 0.07,
+      "ui": false,
+      "loop": false,
+      "duration": 0.277,
+      "source": "Mixkit：见 Sources_1123.md",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/LaserFire.wav",
+      "note": "己方散射机器人发射光束"
+    },
+    {
       "id": "RobotHit",
       "module": "机器人碰撞",
       "label": "撞击机器人",
@@ -440,11 +496,10 @@
       "cooldown": 0.09,
       "ui": false,
       "loop": false,
-      "duration": 0.157,
-      "source": "用户提供：刀打骷髅.MP3",
-      "note": "用户素材：刀打骷髅.MP3；仅己方；持续接触不重复播放",
-      "sourceFile": "Tools/Audio/Sources/刀打骷髅.MP3",
-      "sourceProcessing": "44.1 kHz单声道PCM转码、峰值匹配与首尾淡化；保留音高和时长"
+      "duration": 0.101,
+      "source": "用户提供：01_碰撞机器人.wav",
+      "sourceFile": "Tools/Audio/Sources/SelectedSfx/01_碰撞机器人.wav",
+      "note": "己方能源球首次有效接触机器人或在脱困端点反弹"
     }
   ]
 }

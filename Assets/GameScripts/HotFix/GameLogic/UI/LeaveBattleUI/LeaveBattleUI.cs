@@ -77,7 +77,7 @@ namespace GameLogic
             if (_busy || (!_leftBattle && !OwnsCurrentBattle())) return;
             _busy = true;
             RefreshButtons();
-            GameSoundService.Play(GameSound.UiClick);
+            GameSoundService.Play(GameSound.UiConfirm);
             try
             {
                 if (!_leftBattle)

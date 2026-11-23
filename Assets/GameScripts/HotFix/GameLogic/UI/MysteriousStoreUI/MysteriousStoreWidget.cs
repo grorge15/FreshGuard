@@ -199,7 +199,10 @@ namespace GameLogic
             _removeIcon = new IconView(panel.Find("m_rect_Icon"));
             Listen(_confirmation.transform.Find("m_btn_Outside").GetComponent<Button>(), CancelRemoval);
             Listen(panel.Find("m_btn_Close").GetComponent<Button>(), CancelRemoval);
-            Listen(panel.Find("m_btn_Remove").GetComponent<Button>(), () => ConfirmRemovalAsync().Forget());
+            var confirm = panel.Find("m_btn_Remove").GetComponent<Button>();
+            var sound = confirm.GetComponent<GameButtonSound>() ?? confirm.gameObject.AddComponent<GameButtonSound>();
+            sound.Bind(confirm, GameSound.UiConfirm);
+            Listen(confirm, () => ConfirmRemovalAsync().Forget());
         }
 
         public void Bind(MysteriousStorePreviewSession session, Action close, Action purchased = null)

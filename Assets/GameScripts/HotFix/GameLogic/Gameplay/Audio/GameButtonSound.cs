@@ -8,13 +8,15 @@ namespace GameLogic
     public sealed class GameButtonSound : MonoBehaviour
     {
         private Button _button;
-        public void Bind(Button button)
+        private GameSound _sound;
+        public void Bind(Button button, GameSound sound = GameSound.UiClick)
         {
+            _sound = sound;
             if (_button != null) return;
             _button = button;
             _button.onClick.AddListener(OnClick);
         }
-        private void OnClick() { GameSoundService.Play(GameSound.UiClick); }
+        private void OnClick() { GameSoundService.Play(_sound); }
         private void OnDestroy() { if (_button != null) _button.onClick.RemoveListener(OnClick); }
     }
 }

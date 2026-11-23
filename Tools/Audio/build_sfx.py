@@ -13,6 +13,7 @@ rng = np.random.default_rng(20261109)
 # id, module, label, trigger, level, cooldown, UI, recipe, notes
 SOUNDS = [
  ('UiClick','通用界面','按钮点击','可操作按钮确认点击',.64,.045,True,'click','各界面共用；不可操作按钮不播放'),
+ ('UiConfirm','通用界面','弹窗确认','点击弹窗确认按钮',.64,.045,True,'confirm','离开战斗、移除助力的确认操作'),
  ('UiOpen','通用界面','弹窗打开','神秘商店、移除确认框、BUFF选择打开',.65,.10,True,'open','轻巧上扬'),
  ('UiClose','通用界面','弹窗关闭','关闭神秘商店或移除确认框',.55,.10,True,'close','轻巧下落'),
  ('Error','通用界面','操作失败','货币不足、达到上限、操作失败提示',.60,.35,True,'error','同类提示限频'),
@@ -42,6 +43,9 @@ SOUNDS = [
  ('BuffRemove','神秘商店','移除助力','确认移除助力成功',.65,.15,True,'remove','取消操作只播放关闭声'),
  ('WaveAdvance','战斗流程','波次切换','已开战后波次增加',.52,.5,True,'wave','首波开战不重复提示'),
  ('BuffChoose','BUFF选择','选择强化','手动或超时完成BUFF三选一',.78,.15,True,'choose','已接界面；正常战斗尚未调用该界面'),
+ ('InductionZap','机器人攻击','电磁炉放电','己方电磁炉发射',.50,.07,False,'zap','同次发射一次'),
+ ('FrostArrow','机器人攻击','冰霜炮箭矢','己方冰霜炮发射',.56,.07,False,'arrow','同次发射一次'),
+ ('LaserFire','机器人攻击','激光发射','己方散射机器人发射光束',.50,.07,False,'laser','多束同时发射只播放一次'),
  ('RobotHit','机器人碰撞','撞击机器人','己方能源球首次有效接触机器人或在脱困端点反弹',.46,.09,False,'robothit','用户素材：刀打骷髅.MP3；仅己方；持续接触不重复播放'),
 ]
 
@@ -145,11 +149,41 @@ def make(recipe):
     if recipe=='choose': return notes([988,1319,1760],.06,.4)
     raise ValueError(recipe)
 
+SELECTED = {
+    'UiClick': '03_点击按钮.wav',
+    'UiConfirm': '04_弹窗确认.wav',
+    'RobotHit': '01_碰撞机器人.wav',
+    'GlassHit': '02_碰撞玻璃.wav',
+    'GlassBreak': 'GlassBreak.wav',
+    'GlassRainbow': 'GlassBreak.wav',
+    **{s: s+'.wav' for s in ('ReelSpin','InductionZap','FrostArrow','LaserFire')},
+}
+
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
     entries=[]
     changed=[]
     for sound,module,label,trigger,volume,cooldown,ui,recipe,note in SOUNDS:
+        if sound in SELECTED:
+            # 保持后续程序音效的随机序列。
+            if recipe in ('click','spin'): make(recipe)
+            elif recipe == 'glasshit': glass()
+            elif recipe in ('glassbreak','rainbow'): glass(True)
+            source = ROOT/'Tools/Audio/Sources/SelectedSfx'/SELECTED[sound]
+            name = 'fg_' + ''.join('_'+c.lower() if c.isupper() else c for c in sound).lstrip('_')
+            path = OUT/(name+'.wav')
+            data = source.read_bytes()
+            with wave.open(BytesIO(data)) as clip:
+                assert (clip.getnchannels(),clip.getsampwidth(),clip.getframerate()) == (1,2,RATE)
+                duration = round(clip.getnframes()/RATE,3)
+            if not path.exists() or path.read_bytes() != data:
+                path.write_bytes(data)
+                changed.append(path.name)
+            entries.append(dict(id=sound,module=module,label=label,trigger=trigger,location=name,
+                volume=volume,cooldown=cooldown,ui=ui,loop=sound=='ReelSpin',duration=duration,
+                source=('TinyWorlds / CC0' if sound in ('GlassBreak','GlassRainbow') else 'Mixkit：见 Sources_1123.md' if sound in ('ReelSpin','InductionZap','FrostArrow','LaserFire') else '用户提供：'+source.name),
+                sourceFile=source.relative_to(ROOT).as_posix(),note=trigger))
+            continue
         x=make(recipe)
         user_glass=sound in ('GlassHit','GlassBreak','GlassRainbow')
         if not user_glass:

@@ -549,6 +549,12 @@ namespace GameLogic
                     {
                         if (cast.TimelineKey == "robot.scatter" && model.FlightType == BulletFlightType.Beam)
                             reserve.ScatterLaserStep = (reserve.ScatterLaserStep + 1) % 3;
+                        if (reserve.Robot is InductionRobotEntity)
+                            GameSoundService.PlayForSide(GameSound.InductionZap, cast.Owner.Side);
+                        else if (reserve.Robot is FrostRobotEntity)
+                            GameSoundService.PlayForSide(GameSound.FrostArrow, cast.Owner.Side);
+                        else if (reserve.Robot is ScatterRobotEntity && model.FlightType == BulletFlightType.Beam)
+                            GameSoundService.PlayForSide(GameSound.LaserFire, cast.Owner.Side);
                         reserve.Robot.NotifyAttackLaunched(cast);
                     }
                     reserve.ChargeAnimation?.Refresh();
