@@ -15,6 +15,7 @@ namespace GameLogic
         private Text _coins;
         private Text _refreshPrice;
         private Button _refreshButton;
+        private PlayerBlastButton _blastButton;
         private RectTransform _offers;
         private readonly List<ShopRobotItemWidget> _items = new List<ShopRobotItemWidget>();
         private RobotDragGhostWidget _ghost;
@@ -26,6 +27,7 @@ namespace GameLogic
         private int _hoveredOfferSlot = -1;
         public BattleShopContext Context { get; private set; }
         public RobotDragController Drag { get; private set; }
+        internal void CancelBlastAim() => _blastButton?.CancelAim();
         private bool AutoRefreshInteractionReady => _host != null && _host.CanInteractWithRobots &&
             gameObject != null && gameObject.activeInHierarchy && OwnerWindow != null && OwnerWindow.Visible &&
             Drag != null && Drag.Phase == RobotDragPhase.Idle;
@@ -61,6 +63,7 @@ namespace GameLogic
             _ghost = CreateWidget<RobotDragGhostWidget>("m_item_DragGhost", visible: false);
             _berserkBar = CreateWidget<BerserkBarWidget>("m_rect_ShopPanel/m_item_BerserkBar", visible: true);
             InitializeSlotMachine();
+            _blastButton = PlayerBlastButton.Create(m_rect_ShopPanel);
             GameSoundService.BindButtons(gameObject);
         }
         protected override void OnRefresh()
@@ -75,6 +78,7 @@ namespace GameLogic
                 Context = context;
                 _refreshHintShown = false;
                 _host = host;
+                _blastButton.Bind(host);
                 Drag.Initialize(this, host);
             }
             RefreshView();
@@ -264,7 +268,7 @@ namespace GameLogic
         }
         protected override void OnSetVisible(bool visible)
         {
-            if (!visible) { CancelSlotRefresh(); Drag?.Cancel(); }
+            if (!visible) { CancelSlotRefresh(); Drag?.Cancel(); _blastButton?.CancelAim(); }
             else RefreshView();
         }
         protected override void OnDestroy()

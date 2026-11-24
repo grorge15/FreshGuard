@@ -78,6 +78,15 @@ namespace GameLogic
             }
         }
         public bool IsFrozen => _frozen;
+        internal float PlayerBlastRadius => _playerBoard == null ? 0f :
+            _playerBoard.transform.TransformVector(Vector3.right * _playerBoard.CellSize).magnitude;
+
+        internal bool TryPlayerBlastPointer(Vector2 screen, out Vector3 world)
+        {
+            world = default;
+            return CanInteractWithRobots && IsCombatRunning && _screenLayout != null &&
+                _screenLayout.PlayerScreenRect.Contains(screen) && _placement.TryGetPointerWorldPosition(screen, out world);
+        }
         public float PreparationRemaining => _preparationRemaining;
         public PlacementBoardsBootstrap Bootstrap => _bootstrap;
         public GlassBoardController PlayerGlass => _playerGlass;
@@ -298,7 +307,7 @@ namespace GameLogic
             _frozen = frozen;
             _bootstrap.SetFrozen(frozen);
             _enemies?.SetFrozen(frozen);
-            if (frozen) ShopWindow?.Drag?.Cancel();
+            if (frozen) { ShopWindow?.Drag?.Cancel(); ShopWindow?.CancelBlastAim(); }
         }
 
         public bool TryOpenRobotInteraction(long battleId)

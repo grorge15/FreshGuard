@@ -316,6 +316,21 @@ MonoBehaviour:
   _playerEnemyRoot: {fileID: 1576154972}
   _opponentEnemyRoot: {fileID: 900960162}
   _damageNumberPrefab: {fileID: 5355598917011885402, guid: 70cd3a17ed1327345acef9e62e0e1f71, type: 3}
+  _potLidFrames:
+  - {fileID: 21300000, guid: 2825c43383514566b2866bca89f44715, type: 3}
+  - {fileID: 21300000, guid: f447d87099cf405e97aae9a9d95a45b3, type: 3}
+  - {fileID: 21300000, guid: b7f9aae820f2487b9ca98228f1f2795b, type: 3}
+  - {fileID: 21300000, guid: fdcebd0cf042446caa449fa8e5e76824, type: 3}
+  - {fileID: 21300000, guid: 64adc1d9329d4e73a09960e9f5dcb10c, type: 3}
+  - {fileID: 21300000, guid: 159db30dd30a4be6ab2b7645eba97ffa, type: 3}
+  - {fileID: 21300000, guid: 5d8cf212e72245a0b54d7f99ff220ae2, type: 3}
+  - {fileID: 21300000, guid: d68fc96c9a864918bcf7e42273bab909, type: 3}
+  - {fileID: 21300000, guid: 40c21d20e93647d1863754c53f798068, type: 3}
+  - {fileID: 21300000, guid: 03656b652360483a8cd6c99e25207b8b, type: 3}
+  - {fileID: 21300000, guid: 5190df3a28864fbdb1ab1e99a00c9cbb, type: 3}
+  - {fileID: 21300000, guid: febfdfd708314a60b67706e4d8ac0a6b, type: 3}
+  - {fileID: 21300000, guid: 32d04c00850644c1880b7f654c037a75, type: 3}
+  - {fileID: 21300000, guid: fca38dac5c7547fc8c78113b2f6159b2, type: 3}
 --- !u!114 &164109972
 MonoBehaviour:
   m_ObjectHideFlags: 0

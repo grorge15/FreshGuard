@@ -273,6 +273,7 @@ namespace GameLogic
             if (!_prepared || !OwnsBattle) throw new InvalidOperationException("战斗出兵资源尚未准备完成。");
             if (!_host.IsCombatRunning) return;
             _started = true;
+            _blastReadyAt = 0d;
             _elapsed = 0d;
             try { SpawnDue(); }
             catch { AbortBattle(); throw; }
@@ -292,6 +293,7 @@ namespace GameLogic
                 do
                 {
                     var next = Math.Min(target, _timeline.NextEventTime);
+                    if (_blastPending) next = Math.Min(next, LidContactAt);
                     // 抵塔也是时间边界，不能由集合遍历顺序决定双方先败顺序。
                     next = Math.Min(next, _elapsed + NextArrivalDelay());
                     next = Math.Min(next, _elapsed + NextBuffDelay());
@@ -306,8 +308,10 @@ namespace GameLogic
                     SyncIsolationEffects();
                     if (!IsRunning) return;
                     SpawnDue();
+                    if (IsRunning) ResolveLidContact();
                     if (!IsRunning) return;
                 } while (_elapsed < target);
+                SamplePotLid();
             }
             catch { AbortBattle(); throw; }
             finally { _advancing = false; }
@@ -698,6 +702,9 @@ namespace GameLogic
 
         public void Clear()
         {
+            _blastPending = false;
+            if (_potLid != null) Release(_potLid.gameObject);
+            _potLid = null;
             _staffs?.Dispose(); _staffs = null;
             _generation++;
             ClearIsolation();

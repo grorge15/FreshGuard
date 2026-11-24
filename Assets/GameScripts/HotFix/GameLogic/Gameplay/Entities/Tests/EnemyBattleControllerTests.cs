@@ -9,6 +9,7 @@ using Luban;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace GameLogic.Tests
 {
@@ -772,6 +773,95 @@ namespace GameLogic.Tests
 
         private static void CheckWaveClear(Fixture f, BattleShopContext context) => typeof(BattleShopSceneController)
             .GetMethod("TryCompleteWaveClear", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(f.Host, new object[] { context });
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void PlayerBlastUsesReleasePointAndConsumesOnlyBattleTime(bool occupied)
+        {
+            var f = Create(); f.Start();
+            var enemies = (EnemyBattleController)f.Controller;
+            var board = new GameObject("PlayerBoard").AddComponent<PlacementBoardView>();
+            board.transform.SetParent(f.Root.transform, false);
+            SetField(f.Host, "_playerBoard", board);
+            var radius = f.Host.PlayerBlastRadius;
+            var center = new Vector3(-3, .5f, 0);
+            var player = f.PlayerView;
+            var opponent = f.Views.First(v => f.Side(v) == BattleSide.Opponent);
+            var release = center + Vector3.right * (.2f * radius);
+            player.transform.position = occupied ? release + Vector3.right * radius * 2f : release;
+            opponent.transform.position = center;
+            f.Context.Registry.TryGet(player.InstanceId, out var p);
+            f.Context.Registry.TryGet(opponent.InstanceId, out var o);
+            var hp = ((EnemyEntity)p).CurrentHp; var opponentHp = ((EnemyEntity)o).CurrentHp;
+            Assert.IsFalse(enemies.TryReleaseBlast(center + Vector3.right * radius, out _));
+            Assert.AreEqual(0, enemies.BlastRemaining);
+            Assert.IsTrue(enemies.TryReleaseBlast(release, out var actual));
+            Assert.That(Vector3.Distance(actual, release), Is.LessThan(.0001f));
+            Assert.AreEqual(hp, ((EnemyEntity)p).CurrentHp);
+            Assert.IsFalse(enemies.TryReleaseBlast(center, out _));
+            f.Host.SetFrozen(true); f.Advance(3); Assert.AreEqual(15f, enemies.BlastRemaining);
+            f.Host.SetFrozen(false); f.Advance(.239f);
+            Assert.AreEqual(hp, ((EnemyEntity)p).CurrentHp, "落地前不能造成伤害");
+            ((EnemyEntity)p).SetMoveSpeed(0);
+            player.transform.position = release + (occupied ? Vector3.right : Vector3.left) * radius * (occupied ? 1.19f : 1.21f);
+            f.Advance(.002f);
+            Assert.AreEqual(occupied ? hp - 50 : hp, ((EnemyEntity)p).CurrentHp);
+            Assert.AreEqual(opponentHp, ((EnemyEntity)o).CurrentHp);
+            f.Advance(.259f);
+            Assert.AreEqual(occupied ? hp - 50 : hp, ((EnemyEntity)p).CurrentHp, "余波不重复出伤");
+            Assert.That(enemies.BlastRemaining, Is.EqualTo(14.5f).Within(.0001f));
+        }
+
+        [Test]
+        public void PlayerBlastButtonOnlyCastsOnDragReleaseOverPlayerLane()
+        {
+            var f = Create(); f.Start();
+            var shop = new BattleShopUI();
+            var drag = f.Root.AddComponent<RobotDragController>();
+            SetField(shop, "<Drag>k__BackingField", drag);
+            SetField(f.Host, "<ShopWindow>k__BackingField", shop);
+            SetField(f.Host, "_interactionOpened", true);
+            var camRoot = new GameObject("BlastCamera"); camRoot.transform.SetParent(f.Root.transform);
+            var camera = camRoot.AddComponent<Camera>(); camera.orthographic = true;
+            camera.transform.position = new Vector3(-3, .5f, -10);
+            var board = f.Root.AddComponent<PlacementBoardView>();
+            SetField(board, "_initialized", true);
+            SetField(f.Host, "_playerBoard", board);
+            var placement = f.Root.AddComponent<PlacementController>();
+            SetField(placement, "_playerBoard", board); SetField(placement, "_enemyBoard", board);
+            SetField(placement, "_sceneCamera", camera); SetField(placement, "_ready", true);
+            SetField(f.Host, "_placement", placement);
+            var layout = f.Root.AddComponent<BattleScreenLayoutController>();
+            SetField(layout, "_layout", new BattleScreenLayoutResult(default, default, default, camera.pixelRect,
+                default, default, default, 1, 1)); SetField(f.Host, "_screenLayout", layout);
+            var panel = new GameObject("Shop", typeof(RectTransform)).GetComponent<RectTransform>();
+            panel.SetParent(f.Root.transform, false);
+            panel.gameObject.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var button = PlayerBlastButton.Create(panel);
+            button.Bind(f.Host);
+            var e = new UnityEngine.EventSystems.PointerEventData(null) { pointerId = -1,
+                position = camera.WorldToScreenPoint(new Vector3(-3, .5f, 0)) };
+            button.OnPointerDown(e); button.OnPointerUp(e);
+            Assert.AreEqual(0, f.Host.Enemies.BlastRemaining, "仅点击不能施放");
+            button.OnPointerDown(e);
+            e.position = new Vector2(-10, -10); button.OnDrag(e);
+            var ring = (RectTransform)panel.Find("BlastTouchRadius");
+            Assert.IsTrue(ring.GetComponent<Graphic>().enabled);
+            Assert.That(Vector2.Distance(RectTransformUtility.WorldToScreenPoint(null, ring.position), e.position), Is.LessThan(.01f));
+            var arrow = (RectTransform)ring.Find("BlastAimArrow");
+            Assert.That(Vector3.Distance(arrow.position, button.rectTransform.TransformPoint(button.rectTransform.rect.center)), Is.LessThan(.01f));
+            Assert.That(Vector2.Distance(RectTransformUtility.WorldToScreenPoint(null,
+                arrow.TransformPoint(Vector3.right * arrow.rect.width)), e.position), Is.LessThan(.01f));
+            button.OnPointerUp(e);
+            Assert.IsFalse(arrow.GetComponent<Graphic>().enabled);
+            Assert.AreEqual(0, f.Host.Enemies.BlastRemaining, "路外松手不消耗冷却");
+            button.OnPointerDown(e);
+            e.position = camera.WorldToScreenPoint(new Vector3(-3, .5f, 0));
+            button.OnDrag(e);
+            Assert.IsTrue(ring.GetComponent<Graphic>().enabled);
+            button.OnPointerUp(e);
+            Assert.AreEqual(15, f.Host.Enemies.BlastRemaining);
+        }
 
         private Fixture Create(bool prepare = true) { _fixture = new Fixture(); if (prepare) _fixture.Prepare(); return _fixture; }
         private static Tables LoadTables() => new Tables(name => new ByteBuf(File.ReadAllBytes(
