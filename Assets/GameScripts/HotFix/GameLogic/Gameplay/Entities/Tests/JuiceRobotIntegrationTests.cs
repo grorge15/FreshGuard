@@ -88,7 +88,7 @@ namespace GameLogic.Tests
         {
             Prepare(); var robot = AddRobot(); var view = _f.PlayerView;
             for (var i = 0; i < 5; i++) Shoot(robot).Single().Cancel();
-            view.transform.position = new Vector3(-3f, 0.5f, 0f);
+            view.transform.position = new Vector3(-2.4f, 0f, 0f);
             var drops = Shoot(robot);
             Assert.AreEqual(5, drops.Length);
             var ordered = drops.OrderBy(d => d.Action.Sequence).ToArray();
@@ -153,7 +153,7 @@ namespace GameLogic.Tests
             _f = new EnemyBattleControllerTests.Fixture(WaveTestData.Tables(new[] { WaveTestData.Plan(1, 1) },
                 new[] { WaveTestData.Spawn(1, 0, 1, 2001, 1) }));
             _f.Prepare(); _f.Start();
-            foreach (var view in _f.Views) view.transform.position = new Vector3(-3, 1, 0) +
+            foreach (var view in _f.Views) view.transform.position = new Vector3(-2, 0, 0) +
                 (_f.Side(view) == BattleSide.Player ? Vector3.zero : Vector3.right * 10);
             _combat = new RobotCombatController(_f.Host, _f.Context, (EnemyBattleController)_f.Controller, _views, Load);
             _combat.PrepareAsync(_f.Tables, CancellationToken.None).GetAwaiter().GetResult();
