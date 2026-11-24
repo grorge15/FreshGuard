@@ -236,8 +236,8 @@ namespace GameLogic.Tests
                 Assert.That(BuffFrame(root, "Enemy", 0).sprite, Is.SameAs(QualitySprite(MysteriousStoreQuality.Orange)));
                 Assert.That(BuffFrame(root, "Enemy", 1).enabled, Is.False);
                 Assert.That(BuffLevel(root, "Player", 0).gameObject.activeSelf, Is.False);
-                Assert.That(BuffLevel(root, "Player", 1).text, Is.EqualTo("3级"));
-                Assert.That(BuffLevel(root, "Enemy", 0).text, Is.EqualTo("2级"));
+                Assert.That(BuffLevel(root, "Player", 1).text, Is.EqualTo("3"));
+                Assert.That(BuffLevel(root, "Enemy", 0).text, Is.EqualTo("2"));
                 Assert.That(BuffLevel(root, "Enemy", 1).gameObject.activeSelf, Is.False);
                 view.SetAssistBuffs(new[] { new MatchBuff(1802, "加速", "", 1, quality: MysteriousStoreQuality.Purple) }, null);
                 Assert.That(BuffFrame(root, "Player", 0).sprite, Is.SameAs(QualitySprite(MysteriousStoreQuality.Purple)));
@@ -260,7 +260,7 @@ namespace GameLogic.Tests
 
         private static Text BuffLevel(GameObject root, string side, int index)
         {
-            return root.transform.Find("m_rect_BattleInfo/m_rect_" + side + "/m_rect_BuffSlots/m_rect_Buff" + index + "/m_text_Level").GetComponent<Text>();
+            return root.transform.Find("m_rect_BattleInfo/m_rect_" + side + "/m_rect_BuffSlots/m_rect_Buff" + index + "/m_img_LevelBadge/m_text_Level").GetComponent<Text>();
         }
 
         private static Image BuffFrame(GameObject root, string side, int index)
@@ -270,7 +270,7 @@ namespace GameLogic.Tests
 
         private static Sprite QualitySprite(MysteriousStoreQuality quality)
         {
-            return AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/UI/UISprites/MysteriousStore/shopIcon/Shop_BuffFrame" + quality + ".png");
+            return AssetDatabase.LoadAssetAtPath<Sprite>("Assets/AssetRaw/UI/UISprites/BattleInfoA/BattleInfo_BuffFrame" + quality + ".png");
         }
 
         private static string Label(GameObject root, string path)

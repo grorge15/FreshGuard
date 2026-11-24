@@ -83,6 +83,7 @@ namespace GameLogic
             internal float[] CumulativeLengths;
             internal int NextPoint = 1;
             internal BattleRouteGeometry Geometry;
+            internal Bounds? StaffBodyAtFeet;
         }
 
         private sealed class DeathEntry
@@ -568,24 +569,15 @@ namespace GameLogic
             }
             var extent = Mathf.Abs(outward.x) * bounds.extents.x + Mathf.Abs(outward.y) * bounds.extents.y;
             var start = bounds.center + (Vector3)outward * Mathf.Min(0.18f, extent * 0.35f);
-            if (_damageNumberPrefab != null)
-            {
-                var instance = Instantiate(_damageNumberPrefab, start, Quaternion.identity, transform);
-                var number = instance.GetComponent<DamageNumberView>();
-                if (number == null) number = instance.AddComponent<DamageNumberView>();
-                number.Initialize(damage, start, outward);
-                BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
-                _damageNumbers.Add(number);
-            }
-            else
-            {
-                var instance = new GameObject("DamageNumber");
-                instance.transform.SetParent(transform, true);
-                var number = instance.AddComponent<DamageNumberView>();
-                number.Initialize(damage, start, outward);
-                BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
-                _damageNumbers.Add(number);
-            }
+            var instance = _damageNumberPrefab != null
+                ? Instantiate(_damageNumberPrefab, start, Quaternion.identity, transform)
+                : new GameObject("DamageNumber");
+            if (_damageNumberPrefab == null) instance.transform.SetParent(transform, true);
+            var number = instance.GetComponent<DamageNumberView>() ?? instance.AddComponent<DamageNumberView>();
+            number.Initialize(damage, start, outward);
+            if (side == BattleSide.Opponent) number.MatchPlayerCamera(_host.GetComponent<BattleScreenLayoutController>());
+            BattleSideRenderGroup.BindRoot(instance, _host.GetComponent<BattleSideRenderRegistry>(), side);
+            _damageNumbers.Add(number);
             return true;
         }
 

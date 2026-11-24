@@ -10,19 +10,20 @@ namespace GameLogic.Tests
         private static readonly Bounds Opponent = new Bounds(new Vector3(0, 3, 0), new Vector3(4.1f, 3.3f, 0));
 
         [Test]
-        public void ReferenceKeepsInfoAtPrefabSizeWithoutShrinkingPlayerOnNormalScreen()
+        public void ReferenceEnlargesInfoWithoutShrinkingPlayerOnNormalScreen()
         {
             var player = new Bounds(new Vector3(-0.03f, -1.354f, 0), new Vector3(5.512f, 4.512f, 0));
             var opponent = new Bounds(new Vector3(-0.07f, 3.35f, 0), new Vector3(4.134f, 3.306f, 0));
             float ppu, infoScale;
             Assert.IsTrue(BattleScreenLayout.TryCalculateReference(player, opponent, new Vector2(1056, 246), out ppu, out infoScale));
-            Assert.AreEqual(1f, infoScale, "信息栏不应继承V1战场空隙产生的约0.7倍缩放。");
+            Assert.That(infoScale, Is.GreaterThan(1f));
             foreach (var height in new[] { 1920, 2160, 2380 })
             {
                 BattleScreenLayoutResult result;
                 Assert.IsTrue(BattleScreenLayout.TryCalculateSplit(new Vector2(1080, height), new Rect(0, 0, 1080, height),
                     new Rect(12, 12, 1056, 246), 1, player, opponent, ppu, infoScale, 1, out result));
-                Assert.AreEqual(new Vector2(1040, 156), result.InfoTarget.size);
+                Assert.That(result.InfoTarget.width, Is.EqualTo(1066f).Within(0.01f));
+                Assert.That(result.InfoTarget.height, Is.EqualTo(159.9f).Within(0.01f));
                 Assert.That(result.PlayerPixelsPerUnit, Is.EqualTo(ppu).Within(0.00001f), "普通屏幕应由敌方让出信息栏空间，我方保留基准。");
             }
         }
@@ -66,10 +67,13 @@ namespace GameLogic.Tests
             var result = Calculate(1080, 1450, new Rect(100, 50, 880, 1300));
             var p = Read<Rect>(result, "PlayerTarget");
             var e = Read<Rect>(result, "OpponentTarget");
+            var info = Read<Rect>(result, "InfoTarget");
+            Assert.That(info.xMin, Is.GreaterThanOrEqualTo(100));
+            Assert.That(info.xMax, Is.LessThanOrEqualTo(980));
             Assert.That(p.xMin, Is.GreaterThanOrEqualTo(116));
             Assert.That(e.yMax, Is.LessThanOrEqualTo(1334.001f));
             Assert.That(p.yMin, Is.EqualTo(274).Within(0.001f));
-            Assert.That(e.yMin, Is.GreaterThan(Read<Rect>(result, "InfoTarget").yMax));
+            Assert.That(e.yMin, Is.GreaterThan(info.yMax));
             Assert.That(p.width, Is.LessThan(5.5f * 190));
         }
 

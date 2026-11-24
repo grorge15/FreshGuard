@@ -10,15 +10,17 @@ namespace GameLogic.Tests
     public sealed class JuiceBulletTests
     {
         [Test]
-        public void DropsFollowCenterLineAroundCornerAndDiscardBeyondEnd()
+        public void DropsFollowCenterLineBackAroundCornerAndDiscardBeforeSpawn()
         {
             var route = new[] { Vector3.zero, Vector3.right, new Vector3(1, 1, 0) };
-            var drops = BattleRouteSampler.SampleDrops(route, new Vector3(0.8f, -1, 0), 5, 0.3f);
+            var drops = BattleRouteSampler.SampleDrops(route, new Vector3(2, .2f, 0), 5, 0.3f);
             Assert.AreEqual(5, drops.Count);
-            Assert.That(Vector3.Distance(new Vector3(1, 0.1f, 0), drops[1]), Is.LessThan(0.00001f));
-            Assert.That(Vector3.Distance(new Vector3(1, 1, 0), drops[4]), Is.LessThan(0.00001f));
-            drops = BattleRouteSampler.SampleDrops(route, new Vector3(2, 0.9f, 0), 5, 0.3f);
-            Assert.AreEqual(1, drops.Count, "超出终点不重复堆叠");
+            var expected = new[] { new Vector3(1, .2f, 0), Vector3.right * .9f, Vector3.right * .6f,
+                Vector3.right * .3f, Vector3.zero };
+            for (var i = 0; i < drops.Count; i++)
+                Assert.That(Vector3.Distance(expected[i], drops[i]), Is.LessThan(0.00001f));
+            drops = BattleRouteSampler.SampleDrops(route, new Vector3(.1f, -1, 0), 5, .3f);
+            Assert.AreEqual(1, drops.Count, "超出出生端不重复堆叠");
         }
 
         [Test]
@@ -26,7 +28,7 @@ namespace GameLogic.Tests
         {
             var drops = BattleRouteSampler.SampleDrops(new[] { Vector3.zero, Vector3.zero, Vector3.right,
                 Vector3.zero }, Vector3.right * 0.5f, 2, 0.2f);
-            Assert.That(drops[1].x, Is.EqualTo(0.7f).Within(0.00001));
+            Assert.That(drops[1].x, Is.EqualTo(0.3f).Within(0.00001));
         }
 
         [Test]

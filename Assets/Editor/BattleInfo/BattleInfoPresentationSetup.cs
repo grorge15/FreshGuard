@@ -80,7 +80,7 @@ namespace FreshGuard.Editor
             finally { PrefabUtility.UnloadPrefabContents(root); }
         }
 
-        [MenuItem("FreshGuard/Battle Info/Apply Shop Buff Appearance")]
+        [MenuItem("FreshGuard/Battle Info/Apply Compact Buff Appearance")]
         public static void ApplyBuffAppearance()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
@@ -106,9 +106,8 @@ namespace FreshGuard.Editor
             sprites.arraySize = 4;
             for (var i = 0; i < sprites.arraySize; i++)
             {
-                var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(MysteriousStoreBuffFrameSetup.SpriteFolder +
-                    "Shop_BuffFrame" + (MysteriousStoreQuality)i + ".png");
-                if (sprite == null) throw new InvalidOperationException("缺少神秘商店品质底框：" + (MysteriousStoreQuality)i);
+                var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(SpriteFolder + "/BattleInfo_BuffFrame" + (MysteriousStoreQuality)i + ".png");
+                if (sprite == null) throw new InvalidOperationException("缺少战斗品质底框：" + (MysteriousStoreQuality)i);
                 sprites.GetArrayElementAtIndex(i).objectReferenceValue = sprite;
             }
         }
@@ -152,7 +151,7 @@ namespace FreshGuard.Editor
             frames.arraySize = icons.arraySize = levels.arraySize = BattleInfoView.BUFF_CAPACITY;
             for (var i = 0; i < BattleInfoView.BUFF_CAPACITY; i++)
             {
-                var slot = Rect(tray, "m_rect_Buff" + i, new Vector2(48, 48), new Vector2(-122.5f + 49f * i, 0));
+                var slot = Rect(tray, "m_rect_Buff" + i, new Vector2(48, 48), new Vector2((i - 2.5f) * BattleInfoView.BUFF_SPACING, 0));
                 var frameRect = Rect(slot, "m_img_QualityFrame", new Vector2(48, 48), Vector2.zero);
                 var frame = frameRect.GetComponent<Image>() ?? frameRect.gameObject.AddComponent<Image>();
                 frame.sprite = null;
@@ -161,24 +160,26 @@ namespace FreshGuard.Editor
                 frame.preserveAspect = true;
                 frame.raycastTarget = false;
                 frameRect.SetAsFirstSibling();
-                // 与神秘商店一致：前景图标在 512 方形品质框内每边内缩 30 像素。
-                var icon = Rect(slot, "m_img_Icon", Vector2.one * (48f * (1f - 60f / 512f)), Vector2.zero).GetComponent<Image>();
+                var icon = Rect(slot, "m_img_Icon", Vector2.one * 45f, Vector2.zero).GetComponent<Image>();
                 if (icon == null) icon = slot.Find("m_img_Icon").gameObject.AddComponent<Image>();
                 icon.sprite = null;
                 icon.color = Color.white;
                 icon.preserveAspect = true;
                 icon.raycastTarget = false;
                 icon.enabled = false;
-                var levelRect = Rect(slot, "m_text_Level", new Vector2(38, 24), Vector2.zero);
+                var badge = Rect(slot, "m_img_LevelBadge", new Vector2(22, 22), Vector2.zero);
+                badge.anchorMin = badge.anchorMax = badge.pivot = new Vector2(1, 0);
+                var backing = badge.GetComponent<Image>() ?? badge.gameObject.AddComponent<Image>();
+                backing.color = new Color32(46, 50, 57, 255);
+                backing.raycastTarget = false;
+                var oldLevel = slot.Find("m_text_Level");
+                if (oldLevel != null) oldLevel.SetParent(badge, false);
+                var levelRect = Rect(badge, "m_text_Level", badge.sizeDelta, Vector2.zero);
                 var level = levelRect.GetComponent<Text>() ?? levelRect.gameObject.AddComponent<Text>();
-                Style(level, new Vector2(38, 24), new Vector2(-3, 3), 15, Color.white);
-                levelRect.anchorMin = levelRect.anchorMax = levelRect.pivot = new Vector2(1, 0);
-                level.alignment = TextAnchor.LowerRight;
+                Style(level, badge.sizeDelta, Vector2.zero, 20, Color.white);
                 level.alignByGeometry = true;
-                level.resizeTextMinSize = 10;
-                var outline = level.gameObject.AddComponent<Outline>();
-                outline.effectColor = Color.black;
-                outline.effectDistance = new Vector2(.8f, -.8f);
+                level.resizeTextMinSize = 12;
+                badge.gameObject.SetActive(false);
                 level.text = string.Empty;
                 level.gameObject.SetActive(false);
                 frames.GetArrayElementAtIndex(i).objectReferenceValue = frame;

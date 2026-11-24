@@ -28,12 +28,13 @@ namespace GameLogic
                 if (distance < nearest || distance == nearest && along < start) { nearest = distance; start = along; }
             }
             var drops = new List<Vector3>();
-            var segment = 1;
+            var segment = points.Count - 1;
             for (var i = 0; i < count; i++)
             {
-                var distance = start + (double)i * spacing;
-                if (distance > lengths[lengths.Length - 1] + 0.0000001d) break;
-                while (segment < points.Count - 1 && lengths[segment] < distance) segment++;
+                // 第一个落点仍是目标投影，后续沿敌人来路回铺，越过出生端不重复堆叠。
+                var distance = start - (double)i * spacing;
+                if (distance < -0.0000001d) break;
+                while (segment > 1 && lengths[segment - 1] >= distance) segment--;
                 var length = lengths[segment] - lengths[segment - 1];
                 var t = length <= 0d ? 0f : (float)((distance - lengths[segment - 1]) / length);
                 drops.Add(Vector3.Lerp(points[segment - 1], points[segment], t));

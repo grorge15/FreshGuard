@@ -36,7 +36,7 @@ namespace GameLogic
         private CancellationTokenSource _buffLoads;
 
         public const int BUFF_CAPACITY = 6;
-        private const float BUFF_SPACING = 49f;
+        public const float BUFF_SPACING = 53f;
 
         private void Awake() { FindPanel(); }
 
@@ -81,7 +81,7 @@ namespace GameLogic
             _elapsedTime.text = FormatElapsedTime(totalElapsedSeconds);
         }
 
-        /// <summary>显示本局携带助力的图标、品质底框及大于一级的等级；空槽不显示。</summary>
+        /// <summary>显示本局携带助力的图标、品质底框及大于一级的等级；未装备的位置只显示槽底。</summary>
         public void SetAssistBuffs(IReadOnlyList<MatchBuff> player, IReadOnlyList<MatchBuff> enemy)
         {
             CancelBuffLoads();
@@ -92,8 +92,6 @@ namespace GameLogic
 
         private void RenderBuffs(Image[] frames, Image[] icons, Text[] levels, IReadOnlyList<MatchBuff> buffs, CancellationToken token)
         {
-            var count = Mathf.Min(buffs != null ? buffs.Count : 0, icons.Length);
-            var startX = -(count - 1) * BUFF_SPACING * .5f;
             for (var i = 0; i < icons.Length; i++)
             {
                 var buff = buffs != null && i < buffs.Count ? buffs[i] : null;
@@ -103,14 +101,14 @@ namespace GameLogic
                 frame.enabled = frame.sprite != null;
                 var icon = icons[i];
                 var slot = (RectTransform)icon.transform.parent;
-                slot.anchoredPosition = new Vector2(startX + i * BUFF_SPACING, slot.anchoredPosition.y);
                 icon.sprite = null;
                 icon.enabled = buff != null && !string.IsNullOrEmpty(buff.IconLocation);
                 if (icon.enabled) icon.SetSprite(buff.IconLocation, cancellationToken: token);
                 var level = levels[i];
                 var showLevel = buff != null && buff.Layers > 1;
-                level.text = showLevel ? buff.Layers + "级" : string.Empty;
+                level.text = showLevel ? buff.Layers.ToString() : string.Empty;
                 level.gameObject.SetActive(showLevel);
+                if (level.transform.parent != slot) level.transform.parent.gameObject.SetActive(showLevel);
             }
         }
 

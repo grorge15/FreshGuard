@@ -175,9 +175,13 @@ namespace GameLogic.Tests
             var staff = UnityEngine.Object.Instantiate(prefab, _f.Root.transform).GetComponent<StaffView>();
             var route = new BattleRouteGeometry(new[] { Vector3.zero, Vector3.up });
             var config = new StaffConfig("StaffBullet", 0, 1, 1, 1.2f, .2f, 0, 0);
-            staff.Initialize(new StaffState(1, 1, default, config, 1), route, _f.Host.GetBoardWidthRatioToPlayer(side));
+            config = config.ForBoard(_f.Host.GetBoardWidthRatioToPlayer(side));
+            var state = new StaffState(1, 1, SkillOwnerRef.Battlefield(1, side), config, 1);
+            staff.Initialize(state, route);
             Assert.That(staff.GetComponentInChildren<SpriteRenderer>().bounds.size.x,
                 Is.EqualTo(expectedWidth).Within(.001f));
+            Assert.AreEqual(2f, state.Constrain(0, 2, expectedWidth / 2 + .01f, expectedWidth / 2 + .01f, 0));
+            Assert.That(state.Constrain(0, 2, 0, 0, 0), Is.EqualTo(1 - expectedWidth / 12).Within(.001f));
         }
         [Test]
         public void ReusedViewResetsAppearanceAndKeepsConfiguredWidth()

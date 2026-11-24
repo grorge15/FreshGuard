@@ -220,6 +220,11 @@ namespace GameLogic.Tests
         {
             var f = _fixture;
             var enemy = f.Views.First(v => f.Side(v) == side);
+            var screenLayout = f.Host.gameObject.AddComponent<BattleScreenLayoutController>();
+            const float playerPpu = 100f, opponentPpu = 75f;
+            typeof(BattleScreenLayoutController).GetField("_layout", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(screenLayout, new BattleScreenLayoutResult(default, default, default, default, default,
+                    default, default, playerPpu, opponentPpu));
             var bounds = enemy.GetVisualBounds();
             var outward = side == BattleSide.Player ? Vector3.left : Vector3.right;
             var board = new GameObject("DamageNumberBoard").AddComponent<PlacementBoardView>();
@@ -230,9 +235,12 @@ namespace GameLogic.Tests
             if (usePrefab)
                 typeof(EnemyBattleController).GetField("_damageNumberPrefab", BindingFlags.Instance | BindingFlags.NonPublic)
                     .SetValue(f.Controller, UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
-                        "Assets/AssetRaw/Actor/DamageNumbers/Prefabs/DamageNumber.prefab"));
+                        "Assets/AssetRaw/Actor/Prefabs/DamageNumbers/DamageNumber.prefab"));
             Assert.IsTrue(((EnemyBattleController)f.Controller).TryPlayDamageFeedback(side, enemy.InstanceId, 20));
             var number = f.Root.GetComponentsInChildren<DamageNumberView>().Single();
+            var ppu = side == BattleSide.Player ? playerPpu : opponentPpu;
+            Assert.That(number.GetComponent<TextMesh>().characterSize * number.transform.lossyScale.y * ppu,
+                Is.EqualTo(0.08f * 1.1f * playerPpu).Within(0.001f));
             var start = number.transform.position;
             Assert.Greater(Vector3.Dot(start - bounds.center, outward), 0f, "出字点应偏向棋盘外侧");
             Assert.IsTrue(bounds.Contains(start), "出字点仍应在敌人身体中心附近");
