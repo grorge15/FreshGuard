@@ -81,6 +81,12 @@ namespace GameLogic
         internal float PlayerBlastRadius => _playerBoard == null ? 0f :
             _playerBoard.transform.TransformVector(Vector3.right * _playerBoard.CellSize).magnitude;
 
+        internal void PlayPotLidImpactFeedback()
+        {
+            if (_screenLayout != null) _screenLayout.PlayPotLidShake();
+            HapticFeedbackService.PlayPotLidImpactPulse();
+        }
+
         internal bool TryPlayerBlastPointer(Vector2 screen, out Vector3 world)
         {
             world = default;

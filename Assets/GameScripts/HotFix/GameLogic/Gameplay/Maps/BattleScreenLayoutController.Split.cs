@@ -26,6 +26,29 @@ namespace GameLogic
         private float _referencePixelsPerUnit;
         private float _referenceInfoScale;
 
+        private const float LidShakeDuration = .16f;
+        private float _lidShakeUntil;
+        private Vector3 _playerCameraRest, _opponentCameraRest;
+
+        internal void PlayPotLidShake()
+        {
+            if (_hasLayout && isActiveAndEnabled)
+                _lidShakeUntil = Time.unscaledTime + LidShakeDuration;
+        }
+
+        private void UpdatePotLidShake()
+        {
+            if (_lidShakeUntil == 0f || _sceneCamera == null || _opponentCamera == null) return;
+            float remaining = Mathf.Clamp01((_lidShakeUntil - Time.unscaledTime) / LidShakeDuration);
+            float phase = (1f - remaining) * Mathf.PI * 4f;
+            // 两台正交相机使用相同的屏幕像素偏移，UI 与战斗对象本身保持稳定。
+            var pixels = new Vector3(.32f * Mathf.Sin(phase), Mathf.Cos(phase), 0f)
+                * (6f * Screen.width / 1080f * remaining * remaining);
+            _sceneCamera.transform.position = _playerCameraRest + pixels / _layout.PlayerPixelsPerUnit;
+            _opponentCamera.transform.position = _opponentCameraRest + pixels / _layout.OpponentPixelsPerUnit;
+            if (remaining == 0f) _lidShakeUntil = 0f;
+        }
+
         public Rect PlayerScreenRect => _layout.PlayerArea;
         public Rect OpponentScreenRect => _layout.OpponentArea;
         public Camera OpponentCamera => _opponentCamera;
@@ -65,6 +88,8 @@ namespace GameLogic
             window.ApplyScreenLayout(shopPosition, shopScale, infoPosition, infoScale);
             ApplyCamera(_sceneCamera, candidate.PlayerViewport, screen, playerCenter, playerSize);
             ApplyCamera(_opponentCamera, candidate.OpponentViewport, screen, opponentCenter, opponentSize);
+            _playerCameraRest = _sceneCamera.transform.position;
+            _opponentCameraRest = _opponentCamera.transform.position;
             MatchPortalScreenSize();
             _sceneCamera.backgroundColor = _playerClearColor;
             _opponentCamera.backgroundColor = _opponentClearColor;

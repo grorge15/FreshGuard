@@ -7,13 +7,28 @@ namespace GameLogic
     public sealed partial class EnemyBattleController
     {
         internal const int PlayerBlastDamage = 50;
-        private const float BlastDamageRadiusScale = 1.2f;
+        internal const float BlastDamageRadiusScale = 1.2f;
         // 原画每帧 256px，fx_04 落地帧的锅盖实体横跨 x=95..160，不含冲击火花。
         private const float LidContactWidthPixels = 66f;
         private const int LidContactFrame = 4;
         private const double LidFallFrameSeconds = .060;
         private const double LidAfterContactFrameSeconds = .030;
         [SerializeField] private Sprite[] _potLidFrames;
+        [SerializeField] private Sprite[] _blastRangeFrames;
+        [SerializeField] private Sprite _potLidDisabled;
+        internal Sprite PotLidDisabled => _potLidDisabled;
+        [SerializeField] private Sprite[] _potLidReadyOnFrames;
+        [SerializeField] private Sprite[] _potLidReadyLoopFrames;
+        internal Sprite GetPotLidReadyFrame(int frame)
+        {
+            int intro = _potLidReadyOnFrames?.Length ?? 0;
+            if (frame < intro) return _potLidReadyOnFrames[frame];
+            return _potLidReadyLoopFrames != null && _potLidReadyLoopFrames.Length > 0
+                ? _potLidReadyLoopFrames[(frame - intro) % _potLidReadyLoopFrames.Length] : null;
+        }
+
+        internal Sprite GetBlastRangeFrame(int frame) => _blastRangeFrames != null && _blastRangeFrames.Length > 0
+            ? _blastRangeFrames[frame % _blastRangeFrames.Length] : null;
         private SpriteRenderer _potLid;
         private double _potLidStart;
         private double LidContactAt => _potLidStart + LidContactFrame * LidFallFrameSeconds;
@@ -22,10 +37,13 @@ namespace GameLogic
         private float _blastRadius;
         private SkillOwnerRef _blastSource;
         internal const float PlayerBlastCooldown = 15f;
+        [SerializeField, Tooltip("测试用：锅盖落地后可立即再次施放。")] private bool _skipBlastCooldown;
         private double _blastReadyAt;
         internal float BlastRemaining => (float)Math.Max(0d, _blastReadyAt - _elapsed);
         private IReadOnlyList<Vector3> BlastRoute => _centerRoutes[(int)BattleSide.Player];
-        internal bool BlastReady => IsRunning && BlastRemaining <= 0f;
+        internal bool BlastReady => IsRunning && !_blastPending && BlastRemaining <= 0f;
+
+        private const float PlacementToleranceInCells = .75f;
 
         private bool IsOnBlastRoute(Vector2 pointer)
         {
@@ -42,8 +60,8 @@ namespace GameLogic
                 if (d >= nearest) continue;
                 nearest = d;
             }
-            var halfLane = _host.PlayerBlastRadius * .5f;
-            return halfLane > 0f && nearest <= halfLane * halfLane;
+            var tolerance = _host.PlayerBlastRadius * PlacementToleranceInCells;
+            return tolerance > 0f && nearest <= tolerance * tolerance;
         }
 
         internal bool TryReleaseBlast(Vector2 pointer, out Vector3 center)
@@ -56,7 +74,7 @@ namespace GameLogic
             _blastSource = SkillOwnerRef.Entity(_context.BattleId, BattleSide.Player, tower);
             _potLidStart = _elapsed;
             _blastPending = true;
-            _blastReadyAt = _elapsed + PlayerBlastCooldown;
+            _blastReadyAt = _elapsed + (_skipBlastCooldown ? 0f : PlayerBlastCooldown);
             PlayPotLid(center, _host.PlayerBlastRadius * 2f);
             return true;
         }
@@ -65,6 +83,7 @@ namespace GameLogic
         {
             if (!_blastPending || _elapsed < LidContactAt) return;
             _blastPending = false;
+            _host.PlayPotLidImpactFeedback();
             var targets = new List<int>();
             foreach (var id in _active.Keys)
                 if (TryGetTargetPosition(BattleSide.Player, id, out var feet, true) &&

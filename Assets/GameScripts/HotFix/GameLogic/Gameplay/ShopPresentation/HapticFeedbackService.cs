@@ -23,6 +23,8 @@ namespace GameLogic
 
         public static void PlayBerserkStartPulse() => PlayLightPulse(25, 60, 0.48f);
 
+        public static void PlayPotLidImpactPulse() => PlayLightPulse(45, 145, 0.75f);
+
         public static void PlaySettingsPulse() => PlayLightPulse(35, 90, 0.55f);
 
         public static SlotRefreshHaptic BeginSlotRefresh()

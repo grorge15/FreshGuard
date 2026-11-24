@@ -787,7 +787,8 @@ namespace GameLogic.Tests
             var center = new Vector3(-3, .5f, 0);
             var player = f.PlayerView;
             var opponent = f.Views.First(v => f.Side(v) == BattleSide.Opponent);
-            var release = center + Vector3.right * (.2f * radius);
+            // 松手位置超过原来的半格，仍应以手指位置施放。
+            var release = center + Vector3.right * (.65f * radius);
             player.transform.position = occupied ? release + Vector3.right * radius * 2f : release;
             opponent.transform.position = center;
             f.Context.Registry.TryGet(player.InstanceId, out var p);
@@ -848,12 +849,9 @@ namespace GameLogic.Tests
             var ring = (RectTransform)panel.Find("BlastTouchRadius");
             Assert.IsTrue(ring.GetComponent<Graphic>().enabled);
             Assert.That(Vector2.Distance(RectTransformUtility.WorldToScreenPoint(null, ring.position), e.position), Is.LessThan(.01f));
-            var arrow = (RectTransform)ring.Find("BlastAimArrow");
-            Assert.That(Vector3.Distance(arrow.position, button.rectTransform.TransformPoint(button.rectTransform.rect.center)), Is.LessThan(.01f));
-            Assert.That(Vector2.Distance(RectTransformUtility.WorldToScreenPoint(null,
-                arrow.TransformPoint(Vector3.right * arrow.rect.width)), e.position), Is.LessThan(.01f));
+            Assert.IsNull(ring.Find("BlastAimArrow"));
             button.OnPointerUp(e);
-            Assert.IsFalse(arrow.GetComponent<Graphic>().enabled);
+            Assert.IsFalse(ring.GetComponent<Graphic>().enabled);
             Assert.AreEqual(0, f.Host.Enemies.BlastRemaining, "路外松手不消耗冷却");
             button.OnPointerDown(e);
             e.position = camera.WorldToScreenPoint(new Vector3(-3, .5f, 0));
