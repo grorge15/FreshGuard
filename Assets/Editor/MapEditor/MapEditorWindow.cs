@@ -13,7 +13,7 @@ namespace FreshGuard.Editor
     public sealed class MapEditorWindow : EditorWindow, ISerializationCallbackReceiver
     {
         private const string DEFAULT_DIRECTORY = "Assets/AssetRaw/Configs/Maps";
-        private const string BALL_PREFAB = "Assets/AssetRaw/Physics/Prefabs/PhysicalCollisionBall.prefab";
+        private const string BALL_PREFAB = "Assets/AssetRaw/Actor/Prefabs/PhysicsPrefabs/PhysicalCollisionBall.prefab";
         private static readonly MapEditorBrush[] BASE_PALETTE =
         {
             MapEditorBrush.Track, MapEditorBrush.Empty

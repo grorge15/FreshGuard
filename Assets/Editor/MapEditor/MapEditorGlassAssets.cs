@@ -12,7 +12,8 @@ namespace FreshGuard.Editor
     /// <summary>与GlassPrefabBuilder、GlassView共用既有目录和配置映射，不依赖运行时ConfigSystem。</summary>
     internal sealed class MapEditorGlassAssets
     {
-        private const string GLASS_ROOT = "Assets/AssetRaw/Actor/Glass/";
+        private const string GLASS_PREFAB_ROOT = "Assets/AssetRaw/Actor/Prefabs/glass/";
+        private const string GLASS_SPRITE_ROOT = "Assets/AssetRaw/Actor/Sprites/glass/";
         private readonly Dictionary<ObstacleType, GameObject> _prefabs = new Dictionary<ObstacleType, GameObject>();
         private readonly List<string> _errors = new List<string>();
 
@@ -43,7 +44,7 @@ namespace FreshGuard.Editor
 
         private void ValidatePlacementSlot()
         {
-            const string path = "Assets/AssetRaw/Physics/Prefabs/PlacementSlot.prefab";
+            const string path = "Assets/AssetRaw/Actor/Prefabs/PhysicsPrefabs/PlacementSlot.prefab";
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             var renderer = prefab == null ? null : prefab.GetComponent<SpriteRenderer>();
             if (renderer == null || renderer.sprite == null || renderer.sprite.bounds.size.x <= 0f || renderer.sprite.bounds.size.y <= 0f)
@@ -61,7 +62,7 @@ namespace FreshGuard.Editor
             if (config.MaxDurability <= 0 || config.HitDurabilityLoss <= 0)
                 _errors.Add(label + "耐久和每次命中损失必须大于0。");
 
-            var prefabPath = GLASS_ROOT + "Prefabs/" + config.PrefabLocation + ".prefab";
+            var prefabPath = GLASS_PREFAB_ROOT + config.PrefabLocation + ".prefab";
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             if (prefab == null) _errors.Add(label + "缺少Prefab：" + prefabPath);
             else _prefabs[obstacle] = prefab;
@@ -101,7 +102,7 @@ namespace FreshGuard.Editor
                     if (float.IsNaN(ratio) || float.IsInfinity(ratio) || ratio <= 0f || ratio > 1f ||
                         (index > 0 && ratio <= ratios[index - 1]))
                         _errors.Add(label + "阶段" + index + "耐久比上限必须在(0,1]内递增。");
-                    var spritePath = GLASS_ROOT + "Sprites/" + stages[index] + ".png";
+                    var spritePath = GLASS_SPRITE_ROOT + stages[index] + ".png";
                     var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
                     if (sprite == null) _errors.Add(label + "缺少Sprite：" + spritePath);
                     if (references != null && index < references.arraySize &&
