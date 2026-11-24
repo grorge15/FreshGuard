@@ -87,7 +87,8 @@ namespace GameLogic
             var targets = new List<int>();
             foreach (var id in _active.Keys)
                 if (TryGetTargetPosition(BattleSide.Player, id, out var feet, true) &&
-                    ((Vector2)(feet - _blastCenter)).sqrMagnitude <= _blastRadius * _blastRadius) targets.Add(id);
+                    AoeManager.ContainsCircle(_blastCenter, _blastRadius, feet))
+                    targets.Add(id);
             var source = _blastSource;
             foreach (var id in targets)
             {
