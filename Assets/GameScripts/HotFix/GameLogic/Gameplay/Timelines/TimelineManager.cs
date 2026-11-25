@@ -16,6 +16,13 @@ namespace GameLogic
         public void Register(TimelineModel model) => _models.Add(model.Key, model);
         public void RegisterFactory(string key, Func<SkillCastSnapshot, TimelineModel> factory) => _factories.Add(key, factory);
         public void RegisterAction(string key, ITimelineAction action) => _actions.Add(key, action ?? throw new ArgumentNullException(nameof(action)));
+        internal void Unregister(string timelineKey, params string[] actionKeys)
+        {
+            foreach (var timeline in new List<TimelineObj>(_active.Values))
+                if (timeline.Model.Key == timelineKey) Finish(timeline, true);
+            _models.Remove(timelineKey);
+            foreach (var key in actionKeys) _actions.Remove(key);
+        }
         public bool HasChannel(SkillOwnerRef owner) => _active.ContainsKey(owner);
         public bool IsActive(SkillCastSnapshot cast) => cast != null &&
             _active.TryGetValue(cast.Owner, out var timeline) && !timeline.IsFinished && ReferenceEquals(timeline.Cast, cast);

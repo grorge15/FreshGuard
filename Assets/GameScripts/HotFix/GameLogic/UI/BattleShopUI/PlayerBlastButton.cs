@@ -95,7 +95,7 @@ namespace GameLogic
         {
             var ready = Available;
             var remaining = _host != null && _host.Enemies != null
-                ? Mathf.Clamp01(_host.Enemies.BlastRemaining / EnemyBattleController.PlayerBlastCooldown) : 0f;
+                ? _host.Enemies.BlastCooldownFraction : 0f;
             if (ready && !_ready) _readyStartedAt = _host.Enemies.ElapsedSeconds;
             var sprite = ready ? _host.Enemies.GetPotLidReadyFrame(Mathf.Max(0,
                 (int)((_host.Enemies.ElapsedSeconds - _readyStartedAt) * 20d))) : DisabledSprite;

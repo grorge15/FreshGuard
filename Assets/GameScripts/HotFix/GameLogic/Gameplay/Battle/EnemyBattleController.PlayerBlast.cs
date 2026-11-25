@@ -6,7 +6,11 @@ namespace GameLogic
 {
     public sealed partial class EnemyBattleController
     {
-        internal const int PlayerBlastDamage = 50;
+        internal const int PlayerBlastSkillId = 1608;
+        internal const string PlayerBlastTimelineKey = "battlefield.pot_lid";
+        private const string BlastFallAction = "battlefield.pot_lid.fall";
+        private const string BlastImpactAction = "battlefield.pot_lid.impact";
+        private const double BlastMaxHpDamageRatio = .5;
         internal const float BlastDamageRadiusScale = 1.2f;
         // 原画每帧 256px，fx_04 落地帧的锅盖实体横跨 x=95..160，不含冲击火花。
         private const float LidContactWidthPixels = 66f;
@@ -31,23 +35,44 @@ namespace GameLogic
             ? _blastRangeFrames[frame % _blastRangeFrames.Length] : null;
         private SpriteRenderer _potLid;
         private double _potLidStart;
-        private double LidContactAt => _potLidStart + LidContactFrame * LidFallFrameSeconds;
-        private bool _blastPending;
-        private Vector3 _blastCenter;
-        private float _blastRadius;
-        private SkillOwnerRef _blastSource;
-        internal const float PlayerBlastCooldown = 15f;
+        private const float LidContactDelay = (float)(LidContactFrame * LidFallFrameSeconds);
+        private double LidContactAt => _potLidStart + LidContactDelay;
         [SerializeField, Tooltip("测试用：锅盖落地后可立即再次施放。")] private bool _skipBlastCooldown;
-        private double _blastReadyAt;
-        internal float BlastRemaining => (float)Math.Max(0d, _blastReadyAt - _elapsed);
+        private SkillObj _blastSkill;
+        internal float BlastRemaining => _blastSkill?.CooldownRemaining ?? 0f;
+        internal float BlastCooldownFraction => _blastSkill != null && _blastSkill.Model.Cooldown > 0f
+            ? Mathf.Clamp01(BlastRemaining / _blastSkill.Model.Cooldown) : 0f;
         private IReadOnlyList<Vector3> BlastRoute => _centerRoutes[(int)BattleSide.Player];
-        internal bool BlastReady => IsRunning && !_blastPending && BlastRemaining <= 0f;
+        internal bool BlastReady => IsRunning && _blastSkill != null && BlastRemaining <= 0f &&
+            !_context.Battle.Timelines.HasChannel(_context.Battle.Player.OwnerRef);
+
+        private void RegisterPlayerBlast()
+        {
+            var battle = _context.Battle;
+            if (!battle.Catalog.TryGet(PlayerBlastSkillId, out var model)) return;
+            battle.Timelines.RegisterAction(BlastFallAction, new PlayerBlastAction(this, false));
+            battle.Timelines.RegisterAction(BlastImpactAction, new PlayerBlastAction(this, true));
+            battle.Timelines.Register(new TimelineModel(PlayerBlastTimelineKey, LidContactDelay, new[]
+            {
+                new TimelineNode(0f, BlastFallAction),
+                new TimelineNode(LidContactDelay, BlastImpactAction)
+            }));
+            _blastSkill = battle.Grant(battle.Player, model);
+        }
+
+        private void UnregisterPlayerBlast()
+        {
+            if (_blastSkill == null) return;
+            var battle = _context.Battle;
+            battle.Timelines.Unregister(PlayerBlastTimelineKey, BlastFallAction, BlastImpactAction);
+            _blastSkill = null;
+        }
 
         private const float PlacementToleranceInCells = .75f;
 
         private bool IsOnBlastRoute(Vector2 pointer)
         {
-            if (!BlastReady || BlastRoute == null) return false;
+            if (BlastRoute == null) return false;
             var nearest = float.PositiveInfinity;
             for (int i = 1; i < BlastRoute.Count; i++)
             {
@@ -67,33 +92,64 @@ namespace GameLogic
         internal bool TryReleaseBlast(Vector2 pointer, out Vector3 center)
         {
             center = pointer;
-            if (!IsOnBlastRoute(pointer) ||
-                !_host.TryGetTowerTarget(BattleSide.Player, out var tower, out _)) return false;
-            _blastCenter = center;
-            _blastRadius = _host.PlayerBlastRadius * BlastDamageRadiusScale;
-            _blastSource = SkillOwnerRef.Entity(_context.BattleId, BattleSide.Player, tower);
-            _potLidStart = _elapsed;
-            _blastPending = true;
-            _blastReadyAt = _elapsed + (_skipBlastCooldown ? 0f : PlayerBlastCooldown);
-            PlayPotLid(center, _host.PlayerBlastRadius * 2f);
-            return true;
+            if (!BlastReady) return false;
+            var battle = _context.Battle;
+            var request = new SkillCastRequest(battle.Player.OwnerRef, _blastSkill.Model.Id, SkillTriggerSource.Button,
+                SkillTarget.AtPosition(BattleSide.Player, center));
+            return battle.Skills.TryCast(request).Accepted;
         }
 
-        private void ResolveLidContact()
+        private void StartLidFall(Vector3 center, float cellSize)
         {
-            if (!_blastPending || _elapsed < LidContactAt) return;
-            _blastPending = false;
+            if (_skipBlastCooldown) _blastSkill.CooldownRemaining = 0f;
+            _potLidStart = _elapsed;
+            PlayPotLid(center, cellSize * 2f);
+        }
+
+        private void ResolveLidContact(Vector3 center, float radius, SkillOwnerRef source, int skillId)
+        {
             _host.PlayPotLidImpactFeedback();
             var targets = new List<int>();
             foreach (var id in _active.Keys)
                 if (TryGetTargetPosition(BattleSide.Player, id, out var feet, true) &&
-                    AoeManager.ContainsCircle(_blastCenter, _blastRadius, feet))
+                    AoeManager.ContainsCircle(center, radius, feet))
                     targets.Add(id);
-            var source = _blastSource;
             foreach (var id in targets)
             {
                 if (!OwnsBattle) break;
-                _context.Combat.ResolvePlayerBlast(source, SkillOwnerRef.Entity(source.BattleId, source.Side, id), PlayerBlastDamage);
+                if (_context.Registry.TryGet(id, out var entity) && entity is EnemyEntity enemy)
+                {
+                    var damage = (int)Math.Ceiling(enemy.MaxHp * BlastMaxHpDamageRatio);
+                    _context.Combat.ResolvePlayerBlast(source, enemy.OwnerRef, skillId, damage);
+                }
+            }
+        }
+
+        private sealed class PlayerBlastAction : ITimelineAction
+        {
+            private readonly EnemyBattleController _controller;
+            private readonly bool _impact;
+
+            public PlayerBlastAction(EnemyBattleController controller, bool impact)
+            { _controller = controller; _impact = impact; }
+
+            public bool TryPrepare(SkillCastSnapshot cast, TimelineNode node, out Action execute)
+            {
+                execute = null;
+                if (!_controller.IsRunning || !cast.Owner.Equals(_controller._context.Battle.Player.OwnerRef) ||
+                    cast.Trigger != SkillTriggerSource.Button || cast.Target.Kind != SkillTargetKind.Position ||
+                    !_controller.IsOnBlastRoute(cast.Target.Position) ||
+                    !_controller._host.TryGetTowerTarget(BattleSide.Player, out var tower, out _))
+                    return false;
+
+                var center = cast.Target.Position;
+                var cellSize = _controller._host.PlayerBlastRadius;
+                var source = SkillOwnerRef.Entity(cast.Owner.BattleId, cast.Owner.Side, tower);
+                if (_impact)
+                    execute = () => _controller.ResolveLidContact(center, cellSize * BlastDamageRadiusScale, source, cast.SkillId);
+                else
+                    execute = () => _controller.StartLidFall(center, cellSize);
+                return true;
             }
         }
 
