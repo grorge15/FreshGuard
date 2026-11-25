@@ -97,6 +97,9 @@ namespace GameLogic
                     !EntityValidation.IsFiniteNonNegative(row.Duration) ||
                     !EntityValidation.IsFiniteNonNegative(row.IsolateDuration)) throw new InvalidOperationException("技能等级配置无效：" + row.Id);
                 ValidateRobotLevel(row, model, catalog);
+                if (!EntityValidation.IsFiniteNonNegative(row.MaxHpDamageRatio) || row.MaxHpDamageRatio > 1f ||
+                    !EntityValidation.IsFiniteNonNegative(row.AreaRadiusCells))
+                    throw new InvalidOperationException("技能最大生命伤害比例或范围无效：" + row.Id);
                 if (row.Slow > 0f && (slowBuffId == 0 || row.Duration <= 0f))
                     throw new InvalidOperationException("减速技能缺少Buff或有效持续时间：" + row.Id);
                 if (row.PoisonDamage < 0 || row.PoisonMaxLayers < 0 ||
@@ -122,7 +125,8 @@ namespace GameLogic
                     { "chainTargetCount", row.ChainTargetCount }, { "chainRange", row.ChainRange },
                     { "chainDamageRatio", row.ChainDamageRatio }, { "castWindup", row.CastWindup },
                     { "dropCount", row.DropCount },
-                    { "dropSpacing", row.DropSpacing }, { "splashRadius", row.SplashRadius }
+                    { "dropSpacing", row.DropSpacing }, { "splashRadius", row.SplashRadius },
+                    { "maxHpDamageRatio", row.MaxHpDamageRatio }, { "areaRadiusCells", row.AreaRadiusCells }
                 };
                 catalog.Add(new SkillLevelModel(row.SkillId, row.Level, parameters,
                     CaptureHitBuffs(slowBuffId, poisonBuffId, isolationBuffId, row.SkillId, parameters),
