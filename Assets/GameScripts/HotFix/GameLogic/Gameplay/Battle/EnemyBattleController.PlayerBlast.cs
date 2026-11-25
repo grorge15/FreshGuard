@@ -74,7 +74,7 @@ namespace GameLogic
             _blastSource = SkillOwnerRef.Entity(_context.BattleId, BattleSide.Player, tower);
             _potLidStart = _elapsed;
             _blastPending = true;
-            _blastReadyAt = _elapsed + (_skipBlastCooldown ? 0f : PlayerBlastCooldown);
+            _blastReadyAt = _skipBlastCooldown ? 0d : _elapsed + PlayerBlastCooldown;
             PlayPotLid(center, _host.PlayerBlastRadius * 2f);
             return true;
         }
@@ -83,6 +83,7 @@ namespace GameLogic
         {
             if (!_blastPending || _elapsed < LidContactAt) return;
             _blastPending = false;
+            GameSoundService.Play(GameSound.PotLidImpact);
             _host.PlayPotLidImpactFeedback();
             var targets = new List<int>();
             foreach (var id in _active.Keys)

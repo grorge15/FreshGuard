@@ -311,6 +311,11 @@ namespace GameLogic
                     if (IsRunning) ResolveLidContact();
                     if (!IsRunning) return;
                 } while (_elapsed < target);
+                if (_blastReadyAt > 0d && _elapsed >= _blastReadyAt)
+                {
+                    _blastReadyAt = 0d;
+                    GameSoundService.Play(GameSound.PotLidReady);
+                }
                 SamplePotLid();
             }
             catch { AbortBattle(); throw; }
