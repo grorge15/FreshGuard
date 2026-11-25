@@ -307,9 +307,9 @@ namespace GameLogic
                     if (!IsRunning) return;
                     SpawnDue();
                 } while (_elapsed < target);
-                if (_blastReadyAt > 0d && _elapsed >= _blastReadyAt)
+                if (_playBlastReadySound && BlastReady)
                 {
-                    _blastReadyAt = 0d;
+                    _playBlastReadySound = false;
                     GameSoundService.Play(GameSound.PotLidReady);
                 }
                 SamplePotLid();

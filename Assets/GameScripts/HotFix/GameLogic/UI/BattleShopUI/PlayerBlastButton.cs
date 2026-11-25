@@ -141,7 +141,7 @@ namespace GameLogic
             if (root == null) return;
             var parent = (RectTransform)root.transform;
             var camera = root.renderMode == RenderMode.ScreenSpaceOverlay ? null : root.worldCamera;
-            var radiusPx = _host.Placement.GetScreenCellHeight(BattleSide.Player) * EnemyBattleController.BlastDamageRadiusScale;
+            var radiusPx = _host.Placement.GetScreenCellHeight(BattleSide.Player) * _host.Enemies.BlastRadiusInCells;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, camera, out var local) ||
                 !RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen + Vector2.up * radiusPx,
                     camera, out var edge)) return;
