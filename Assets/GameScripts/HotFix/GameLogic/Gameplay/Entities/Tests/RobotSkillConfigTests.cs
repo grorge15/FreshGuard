@@ -42,6 +42,7 @@ namespace GameLogic.Tests
                     continue;
                 }
                 Assert.IsTrue(catalog.TryGet(row.Id, out var skill));
+                if (skill.Type == SkillType.Battlefield) continue;
                 if (skill.TimelineKey == "robot.roll")
                 {
                     Assert.AreEqual(0, skill.BulletId);

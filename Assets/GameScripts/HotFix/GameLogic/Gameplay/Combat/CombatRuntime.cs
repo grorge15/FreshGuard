@@ -116,8 +116,8 @@ namespace GameLogic
             CombatSourceKind sourceKind = CombatSourceKind.Robot)
             => ResolveFixedDamage(source, target, skillId, damage, sourceKind, CombatOutcomeTag.DamageOverTime);
 
-        internal CombatTargetResolution ResolvePlayerBlast(SkillOwnerRef tower, SkillOwnerRef enemy, int damage)
-            => ResolveFixedDamage(tower, enemy, 0, damage, CombatSourceKind.Other, CombatOutcomeTag.AreaDamage);
+        internal CombatTargetResolution ResolvePlayerBlast(SkillOwnerRef tower, SkillOwnerRef enemy, int skillId, int damage)
+            => ResolveFixedDamage(tower, enemy, skillId, damage, CombatSourceKind.Other, CombatOutcomeTag.AreaDamage);
 
         private CombatTargetResolution ResolveFixedDamage(SkillOwnerRef source, SkillOwnerRef target, int skillId,
             int damage, CombatSourceKind sourceKind, CombatOutcomeTag tag)

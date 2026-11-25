@@ -778,7 +778,9 @@ namespace GameLogic.Tests
         [TestCase(false)]
         public void PlayerBlastUsesReleasePointAndConsumesOnlyBattleTime(bool occupied)
         {
-            var f = Create(); f.Start();
+            var f = Create();
+            f.Context.Battle.Configure(SkillConfigAdapter.FromTables(f.Tables));
+            f.Start();
             var enemies = (EnemyBattleController)f.Controller;
             var board = new GameObject("PlayerBoard").AddComponent<PlacementBoardView>();
             board.transform.SetParent(f.Root.transform, false);
@@ -793,30 +795,36 @@ namespace GameLogic.Tests
             opponent.transform.position = center;
             f.Context.Registry.TryGet(player.InstanceId, out var p);
             f.Context.Registry.TryGet(opponent.InstanceId, out var o);
-            var hp = ((EnemyEntity)p).CurrentHp; var opponentHp = ((EnemyEntity)o).CurrentHp;
+            var enemy = (EnemyEntity)p;
+            enemy.ApplyDamage(3);
+            var hp = enemy.CurrentHp; var opponentHp = ((EnemyEntity)o).CurrentHp;
+            var expectedHp = occupied ? hp - (int)Math.Ceiling(enemy.MaxHp * .5) : hp;
             Assert.IsFalse(enemies.TryReleaseBlast(center + Vector3.right * radius, out _));
             Assert.AreEqual(0, enemies.BlastRemaining);
             Assert.IsTrue(enemies.TryReleaseBlast(release, out var actual));
             Assert.That(Vector3.Distance(actual, release), Is.LessThan(.0001f));
+            Assert.IsTrue(f.Context.Battle.Timelines.HasChannel(f.Context.Battle.Player.OwnerRef), "锅盖应启动玩家战场时间轴");
             Assert.AreEqual(hp, ((EnemyEntity)p).CurrentHp);
             Assert.IsFalse(enemies.TryReleaseBlast(center, out _));
-            f.Host.SetFrozen(true); f.Advance(3); Assert.AreEqual(15f, enemies.BlastRemaining);
-            f.Host.SetFrozen(false); f.Advance(.239f);
+            f.Host.SetFrozen(true); f.AdvanceBlast(3); Assert.AreEqual(15f, enemies.BlastRemaining);
+            f.Host.SetFrozen(false); f.AdvanceBlast(.239f);
             Assert.AreEqual(hp, ((EnemyEntity)p).CurrentHp, "落地前不能造成伤害");
             ((EnemyEntity)p).SetMoveSpeed(0);
             player.transform.position = release + (occupied ? Vector3.right : Vector3.left) * radius * (occupied ? 1.19f : 1.21f);
-            f.Advance(.002f);
-            Assert.AreEqual(occupied ? hp - 50 : hp, ((EnemyEntity)p).CurrentHp);
+            f.AdvanceBlast(.002f);
+            Assert.AreEqual(expectedHp, enemy.CurrentHp);
             Assert.AreEqual(opponentHp, ((EnemyEntity)o).CurrentHp);
-            f.Advance(.259f);
-            Assert.AreEqual(occupied ? hp - 50 : hp, ((EnemyEntity)p).CurrentHp, "余波不重复出伤");
+            f.AdvanceBlast(.259f);
+            Assert.AreEqual(expectedHp, enemy.CurrentHp, "余波不重复出伤");
             Assert.That(enemies.BlastRemaining, Is.EqualTo(14.5f).Within(.0001f));
         }
 
         [Test]
         public void PlayerBlastButtonOnlyCastsOnDragReleaseOverPlayerLane()
         {
-            var f = Create(); f.Start();
+            var f = Create();
+            f.Context.Battle.Configure(SkillConfigAdapter.FromTables(f.Tables));
+            f.Start();
             var shop = new BattleShopUI();
             var drag = f.Root.AddComponent<RobotDragController>();
             SetField(shop, "<Drag>k__BackingField", drag);
@@ -943,6 +951,17 @@ namespace GameLogic.Tests
             public void Prepare(Func<string, Transform, CancellationToken, UniTask<GameObject>> load = null) => PrepareTask(load).GetAwaiter().GetResult();
             public void Start() => Invoke("StartBattle");
             public void Advance(float dt) => Invoke("Advance", dt);
+            public void AdvanceBlast(float remaining)
+            {
+                while (remaining > 0f && Host.IsCombatRunning)
+                {
+                    var step = Mathf.Min(remaining, Context.Battle.Timelines.TimeUntilNextNode);
+                    Context.Battle.AdvanceBeforeEnemyMovement(step, false);
+                    Advance(step);
+                    Context.Battle.Timelines.Advance(step);
+                    remaining -= step;
+                }
+            }
             public void Clear() => Invoke("Clear");
             private void Invoke(string name, params object[] args)
             {

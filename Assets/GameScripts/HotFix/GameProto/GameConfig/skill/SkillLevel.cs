@@ -52,6 +52,8 @@ public sealed partial class SkillLevel : Luban.BeanBase
         StaffAppearGrowTime = _buf.ReadFloat();
         StaffAppearSettleTime = _buf.ReadFloat();
         CastWindup = _buf.ReadFloat();
+        MaxHpDamageRatio = _buf.ReadFloat();
+        AreaRadiusCells = _buf.ReadFloat();
     }
 
     public static SkillLevel DeserializeSkillLevel(ByteBuf _buf)
@@ -200,6 +202,14 @@ public sealed partial class SkillLevel : Luban.BeanBase
     /// 施法前摇；光束为亮束前延迟（秒）
     /// </summary>
     public readonly float CastWindup;
+    /// <summary>
+    /// 目标最大生命伤害比例（0~1）
+    /// </summary>
+    public readonly float MaxHpDamageRatio;
+    /// <summary>
+    /// 伤害半径（格）
+    /// </summary>
+    public readonly float AreaRadiusCells;
    
     public const int __ID__ = -65736816;
     public override int GetTypeId() => __ID__;
@@ -247,6 +257,8 @@ public sealed partial class SkillLevel : Luban.BeanBase
         + "staffAppearGrowTime:" + StaffAppearGrowTime + ","
         + "staffAppearSettleTime:" + StaffAppearSettleTime + ","
         + "castWindup:" + CastWindup + ","
+        + "maxHpDamageRatio:" + MaxHpDamageRatio + ","
+        + "areaRadiusCells:" + AreaRadiusCells + ","
         + "}";
     }
 }

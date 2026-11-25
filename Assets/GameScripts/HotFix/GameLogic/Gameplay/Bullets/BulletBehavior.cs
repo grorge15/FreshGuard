@@ -134,13 +134,11 @@ namespace GameLogic
                 !context.World.IsValid(action.BattleId) || !context.World.IsRunning || !context.Attack.TryBeginSplash()) return;
             var ids = new SortedSet<int>();
             var center = context.HitPosition;
-            var radiusSquared = (double)context.SplashRadius * context.SplashRadius;
             var candidates = context.World.GetTargets(action.SourceSide);
             if (candidates != null) foreach (var candidate in candidates)
             {
-                var position = candidate.GroundPosition;
-                var dx = (double)position.x - center.x; var dy = (double)position.y - center.y;
-                if (dx * dx + dy * dy <= radiusSquared) ids.Add(candidate.InstanceId);
+                if (AoeManager.ContainsCircle(center, context.SplashRadius, candidate.GroundPosition))
+                    ids.Add(candidate.InstanceId);
             }
             foreach (var id in ids)
             {
