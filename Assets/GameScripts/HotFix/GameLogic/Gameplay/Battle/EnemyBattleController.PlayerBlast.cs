@@ -103,11 +103,17 @@ namespace GameLogic
         {
             if (_skipBlastCooldown) _blastSkill.CooldownRemaining = 0f;
             _potLidStart = _elapsed;
-            PlayPotLid(center, cellSize * 2f);
+            _blastPending = true;
+            _blastReadyAt = _skipBlastCooldown ? 0d : _elapsed + PlayerBlastCooldown;
+            PlayPotLid(center, _host.PlayerBlastRadius * 2f);
+            return true;
         }
 
         private void ResolveLidContact(Vector3 center, float radius, SkillOwnerRef source, int skillId)
         {
+            if (!_blastPending || _elapsed < LidContactAt) return;
+            _blastPending = false;
+            GameSoundService.Play(GameSound.PotLidImpact);
             _host.PlayPotLidImpactFeedback();
             var targets = new List<int>();
             foreach (var id in _active.Keys)
