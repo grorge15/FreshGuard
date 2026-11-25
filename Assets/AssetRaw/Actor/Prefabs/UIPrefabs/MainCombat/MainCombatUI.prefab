@@ -252,6 +252,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _topColor: {r: 1, g: 0.972549, b: 0.76862746, a: 1}
   _bottomColor: {r: 1, g: 0.5921569, b: 0.15294118, a: 1}
+  outlineWidth: 2
+  glowRadius: 6
 --- !u!114 &1786338310872302486
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -259,7 +261,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2050330529038849508}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
   m_Name: 

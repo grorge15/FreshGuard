@@ -86,13 +86,13 @@ TextMesh:
   m_GameObject: {fileID: 5597764960707682923}
   m_Text: 10 Combo
   m_OffsetZ: 0
-  m_CharacterSize: 0.08
+  m_CharacterSize: 0.09
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
   m_TabSize: 4
   m_FontSize: 32
-  m_FontStyle: 0
+  m_FontStyle: 1
   m_RichText: 1
   m_Font: {fileID: 12800000, guid: 5cd36d6dd0ef80c4ebcfd113fb73cbe7, type: 3}
   m_Color:
